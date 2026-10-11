@@ -131,7 +131,36 @@ syncClock(); setInterval(syncClock, 10 * 60e3);
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-let runners = [], laps = [], queue = [], active = null, lastServer = 0;
+
+// ===== Samenvatting voor de lopers-app: de chronometer schrijft elke ~2 min een kleine samenvatting, zodat gsm's niet alle rondes hoeven te lezen =====
+function buildMeta(runnersArr, lapsArr) {
+  const by = {};
+  lapsArr.forEach((l) => { const e = by[l.runnerId] || (by[l.runnerId] = { n: 0, tt: 0, best: Infinity, sq: 0 }); e.n++; e.tt += l.time; if (l.time < e.best) e.best = l.time; });
+  lapsArr.forEach((l) => { const e = by[l.runnerId], m = e.tt / e.n; e.sq += (l.time - m) * (l.time - m); });
+  const list = runnersArr.map((r) => { const e = by[r.id]; return { i: r.id, n: r.name || '', g: r.gender || 'X', l: e ? e.n : 0, t: e ? Math.round(e.tt) : 0, b: e ? Math.round(e.best) : 0, s: e && e.n >= 3 ? +(Math.sqrt(e.sq / e.n) / (e.tt / e.n)).toFixed(3) : 0 }; });
+  const gOf = {}; runnersArr.forEach((r) => { gOf[r.id] = r.gender; });
+  const sorted = [...lapsArr].sort((a, b) => a.time - b.time);
+  const top = (arr) => arr.slice(0, 10).map((l) => ({ id: l.runnerId, name: l.runnerName, t: l.time, at: l.timestamp }));
+  const most = list.filter((x) => x.l > 0).sort((a, b) => b.l - a.l).slice(0, 10).map((x) => ({ id: x.i, name: x.n, n: x.l }));
+  const now = Date.now();
+  return {
+    index: { updatedAt: now, list },
+    summary: { updatedAt: now, total: lapsArr.length, record: sorted[0] ? { t: sorted[0].time, name: sorted[0].runnerName } : null,
+      top: { fast: top(sorted), fastM: top(sorted.filter((l) => gOf[l.runnerId] === 'M')), fastV: top(sorted.filter((l) => gOf[l.runnerId] === 'V')), most } }
+  };
+}
+
+// Gegevens in de lopers-app (zuinig): wachtrij + actieve loper + samenvatting + lopersindex; rondes enkel van de gekozen lopers.
+let runners = [], queue = [], active = null, lastServer = 0, SUM = null, rMap = new Map(), MODE = 'lean';
+let rawRunners = [], rawLaps = [];            // enkel in 'volledige' modus (als er nog geen samenvatting bestaat, bv. in de oefenmodus zonder chronometer)
+const LAPS = {};                              // rondes per loper (enkel van wie we bekijken)
+const lapsOf = (id) => LAPS[id] || [];
+const getR = (id) => rMap.get(id);
+function applyIndex(list) {
+  runners = list.map((a) => ({ id: a.i, name: a.n, gender: a.g, totalLaps: a.l, totalTime: a.t, best: a.b, sd: a.s }));
+  rMap = new Map(runners.map((r) => [r.id, r])); statCache = null;
+}
+const totalLaps = () => SUM ? SUM.total : 0;
 const ME_KEY = 'myRunnerId' + (NS ? '_' + NS : '');   // per omgeving onthouden (oefen en echt apart)
 let me = ''; try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) {}
 if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
@@ -149,21 +178,11 @@ const isRunning = () => !!(active && active.isRunning && active.runner);
 const startMs = () => active && active.startTime ? new Date(active.startTime).getTime() : null;
 const waiting = () => queue.filter((q) => !(isRunning() && q.runnerId === active.runner.runnerId));
 
-function groupAvg() {
-  const hourAgo = Date.now() - 3600e3;
-  const recent = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo);
-  if (recent.length >= 5) return recent.reduce((a, l) => a + l.time, 0) / recent.length;
-  if (laps.length >= 5) return laps.reduce((a, l) => a + l.time, 0) / laps.length;
-  return 100000;
-}
 let statCache = null;
-function stats() {
-  if (statCache && statCache.n === laps.length && tnow() - statCache.at < 15000) return statCache;
-  const per = {}; laps.forEach((l) => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; });
-  statCache = { n: laps.length, at: Date.now(), per, group: groupAvg() };
-  return statCache;
+function expected(rid) {
+  const r = getR(rid), prior = FIRST_LAP_MS[r && r.gender] || FIRST_LAP_MS.X;
+  return r && r.totalLaps > 0 ? (r.totalTime + prior * 2) / (r.totalLaps + 2) : prior;
 }
-function expected(rid) { const s = stats(), e = s.per[rid], rn = runners.find((x) => x.id === rid), prior = FIRST_LAP_MS[rn && rn.gender] || FIRST_LAP_MS.X; return e ? (e.sum + prior * 2) / (e.n + 2) : prior; }
 function waitMs(idx) {
   let t = 0;
   if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(active.runner.runnerId) - (st ? tnow() - st : 0)); }
@@ -217,28 +236,27 @@ function viewMine() {
   }
 }
 function profile(r, self) {
-  const my = laps.filter((l) => l.runnerId === r.id).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  const times = my.map((l) => l.time);
-  const best = times.length ? Math.min(...times) : 0, avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
-  const overall = laps.length ? Math.min(...laps.map((l) => l.time)) : 0;
-  const byRunner = {}; laps.forEach((l) => { byRunner[l.runnerId] = (byRunner[l.runnerId] || 0) + 1; });
-  const lapRank = Object.values(byRunner).filter((n) => n > my.length).length + 1;
-  const bests = {}; laps.forEach((l) => { if (bests[l.runnerId] === undefined || l.time < bests[l.runnerId]) bests[l.runnerId] = l.time; });
-  const bestRank = best ? Object.values(bests).filter((t) => t < best).length + 1 : 0;
+  const my = [...lapsOf(r.id)].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const times = my.map((l) => l.time), loadingLaps = r.totalLaps > 0 && my.length === 0;
+  const best = times.length ? Math.min(...times) : (r.best || 0), avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : (r.totalLaps ? r.totalTime / r.totalLaps : 0);
+  const n = my.length || r.totalLaps || 0;
+  const overall = SUM && SUM.record ? SUM.record.t : 0;
+  const lapRank = runners.filter((x) => x.totalLaps > n).length + 1;
+  const bestRank = best ? runners.filter((x) => x.best > 0 && x.best < best).length + 1 : 0;
   return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:26px;font-weight:800">${esc(r.name)}</b>${self ? '<button class="link" data-act="other">Andere loper</button>' : '<button class="link" data-act="back">← Terug</button>'}</div>
     ${self ? '' : `<button class="btn full" data-act="pickme" data-id="${esc(r.id)}">Dit ben ik</button>`}
     ${statusCard(r, self)}
     <div class="card"><div class="grid">
-      <div class="tile"><div class="k">Rondes</div><div class="v">${my.length}</div></div>
-      <div class="tile"><div class="k">Afstand</div><div class="v">${(my.length * 0.515).toFixed(2).replace('.', ',')} km</div></div>
+      <div class="tile"><div class="k">Rondes</div><div class="v">${n}</div></div>
+      <div class="tile"><div class="k">Afstand</div><div class="v">${(n * 0.515).toFixed(2).replace('.', ',')} km</div></div>
       <div class="tile"><div class="k">Snelste ronde</div><div class="v">${best ? mmss(best) : '–'}</div></div>
       <div class="tile"><div class="k">Gemiddeld</div><div class="v">${avg ? mmss(avg) : '–'}</div></div>
-      <div class="tile"><div class="k">Plaats (meeste rondes)</div><div class="v">${my.length ? '#' + lapRank : '–'}</div></div>
+      <div class="tile"><div class="k">Plaats (meeste rondes)</div><div class="v">${n ? '#' + lapRank : '–'}</div></div>
       <div class="tile"><div class="k">Plaats (snelste ronde)</div><div class="v">${best ? '#' + bestRank : '–'}</div></div>
-      <div class="tile wide"><div class="k">${self ? 'Jij liep' : 'Liep'} bij voor Water for All</div><div class="v">€ ${my.length * EUR_PER_LAP}</div></div></div>
-      ${self && my.length ? `<button class="btn full" style="margin-top:12px" data-act="share">Deel mijn resultaat</button>` : ''}</div>
+      <div class="tile wide"><div class="k">${self ? 'Jij liep' : 'Liep'} bij voor Water for All</div><div class="v">€ ${n * EUR_PER_LAP}</div></div></div>
+      ${self && n ? `<button class="btn full" style="margin-top:12px" data-act="share">Deel mijn resultaat</button>` : ''}</div>
     ${times.length >= 2 ? `<div class="card"><h2>${self ? 'Jouw' : 'Het'} tempo</h2>${tempoSvg(times)}</div>` : ''}
-    <div class="card"><h2>${self ? 'Jouw rondes' : 'Rondes'}</h2>${my.length === 0 ? '<div class="empty">Nog geen rondes gelopen</div>' :
+    <div class="card"><h2>${self ? 'Jouw rondes' : 'Rondes'}</h2>${loadingLaps ? '<div class="empty">Rondes laden…</div>' : my.length === 0 ? '<div class="empty">Nog geen rondes gelopen</div>' :
       my.map((l, i) => ({ l, nr: i + 1 })).reverse().map(({ l, nr }) => `<div class="lap"><div class="t">${clock(l.timestamp)}</div><div class="n">ronde ${nr}${l.time === overall ? '<span class="badge">record</span>' : l.time === best && my.length > 1 ? '<span class="badge">PR</span>' : ''}</div><div class="r">${mmss(l.time)}</div></div>`).join('')}</div>`;
 }
 function resultsHtml(res, q, act = 'pick') {
@@ -262,11 +280,9 @@ const TRACK_D = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 
 function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
-  const mine = laps.filter((l) => l.runnerId === rid).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0, rnn = runners.find((x) => x.id === rid), ex = mine.length ? expected(rid) : (FIRST_LAP_TYPICAL_MS[rnn && rnn.gender] || FIRST_LAP_TYPICAL_MS.X);
-  const sdRel = (arr) => { const m = arr.reduce((a, b) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length) / m; };
-  const hourAgo = tnow() - 3600e3, recent = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo).map((l) => l.time);
-  const groupRel = recent.length >= 5 ? sdRel(recent) : 0.15;
-  const rel = Math.max(0.06, Math.min(0.25, mine.length >= 3 ? sdRel(mine) : groupRel));
+  const rnn = getR(rid), nLaps = rnn ? rnn.totalLaps : 0, best = rnn && rnn.best ? rnn.best : 0, ex = nLaps ? expected(rid) : (FIRST_LAP_TYPICAL_MS[rnn && rnn.gender] || FIRST_LAP_TYPICAL_MS.X);
+  const mine = { length: nLaps };
+  const rel = Math.max(0.06, Math.min(0.25, nLaps >= 3 && rnn.sd ? rnn.sd : 0.15));
   const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : ex * 1.12;
   return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">Nu aan het lopen</div>
     <div style="display:flex;align-items:center;gap:10px">
@@ -293,15 +309,12 @@ function viewQueue() {
 }
 
 function viewRank() {
-  const g = {}; runners.forEach((r) => { g[r.id] = r.gender; });
-  const fast = (f) => [...laps].filter(f).sort((a, b) => a.time - b.time).slice(0, 10);
+  const T = (SUM && SUM.top) || { fast: [], fastM: [], fastV: [], most: [] };
   const list = (arr, val) => arr.length ? arr.map((x, i) => `<div class="rank" data-act="view" data-id="${esc(x.id)}" style="cursor:pointer"><b>${i + 1}</b><div class="nm">${esc(x.name)}</div><div class="v">${val(x)}</div></div>`).join('') : '<div class="empty">Nog geen data</div>';
-  const mapLap = (l) => ({ id: l.runnerId, name: l.runnerName, t: l.time });
-  const most = Object.entries(laps.reduce((a, l) => { a[l.runnerId] = (a[l.runnerId] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n]) => ({ id, name: (runners.find((r) => r.id === id) || {}).name || '?', n }));
-  return `<div class="card"><h2>Snelste rondes <small>algemeen</small></h2>${list(fast(() => true).map(mapLap), (x) => mmss(x.t))}</div>
-    <div class="card"><h2>Snelste rondes <small>vrouwen</small></h2>${list(fast((l) => g[l.runnerId] === 'V').map(mapLap), (x) => mmss(x.t))}</div>
-    <div class="card"><h2>Snelste rondes <small>mannen</small></h2>${list(fast((l) => g[l.runnerId] === 'M').map(mapLap), (x) => mmss(x.t))}</div>
-    <div class="card"><h2>Meeste rondes</h2>${list(most, (x) => x.n)}</div>`;
+  return `<div class="card"><h2>Snelste rondes <small>algemeen</small></h2>${list(T.fast, (x) => mmss(x.t))}</div>
+    <div class="card"><h2>Snelste rondes <small>vrouwen</small></h2>${list(T.fastV, (x) => mmss(x.t))}</div>
+    <div class="card"><h2>Snelste rondes <small>mannen</small></h2>${list(T.fastM, (x) => mmss(x.t))}</div>
+    <div class="card"><h2>Meeste rondes</h2>${list(T.most, (x) => x.n)}</div>`;
 }
 
 let lastParts = [], lastTab = '';
@@ -313,7 +326,8 @@ function patchView(html) {
   lastParts = parts; lastTab = key; liveTick();
 }
 function render(force) {
-  $('euro').textContent = '€ ' + (laps.length * EUR_PER_LAP).toLocaleString('nl-BE');
+  syncWatches();
+  $('euro').textContent = '€ ' + (totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE');
   $('nav').innerHTML = [['queue', 'Wachtrij'], ['mine', 'Mijn tijden'], ['search', 'Zoeken'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
   const ae = document.activeElement && document.activeElement.id;
   const typing = ae === 'q' || ae === 'sq';
@@ -330,7 +344,7 @@ let rt = null; const later = (force) => { clearTimeout(rt); rt = setTimeout(() =
 // ---------- gedeelde kaart ----------
 async function share() {
   const r = runners.find((x) => x.id === me); if (!r) return;
-  const my = laps.filter((l) => l.runnerId === me), times = my.map((l) => l.time);
+  const my = lapsOf(me), times = my.map((l) => l.time); if (!my.length) return;
   const best = Math.min(...times), avg = times.reduce((a, b) => a + b, 0) / times.length;
   const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const x = c.getContext('2d');
   x.fillStyle = '#fff1cf'; x.fillRect(0, 0, 1080, 1350);
@@ -362,7 +376,7 @@ document.addEventListener('click', (e) => {
   if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'wfa') {
     e.preventDefault();
-    $('overlay').innerHTML = `<div class="modal" data-act="closewfa"><div class="box"><h3>Water for All</h3><div class="eur">€ ${(laps.length * EUR_PER_LAP).toLocaleString('nl-BE')}</div>
+    $('overlay').innerHTML = `<div class="modal" data-act="closewfa"><div class="box"><h3>Water for All</h3><div class="eur">€ ${(totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE')}</div>
       <p>Alle rondes van dit event tellen mee voor Water for All (Atlas Copco). Voor elke gelopen ronde komt er € ${EUR_PER_LAP} bij.</p><p>Wil je er meer over lezen? Dan kan je naar de website van Water for All gaan.</p>
       <div class="acts"><a class="btn" href="https://www.atlascopco.com/nl-be/about-atlas-copco/water-for-all" target="_blank" rel="noopener">Naar de website</a><button class="btn ghost" data-act="closewfa">Sluiten</button></div></div></div>`;
     return;
@@ -377,11 +391,37 @@ document.addEventListener('click', (e) => {
 document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } if (e.target.id === 'sq') { squery = e.target.value; render(false); } });
 
 // ---------- data ----------
-const snap = (name, fn) => db.collection(col(name)).onSnapshot((s) => { lastServer = Date.now(); fn(s); later(); }, (err) => { $('foot').textContent = 'Geen verbinding met de server… (' + err.code + ')'; });
-snap('runners', (s) => { runners = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
-snap('laps', (s) => { laps = s.docs.map((d) => ({ id: d.id, ...d.data() })); statCache = null; });
-snap('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)); });
-snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; });
+const onErr = (err) => { $('foot').textContent = 'Geen verbinding met de server… (' + err.code + ')'; };
+const snap = (name, fn) => db.collection(col(name)).onSnapshot((s) => { lastServer = Date.now(); fn(s); later(); }, onErr);
+const metaDoc = (id) => db.collection(col('meta')).doc(id);
+const lapSubs = {};
+function syncWatches() {   // rondes ophalen van enkel de gekozen lopers (jezelf en wie je bekijkt)
+  if (MODE !== 'lean') return;
+  const want = new Set([me, viewId].filter(Boolean));
+  Object.keys(lapSubs).forEach((id) => { if (!want.has(id)) { lapSubs[id](); delete lapSubs[id]; delete LAPS[id]; } });
+  want.forEach((id) => { if (!lapSubs[id]) lapSubs[id] = db.collection(col('laps')).where('runnerId', '==', id).onSnapshot((s) => { LAPS[id] = s.docs.map((d) => ({ id: d.id, ...d.data() })); later(); }, onErr); });
+}
+function startCommon() {
+  snap('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)); });
+  snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; });
+}
+function startLean() {
+  MODE = 'lean'; startCommon();
+  metaDoc('summary').onSnapshot((s) => { if (s.exists) { SUM = s.data(); lastServer = Date.now(); later(); } }, onErr);
+  let idxAt = 0;
+  const loadIndex = () => { idxAt = Date.now(); metaDoc('runnerIndex').get().then((s) => { if (s.exists) { applyIndex(s.data().list || []); later(); } }).catch(() => {}); };
+  loadIndex(); setInterval(loadIndex, 10 * 60e3);
+  window.addEventListener('focus', () => { if (Date.now() - idxAt > 120000) loadIndex(); });
+}
+function startHeavy() {   // geen samenvatting beschikbaar: alles lezen (enkel voor oefenen zonder chronometer)
+  MODE = 'heavy'; startCommon();
+  const rebuild = () => { const m = buildMeta(rawRunners, rawLaps); SUM = m.summary; applyIndex(m.index.list); Object.keys(LAPS).forEach((k) => delete LAPS[k]); rawLaps.forEach((l) => { (LAPS[l.runnerId] = LAPS[l.runnerId] || []).push(l); }); };
+  snap('runners', (s) => { rawRunners = s.docs.map((d) => ({ id: d.id, ...d.data() })); rebuild(); });
+  snap('laps', (s) => { rawLaps = s.docs.map((d) => ({ id: d.id, ...d.data() })); rebuild(); });
+}
+(function boot(tries) {
+  metaDoc('summary').get().then((d) => { if (d.exists) startLean(); else startHeavy(); }).catch((e) => { if (tries < 4) setTimeout(() => boot(tries + 1), 2500); else startHeavy(); });
+})(0);
 
 // levende klok + wachttijd elke seconde bijwerken (zonder de pagina opnieuw op te bouwen)
 function liveTick() {

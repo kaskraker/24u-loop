@@ -1076,6 +1076,10 @@ const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waars
         // ===== Infographics naast de live statistieken: wisselt om de ~11 s tussen leuke grafieken en een "loper in de spotlight" =====
         const LiveCharts = ({ laps, runners }) => {
             const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+            const [qh, setQh] = React.useState([]);
+            React.useEffect(() => {
+                try { if (typeof db === 'undefined' || !db) return; return db.collection(colName('meta')).doc('queueHistory').onSnapshot((snap) => { const a = (snap.exists && snap.data().samples) || []; setQh(a.slice().sort((x, y) => x.t - y.t)); }, () => {}); } catch (e) {}
+            }, []);
             const [idx, setIdx] = React.useState(0);
             React.useEffect(() => { const i = setInterval(() => setIdx(n => n + 1), Number(new URLSearchParams(window.location.search).get('slidems')) || 11000); return () => clearInterval(i); }, []);
             const d = React.useMemo(() => {
@@ -1173,13 +1177,21 @@ const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waars
 
             // ---- slide: loper in de spotlight ----
             const spark = (times, hi) => {
-                const W = 300, H = 96, n = times.length, mn = Math.min(...times), mx = Math.max(...times), rg = (mx - mn) || 1;
-                const X = (i) => 8 + (n === 1 ? (W - 16) / 2 : i * (W - 16) / (n - 1)), Y = (t) => 10 + ((t - mn) / rg) * (H - 24);   // sneller = hoger
-                const bestI = times.indexOf(mn);
+                // Duidelijke lijngrafiek: ruime marges, de tijd bij elk punt, rondenummer eronder, stippellijn = gemiddelde, hoger = sneller
+                const W = 300, H = 120, n = times.length, L = 26, R = 26, T = 30, B = 26;
+                const mn = Math.min(...times), mx = Math.max(...times), pad = Math.max((mx - mn) * 0.15, 3000), lo = mn - pad, hiV = mx + pad;
+                const X = (i) => n === 1 ? W / 2 : L + i * (W - L - R) / (n - 1), Y = (t) => T + ((t - lo) / (hiV - lo)) * (H - T - B);   // sneller = hoger
+                const bestI = times.indexOf(mn), avg = times.reduce((x, y) => x + y, 0) / n, showAll = n <= 8;
+                const inHi = (i) => hi && i >= hi[0] && i <= hi[1];
                 return h('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', style: { display: 'block' } },
-                    h('polyline', { points: times.map((t, i) => `${X(i)},${Y(t)}`).join(' '), fill: 'none', stroke: '#17120d', strokeWidth: 3, strokeLinejoin: 'round', strokeLinecap: 'round' }),
-                    times.map((t, i) => h('circle', { key: i, cx: X(i), cy: Y(t), r: i === bestI ? 5 : (hi && i >= hi[0] && i <= hi[1] ? 4 : 3), fill: i === bestI ? '#f2a342' : (hi && i >= hi[0] && i <= hi[1] ? '#16a34a' : '#17120d') })),
-                    h('text', { x: X(bestI), y: Math.max(9, Y(mn) - 8), fontSize: 10, fontWeight: 800, textAnchor: 'middle', fill: '#b45309' }, mmss(mn / 1000))
+                    h('line', { x1: L - 10, x2: W - R + 10, y1: Y(avg), y2: Y(avg), stroke: '#9ca3af', strokeWidth: 1.5, strokeDasharray: '4 4' }),
+                    h('text', { x: W - R + 10, y: Y(avg) - 4, fontSize: 9, fontWeight: 700, textAnchor: 'end', fill: '#6b7280' }, `gem. ${mmss(avg / 1000)}`),
+                    n > 1 && h('polyline', { points: times.map((t, i) => `${X(i)},${Y(t)}`).join(' '), fill: 'none', stroke: '#17120d', strokeWidth: 3, strokeLinejoin: 'round', strokeLinecap: 'round' }),
+                    times.map((t, i) => h('g', { key: i },
+                        h('circle', { cx: X(i), cy: Y(t), r: i === bestI ? 7 : 5, fill: i === bestI ? '#e8590c' : inHi(i) ? '#16a34a' : '#fff', stroke: '#17120d', strokeWidth: 3 }),
+                        (showAll || i === bestI || i === n - 1) && h('text', { x: X(i), y: Y(t) - 12, fontSize: i === bestI ? 12 : 10.5, fontWeight: 800, textAnchor: 'middle', fill: i === bestI ? '#c2410c' : '#111827' }, mmss(t / 1000)),
+                        showAll && h('text', { x: X(i), y: H - 6, fontSize: 9, fontWeight: 700, textAnchor: 'middle', fill: '#6b7280' }, `#${i + 1}`))),
+                    h('text', { x: 2, y: 12, fontSize: 9, fontWeight: 700, fill: '#6b7280' }, '↑ sneller')
                 );
             };
             const spot = (kicker, name, big, sub, times, hi) => h('div', { className: 'text-center' },
@@ -1318,6 +1330,23 @@ const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waars
                     h('div', { className: 'text-xl font-extrabold text-gray-900' }, c[1]),
                     h('div', { className: 'text-xs text-gray-700 mt-1' }, c[2]));
             };
+            // ---- slide: de wachtrij (drukte), uit de metingen van de chronometer ----
+            const queueSlide = () => {
+                const tm = (t) => new Date(t).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+                const day = qh.filter(x => x.t > Date.now() - 24 * 3600e3), last = day[day.length - 1];
+                const mx = day.reduce((m, x) => x.n > m.n ? x : m, day[0]), mn = day.reduce((m, x) => x.n < m.n ? x : m, day[0]);
+                const avg = day.reduce((a, x) => a + x.n, 0) / day.length;
+                const bars = day.slice(-36), top = Math.max(1, ...bars.map(x => x.n)), W = 300, bw = W / 36;
+                const stat = (k, v, sub) => h('div', { className: 'rounded-lg px-2 py-1 text-center', style: { border: '2px solid #17120d', background: '#fff6df', flex: 1 } },
+                    h('div', { className: 'text-[10px] font-extrabold uppercase text-gray-700' }, k), h('div', { className: 'text-2xl font-extrabold leading-tight' }, v), sub && h('div', { className: 'text-[10px] text-gray-600' }, sub));
+                return h('div', { className: 'text-center' }, label('De wachtrij'),
+                    h('div', { className: 'flex gap-2 mt-2' }, stat('Nu', last.n, last.n === 1 ? 'loper' : 'lopers'), stat('Langste', mx.n, `om ${tm(mx.t)}`), stat('Kortste', mn.n, `om ${tm(mn.t)}`), stat('Gemiddeld', avg.toFixed(1).replace('.', ','), 'per moment')),
+                    h('svg', { viewBox: '0 0 300 120', width: '100%', style: { display: 'block', marginTop: 8 } },
+                        bars.map((x, i) => h('rect', { key: i, x: i * bw + 1, width: bw - 2, y: 92 - (x.n / top) * 70, height: Math.max(2, (x.n / top) * 70), rx: 1.5, fill: x === mx ? '#e8590c' : '#f2a342', stroke: '#17120d', strokeWidth: 1 })),
+                        bars.filter((x, i) => i % 12 === 0).map((x, k) => h('text', { key: 't' + k, x: bars.indexOf(x) * bw + bw / 2, y: 110, fontSize: 9, fontWeight: 700, textAnchor: 'middle', fill: '#6b7280' }, tm(x.t)))),
+                    h('div', { className: 'text-xs text-gray-700' }, 'lengte van de wachtrij, laatste 3 uur'));
+            };
+
             // ---- slide: aftellen naar het einde ----
             const countdown = () => {
                 const hrs = Math.floor(d.remaining / 3600e3), mins = Math.floor((d.remaining % 3600e3) / 60e3), done = Math.floor(d.elapsedFrac * 24);
@@ -1345,6 +1374,7 @@ const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waars
             if (d.improveL.length) dyn.push((r) => { const x = rankOf(d.improveL, r); return ['imp' + r % 3, spot('steeds sneller', x.name, `${mmss(x.first / 1000)} → ${mmss(x.best / 1000)}`, `${Math.round(x.gain / 1000)} s sneller dan de eerste ronde`, x.times)]; });
             dyn.push((r) => ['km' + r, distance(r)]);
             if (laps.length >= 30) dyn.push(() => ['tempo', tempoHour()]);
+            if (qh.filter(x => x.t > Date.now() - 24 * 3600e3).length >= 3) dyn.push(() => ['queue', queueSlide()]);
             dyn.push(() => ['countdown', countdown()]);
             dyn.push(() => ['humasol', humasol()]);
             const stat = [];
@@ -1443,7 +1473,7 @@ const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waars
             if (field.length || row.length) { row.push(field); rows.push(row); }
             return rows;
         };
-        const FEMALE_FIRST_NAMES = new Set(('alina anna astrid berbel camille caro clara dejana dina elena eline elisabeth elise ella emily emke emma erica ester evelien evi felien fien flore florine fran frances gerlinde hannah hanne hazel helena ine irene jade jasmin jing jitte julie jorunn kaat laura lena lisa livia loes lola lore lotte maayke magalie margot marie marlies marthe merel michele mila milena mirte myriam nele noemie nore pauline roos saar sarah sien sofie sophie tine trui valentine wanne amarentia amelie ann annelien antonia cara eef heleen jinte julia kiara katrijn lene louise margaux noor shannon silke sus wies').split(' '));
+        const FEMALE_FIRST_NAMES = new Set(('alina amarentia amelie ann anna annelien antonia astrid berbel camille cara caro clara dejana dina eef elena eline elisabeth elise ella emily emke emma erica ester evelien evi felien fien flore florine fran frances gerlinde giofka hannah hanne hazel heleen helena ine irene jade jasmin jing jinte jitte jorunn julia julie kaat katrijn kiara laura lena lene lisa livia loes lola lore lotte louise maayke magalie margaux margot marie marlies marthe merel michele mila milena mirte myriam nele noemie noor nore pauline roos saar sarah shannon sien silke sofie sophie sus tine trui valentine wies').split(' '));
         // Gender afleiden uit de voornaam (enkel voor testdata; het CSV-bestand bevat geen gender)
         const guessGender = (firstName) => FEMALE_FIRST_NAMES.has(nameKey(firstName)) ? 'V' : 'M';
 
