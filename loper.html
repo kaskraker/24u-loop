@@ -164,7 +164,7 @@ function statusCard(r, self = true) {
   const fn = esc((r.name || '').split(' ')[0]);
   if (isRunning() && active.runner.runnerId === r.id) {
     const st = startMs();
-    return `<div class="status run"><div class="k">${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
+    return `<div class="status run"><div class="k">${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">0:00.00</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
   }
   const w = waiting(), idxs = w.map((q, i) => q.runnerId === r.id ? i : -1).filter((i) => i >= 0), idx = idxs.length ? idxs[0] : -1;
   if (idx === -1) return `<div class="status none"><div class="k">${self ? 'Je staat niet in de wachtrij' : fn + ' staat niet in de wachtrij'}</div>${self ? '<div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div>' : ''}</div>`;
@@ -253,10 +253,10 @@ function nowCard() {
   return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">Nu aan het lopen</div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${esc(active.runner.runnerName)}</div>
-        <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">${mmssc(tnow() - st)}</div>
+        <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">0:00.00</div>
         <div style="font-size:12px;color:var(--muted);font-weight:500">Verwacht ≈ ${mmss(ex)}</div></div>
       <svg viewBox="0 0 260 140" style="width:46%;flex:none;overflow:visible" data-track data-start="${st}" data-fast="${fast}" data-slow="${slow}">
-        <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#fbd9a0" stroke-width="17"/>
+        <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
         <path class="tlo" d="${TRACK_D}" fill="none" stroke="#f2a342" stroke-width="17" pathLength="1" stroke-dasharray=".001 2" opacity=".55"/>
         <path class="thi" d="${TRACK_D}" fill="none" stroke="#e8590c" stroke-width="17" pathLength="1" stroke-dasharray=".05 2"/>
         <line x1="0" y1="70" x2="26" y2="70" stroke="#17120d" stroke-width="5"/></svg></div></div>`;
@@ -286,6 +286,14 @@ function viewRank() {
     <div class="card"><h2>Meeste rondes</h2>${list(most, (x) => x.n)}</div>`;
 }
 
+let lastParts = [], lastTab = '';
+function patchView(html) {
+  const box = $('view'), tpl = document.createElement('template'); tpl.innerHTML = html;
+  const nk = [...tpl.content.children], parts = nk.map((n) => n.outerHTML), ok = [...box.children], key = tab + '|' + viewId + '|' + me;
+  if (key !== lastTab || nk.length !== ok.length || ok.length !== lastParts.length) { box.replaceChildren(...nk); }
+  else nk.forEach((n, i) => { if (parts[i] !== lastParts[i]) ok[i].replaceWith(n); });
+  lastParts = parts; lastTab = key; liveTick();
+}
 function render(force) {
   $('euro').textContent = '€ ' + (laps.length * EUR_PER_LAP).toLocaleString('nl-BE');
   $('nav').innerHTML = [['queue', 'Wachtrij'], ['mine', 'Mijn tijden'], ['search', 'Zoeken'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
@@ -296,7 +304,7 @@ function render(force) {
     else { const q = squery.trim().toLowerCase(); $('sres').innerHTML = resultsHtml(runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 15), q, 'view'); }
     return;
   }
-  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'rank' ? viewRank() : tab === 'search' ? viewSearch() : viewMine();
+  patchView(tab === 'queue' ? viewQueue() : tab === 'rank' ? viewRank() : tab === 'search' ? viewSearch() : viewMine());
   const f = $('foot'); f.textContent = lastServer ? `Laatst bijgewerkt ${clock(lastServer)}` : 'Verbinden…';
 }
 let rt = null; const later = (force) => { clearTimeout(rt); rt = setTimeout(() => render(force), 120); };
@@ -350,14 +358,15 @@ snap('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).so
 snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; });
 
 // levende klok + wachttijd elke seconde bijwerken (zonder de pagina opnieuw op te bouwen)
-setInterval(() => {
+function liveTick() {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
   document.querySelectorAll('svg[data-track]').forEach((el) => {
     const e = Math.max(0, tnow() - Number(el.dataset.start)), hi = Math.min(1, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
     el.querySelector('.tlo').setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`);
     const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo);
   });
-}, 100);
+}
+setInterval(liveTick, 100);
 setInterval(() => { const ae = document.activeElement && document.activeElement.id; if (ae !== 'q' && ae !== 'sq') render(true); }, 10000);
 render(true);
 </script>
