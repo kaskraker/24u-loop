@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2a342">
+<title>24u Loop Leuven · Volg live</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #17120d; --butter: #fff1cf; --orange: #f2a342; --deep: #e8590c; --brown: #863c14; --ok: #2fb344; --muted: #6a5a48; }
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { overflow-x: hidden; max-width: 100vw; }
+  body { font-family: 'Bricolage Grotesque', system-ui, sans-serif; background: var(--butter); color: var(--ink); padding-bottom: 40px; font-variant-numeric: tabular-nums; }
+  header { background: var(--orange); border-bottom: 3px solid var(--ink); padding: 14px 16px 12px; padding-top: max(14px, env(safe-area-inset-top)); }
+  header h1 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+  header .sub { font-size: 12px; font-weight: 500; }
+  .euro { margin-top: 10px; display: inline-flex; align-items: center; gap: 10px; background: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 6px 12px; box-shadow: 3px 3px 0 var(--ink); }
+  .euro b { font-size: 22px; font-weight: 800; } .euro span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  nav { display: flex; gap: 8px; padding: 12px 20px 8px 14px; position: sticky; top: 0; background: var(--butter); z-index: 5; }
+  nav button { flex: 1; min-width: 0; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 4px; border: 3px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+  nav button.on { background: var(--orange); }
+  main { padding: 12px 20px 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; max-width: 560px; margin: 0 auto; }
+  .card { background: #fff; border: 3px solid var(--ink); border-radius: 16px; box-shadow: 5px 5px 0 var(--ink); padding: 14px; }
+  .card h2 { font-size: 18px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline; }
+  .card h2 small { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .status { border-radius: 16px; border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); padding: 16px; text-align: center; background: #ffd58a; }
+  .status.go { background: #d9f7d0; } .status.run { background: #ffd58a; } .status.none { background: #fff; }
+  .status .k { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  .status .big { font-size: 52px; font-weight: 800; line-height: 1.05; margin: 2px 0; }
+  .status .s { font-size: 14px; font-weight: 500; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile { background: #fff6df; border: 2px solid var(--ink); border-radius: 12px; padding: 10px 12px; } .tile .k { font-size: 11px; font-weight: 700; color: var(--muted); } .tile .v { font-size: 24px; font-weight: 800; }
+  .tile.wide { grid-column: span 2; background: #d9f7d0; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; background: #fff6df; margin-bottom: 6px; border: 2px solid transparent; }
+  .row.me { background: #ffd58a; border-color: var(--ink); }
+  .row .no { width: 26px; font-weight: 800; color: var(--muted); text-align: center; }
+  .row .nm { flex: 1; min-width: 0; font-weight: 700; } .row .nm small { display: block; font-weight: 500; font-size: 11px; color: var(--muted); }
+  .row .w { text-align: right; font-weight: 800; font-size: 17px; line-height: 1.1; white-space: nowrap; } .row .w small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .btn { font: inherit; font-weight: 800; border: 3px solid var(--ink); border-radius: 12px; background: var(--orange); color: var(--ink); padding: 10px 14px; box-shadow: 3px 3px 0 var(--ink); font-size: 15px; }
+  .btn.small { padding: 5px 10px; font-size: 12px; border-width: 2px; box-shadow: 2px 2px 0 var(--ink); background: #fff; }
+  .btn.full { width: 100%; }
+  .link { background: none; border: 0; font: inherit; font-weight: 700; text-decoration: underline; color: var(--brown); padding: 4px; }
+  input { font: inherit; font-size: 18px; width: 100%; border: 3px solid var(--ink); border-radius: 12px; padding: 12px 14px; background: #fff; margin-bottom: 10px; }
+  .lap { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 2px dashed #e5d3a8; } .lap:last-child { border: 0; }
+  .lap .t { width: 48px; font-weight: 700; } .lap .n { flex: 1; font-weight: 600; color: var(--muted); } .lap .r { font-weight: 800; font-size: 19px; }
+  .badge { font-size: 10px; font-weight: 800; border: 2px solid var(--ink); border-radius: 6px; padding: 1px 6px; background: #ffe27a; margin-left: 6px; }
+  .empty { text-align: center; color: var(--muted); padding: 18px 0; font-weight: 500; }
+  .rank { display: flex; gap: 10px; padding: 6px 4px; border-bottom: 2px dashed #e5d3a8; } .rank:last-child { border: 0; } .rank b { width: 26px; } .rank .nm { flex: 1; font-weight: 600; } .rank .v { font-weight: 800; }
+  .foot { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>24u Loop Leuven</h1>
+  <div class="sub">Humasol × Atlas Copco · Water for All</div>
+  <div class="euro"><span>Opgehaald</span><b id="euro">€ 0</b></div>
+</header>
+<nav id="nav"></nav>
+<main id="view"></main>
+<div class="foot" id="foot">Verbinden…</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDVULWNjHaR41EaptoQYnWnTdnU-suMuuA", authDomain: "u-loop-leuven-2026.firebaseapp.com", projectId: "u-loop-leuven-2026",
+  storageBucket: "u-loop-leuven-2026.firebasestorage.app", messagingSenderId: "1032849674125", appId: "1:1032849674125:web:110054a3b61ba10eedb7c4"
+};
+const params = new URLSearchParams(location.search);
+const NS = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, '');
+const col = (n) => NS ? `${NS}_${n}` : n;
+const EUR_PER_LAP = 5;
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let runners = [], laps = [], queue = [], active = null, lastServer = 0;
+let me = ''; try { me = localStorage.getItem('myRunnerId') || ''; } catch (e) {}
+if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
+let tab = params.get('tab') || (me ? 'mine' : 'queue');
+let query = '';
+const $ = (id) => document.getElementById(id);
+
+// ---------- helpers ----------
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
+const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+
+const isRunning = () => !!(active && active.isRunning && active.runner);
+const startMs = () => active && active.startTime ? new Date(active.startTime).getTime() : null;
+const waiting = () => queue.filter((q) => !(isRunning() && q.runnerId === active.runner.runnerId));
+
+function groupAvg() {
+  const hourAgo = Date.now() - 3600e3;
+  const recent = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo);
+  if (recent.length >= 5) return recent.reduce((a, l) => a + l.time, 0) / recent.length;
+  if (laps.length >= 5) return laps.reduce((a, l) => a + l.time, 0) / laps.length;
+  return 100000;
+}
+let statCache = null;
+function stats() {
+  if (statCache && statCache.n === laps.length && Date.now() - statCache.at < 15000) return statCache;
+  const per = {}; laps.forEach((l) => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; });
+  statCache = { n: laps.length, at: Date.now(), per, group: groupAvg() };
+  return statCache;
+}
+function expected(rid) { const s = stats(), e = s.per[rid]; return e ? (e.sum + s.group * 2) / (e.n + 2) : s.group; }
+function waitMs(idx) {
+  let t = 0;
+  if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(active.runner.runnerId) - (st ? Date.now() - st : 0)); }
+  const w = waiting();
+  for (let j = 0; j < idx && j < w.length; j++) t += 3000 + expected(w[j].runnerId);
+  return t;
+}
+function waitText(ms, idx) {
+  if (idx === 0 && ms <= 5000) return 'elk moment';
+  if (idx === 0 && ms < 90000) return `± ${Math.max(10, Math.round(ms / 10000) * 10)} s`;
+  return `± ${Math.max(1, Math.round(ms / 60000))} min`;
+}
+
+// ---------- weergave ----------
+function statusCard(r) {
+  if (isRunning() && active.runner.runnerId === r.id) {
+    const st = startMs();
+    return `<div class="status run"><div class="k">🏃 Jij loopt nu!</div><div class="big" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div><div class="s">Succes! Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
+  }
+  const w = waiting(), idx = w.findIndex((q) => q.runnerId === r.id);
+  if (idx === -1) return `<div class="status none"><div class="k">Je staat niet in de wachtrij</div><div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div></div>`;
+  const ms = waitMs(idx);
+  const head = idx === 0 ? 'Jij bent de volgende — sta klaar!' : `Je staat ${idx + 1}e in de rij`;
+  const sub = idx === 0 ? `Start ${ms <= 5000 ? 'elk moment' : 'rond ' + clock(Date.now() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor jou · start rond ${clock(Date.now() + ms)}`;
+  return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${waitText(ms, idx)}</div><div class="s">${sub}</div><div class="s" style="font-size:11px;margin-top:4px;color:var(--muted)">Dit is een schatting.</div></div>`;
+}
+
+function tempoSvg(times) {
+  if (times.length < 2) return '';
+  const W = 300, H = 90, mn = Math.min(...times), mx = Math.max(...times), rg = (mx - mn) || 1;
+  const X = (i) => 10 + i * (W - 20) / (times.length - 1), Y = (t) => 12 + (t - mn) / rg * (H - 30);
+  const bi = times.indexOf(mn), avg = times.reduce((a, b) => a + b, 0) / times.length;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">
+    <line x1="10" x2="${W - 10}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#6a5a48" stroke-dasharray="4 4" stroke-width="1.5"/>
+    <polyline fill="none" stroke="#e8590c" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" points="${times.map((t, i) => `${X(i)},${Y(t)}`).join(' ')}"/>
+    ${times.map((t, i) => `<circle cx="${X(i)}" cy="${Y(t)}" r="${i === bi ? 6 : 3.5}" fill="${i === bi ? '#2fb344' : '#17120d'}"/>`).join('')}
+    <text x="${X(bi)}" y="${Math.max(10, Y(mn) - 9)}" font-size="11" font-weight="800" text-anchor="middle" fill="#17120d">${mmss(mn)}</text>
+    <text x="${W - 10}" y="${H - 2}" font-size="10" text-anchor="end" fill="#6a5a48">stippellijn = gemiddelde</text></svg>`;
+}
+
+function viewMine() {
+  const r = runners.find((x) => x.id === me);
+  if (!r) {
+    const q = query.trim().toLowerCase();
+    const res = q ? runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 12) : [];
+    return `<div class="card"><h2>Wie ben jij?</h2><div class="s" style="margin-bottom:10px;font-weight:500">Zoek je naam om je wachtplaats en je tijden te zien.</div>
+      <input id="q" placeholder="Typ je naam…" value="${esc(query)}" autocomplete="off">
+      <div id="res">${resultsHtml(res, q)}</div></div>`;
+  }
+  const my = laps.filter((l) => l.runnerId === r.id).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const times = my.map((l) => l.time);
+  const best = times.length ? Math.min(...times) : 0, avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
+  const overall = laps.length ? Math.min(...laps.map((l) => l.time)) : 0;
+  const byRunner = {}; laps.forEach((l) => { byRunner[l.runnerId] = (byRunner[l.runnerId] || 0) + 1; });
+  const lapRank = Object.values(byRunner).filter((n) => n > my.length).length + 1;
+  const bests = {}; laps.forEach((l) => { if (bests[l.runnerId] === undefined || l.time < bests[l.runnerId]) bests[l.runnerId] = l.time; });
+  const bestRank = best ? Object.values(bests).filter((t) => t < best).length + 1 : 0;
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:26px;font-weight:800">${esc(r.name)}</b><button class="link" data-act="other">Andere loper</button></div>
+    ${statusCard(r)}
+    <div class="card"><div class="grid">
+      <div class="tile"><div class="k">Rondes</div><div class="v">${my.length}</div></div>
+      <div class="tile"><div class="k">Afstand</div><div class="v">${(my.length * 0.515).toFixed(2).replace('.', ',')} km</div></div>
+      <div class="tile"><div class="k">Snelste ronde</div><div class="v">${best ? mmss(best) : '–'}</div></div>
+      <div class="tile"><div class="k">Gemiddeld</div><div class="v">${avg ? mmss(avg) : '–'}</div></div>
+      <div class="tile"><div class="k">Plaats (meeste rondes)</div><div class="v">${my.length ? '#' + lapRank : '–'}</div></div>
+      <div class="tile"><div class="k">Plaats (snelste ronde)</div><div class="v">${best ? '#' + bestRank : '–'}</div></div>
+      <div class="tile wide"><div class="k">Jij liep bij voor Water for All</div><div class="v">€ ${my.length * EUR_PER_LAP}</div></div></div>
+      ${my.length ? `<button class="btn full" style="margin-top:12px" data-act="share">📤 Deel mijn resultaat</button>` : ''}</div>
+    ${times.length >= 2 ? `<div class="card"><h2>Jouw tempo</h2>${tempoSvg(times)}</div>` : ''}
+    <div class="card"><h2>Jouw rondes</h2>${my.length === 0 ? '<div class="empty">Nog geen rondes gelopen</div>' :
+      my.map((l, i) => ({ l, nr: i + 1 })).reverse().map(({ l, nr }) => `<div class="lap"><div class="t">${clock(l.timestamp)}</div><div class="n">ronde ${nr}${l.time === overall ? '<span class="badge">🏆 record</span>' : l.time === best && my.length > 1 ? '<span class="badge">PR</span>' : ''}</div><div class="r">${mmss(l.time)}</div></div>`).join('')}</div>`;
+}
+function resultsHtml(res, q) {
+  if (!q) return '';
+  if (!res.length) return '<div class="empty">Geen loper gevonden</div>';
+  const inQ = new Set(queue.map((x) => x.runnerId));
+  return res.map((x) => `<div class="row" data-act="pick" data-id="${esc(x.id)}" style="cursor:pointer"><div class="nm">${esc(x.name)}<small>${x.totalLaps || 0} ${(x.totalLaps || 0) === 1 ? 'ronde' : 'rondes'}${inQ.has(x.id) ? ' · staat in de wachtrij' : ''}</small></div><div class="w">Dit ben ik ›</div></div>`).join('');
+}
+
+function viewQueue() {
+  const w = waiting();
+  const meR = runners.find((x) => x.id === me);
+  const run = isRunning() ? active.runner : null, st = startMs();
+  return `${meR ? statusCard(meR) : '<div class="card" style="background:#ffd58a"><b>Tik hieronder op “Dit ben ik” bij je naam</b> om te zien hoe lang het nog duurt.</div>'}
+    <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
+      ${run ? `<div class="row" style="background:#ffd58a;border-color:#17120d"><div class="no">🏃</div><div class="nm">${esc(run.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div></div>` : ''}
+      ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, 40).map((q, i) => {
+        const ms = waitMs(i), mine = q.runnerId === me;
+        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(Date.now() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
+      }).join('')}
+      ${w.length > 40 ? `<div class="empty">… en nog ${w.length - 40}</div>` : ''}</div>`;
+}
+
+function viewRank() {
+  const g = {}; runners.forEach((r) => { g[r.id] = r.gender; });
+  const fast = (f) => [...laps].filter(f).sort((a, b) => a.time - b.time).slice(0, 10);
+  const list = (arr, val) => arr.length ? arr.map((x, i) => `<div class="rank"><b>${i + 1}</b><div class="nm">${esc(x.name)}</div><div class="v">${val(x)}</div></div>`).join('') : '<div class="empty">Nog geen data</div>';
+  const mapLap = (l) => ({ name: l.runnerName, t: l.time });
+  const most = Object.entries(laps.reduce((a, l) => { a[l.runnerId] = (a[l.runnerId] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n]) => ({ name: (runners.find((r) => r.id === id) || {}).name || '?', n }));
+  return `<div class="card"><h2>Snelste rondes <small>algemeen</small></h2>${list(fast(() => true).map(mapLap), (x) => mmss(x.t))}</div>
+    <div class="card"><h2>Snelste rondes <small>vrouwen</small></h2>${list(fast((l) => g[l.runnerId] === 'V').map(mapLap), (x) => mmss(x.t))}</div>
+    <div class="card"><h2>Snelste rondes <small>mannen</small></h2>${list(fast((l) => g[l.runnerId] === 'M').map(mapLap), (x) => mmss(x.t))}</div>
+    <div class="card"><h2>Meeste rondes</h2>${list(most, (x) => x.n)}</div>`;
+}
+
+function render(force) {
+  $('euro').textContent = '€ ' + (laps.length * EUR_PER_LAP).toLocaleString('nl-BE');
+  $('nav').innerHTML = [['queue', 'Wachtrij'], ['mine', 'Mijn tijden'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
+  const typing = document.activeElement && document.activeElement.id === 'q';
+  if (typing && !force) { const q = query.trim().toLowerCase(); $('res').innerHTML = resultsHtml(runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 12), q); return; }
+  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'rank' ? viewRank() : viewMine();
+  const f = $('foot'); f.textContent = lastServer ? `Laatst bijgewerkt ${clock(lastServer)}` : 'Verbinden…';
+}
+let rt = null; const later = (force) => { clearTimeout(rt); rt = setTimeout(() => render(force), 120); };
+
+// ---------- gedeelde kaart ----------
+async function share() {
+  const r = runners.find((x) => x.id === me); if (!r) return;
+  const my = laps.filter((l) => l.runnerId === me), times = my.map((l) => l.time);
+  const best = Math.min(...times), avg = times.reduce((a, b) => a + b, 0) / times.length;
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const x = c.getContext('2d');
+  x.fillStyle = '#fff1cf'; x.fillRect(0, 0, 1080, 1350);
+  x.fillStyle = '#f2a342'; x.fillRect(0, 0, 1080, 230); x.fillStyle = '#17120d'; x.fillRect(0, 230, 1080, 8);
+  x.fillStyle = '#17120d'; x.font = '800 70px "Bricolage Grotesque", sans-serif'; x.fillText('24u Loop Leuven', 60, 120);
+  x.font = '500 34px "Bricolage Grotesque", sans-serif'; x.fillText('Humasol × Atlas Copco · Water for All', 60, 180);
+  const card = (xx, yy, w, hh, bg) => { x.fillStyle = '#17120d'; x.fillRect(xx + 10, yy + 10, w, hh); x.fillStyle = bg; x.fillRect(xx, yy, w, hh); x.strokeStyle = '#17120d'; x.lineWidth = 6; x.strokeRect(xx, yy, w, hh); };
+  card(60, 300, 940, 330, '#ffd58a');
+  x.fillStyle = '#17120d'; x.font = '800 88px "Bricolage Grotesque", sans-serif'; x.fillText(r.name.length > 20 ? r.name.slice(0, 19) + '…' : r.name, 100, 420);
+  x.font = '800 190px "Bricolage Grotesque", sans-serif'; x.fillText(String(my.length), 100, 590);
+  x.font = '600 56px "Bricolage Grotesque", sans-serif'; x.fillText(my.length === 1 ? 'ronde' : 'rondes', 100 + x.measureText(String(my.length)).width * 0 + 330, 590);
+  const t = (l, v, xx, yy) => { card(xx, yy, 450, 200, '#fff'); x.fillStyle = '#6a5a48'; x.font = '600 36px "Bricolage Grotesque", sans-serif'; x.fillText(l, xx + 30, yy + 70); x.fillStyle = '#17120d'; x.font = '800 78px "Bricolage Grotesque", sans-serif'; x.fillText(v, xx + 30, yy + 160); };
+  t('Afstand', (my.length * 0.515).toFixed(2).replace('.', ',') + ' km', 60, 710); t('Snelste ronde', mmss(best), 550, 710);
+  t('Gemiddeld', mmss(avg), 60, 960); t('Voor Water for All', '€ ' + my.length * EUR_PER_LAP, 550, 960);
+  x.fillStyle = '#17120d'; x.font = '700 40px "Bricolage Grotesque", sans-serif'; x.fillText('Bedankt om mee te lopen! 💛', 60, 1260);
+  const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+  const file = new File([blob], '24u-loop-resultaat.png', { type: 'image/png' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: '24u Loop Leuven', text: `Ik liep ${my.length} rondes voor Water for All!` }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+}
+
+// ---------- events ----------
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
+  if (t.dataset.tab) { tab = t.dataset.tab; render(true); return; }
+  const a = t.dataset.act;
+  if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem('myRunnerId', me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
+  if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem('myRunnerId'); } catch (e) {} render(true); }
+  if (a === 'share') share();
+});
+document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } });
+
+// ---------- data ----------
+const snap = (name, fn) => db.collection(col(name)).onSnapshot((s) => { lastServer = Date.now(); fn(s); later(); }, (err) => { $('foot').textContent = 'Geen verbinding met de server… (' + err.code + ')'; });
+snap('runners', (s) => { runners = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
+snap('laps', (s) => { laps = s.docs.map((d) => ({ id: d.id, ...d.data() })); statCache = null; });
+snap('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)); });
+snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; });
+
+// levende klok + wachttijd elke seconde bijwerken (zonder de pagina opnieuw op te bouwen)
+setInterval(() => {
+  document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(Date.now() - st); });
+}, 100);
+setInterval(() => { if (!(document.activeElement && document.activeElement.id === 'q')) render(true); }, 10000);
+render(true);
+</script>
+</body>
+</html>
