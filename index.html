@@ -125,6 +125,8 @@
         .dark-mode .chart-card text[fill='#111827'] { fill: #f3f4f6; }
         .dark-mode .chart-card text[fill='#b45309'] { fill: #fbbf24; }
         @keyframes weetBar { from { width: 0%; } to { width: 100%; } }
+        .dark-mode .keep-light, .dark-mode .keep-light *:not([style*='color']) { color: #17120d !important; }
+        .dark-mode .keep-light .text-gray-500, .dark-mode .keep-light .text-gray-600 { color: #5b4a3a !important; }
         .dark-mode .qr-promo { background: linear-gradient(135deg, #fff7ed, #ffedd5) !important; }
         .dark-mode .qr-promo .text-humasol-brown { color: #863c14; }
         .dark-mode .from-orange-50 { --tw-gradient-from: #3d2a14 var(--tw-gradient-from-position); --tw-gradient-to: #3d2a1400 var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
@@ -1054,12 +1056,12 @@ function predictNext(times, gender, restMs) {
             const city = doneCities[doneCities.length - 1];
             const nextCity = CITY_ROUTES.find(c => km < c.km);
 
-            const tile = (label, value, sub, color, subColor) => h('div', { className: 'rounded-lg p-2 min-w-0', style: { border: '2px solid #17120d', background: '#fff6df' } },
+            const tile = (label, value, sub, color, subColor) => h('div', { className: 'keep-light rounded-lg p-2 min-w-0', style: { border: '2px solid #17120d', background: '#fff6df' } },
                 h('div', { className: 'text-[11px] font-bold uppercase tracking-wide text-gray-500' }, label),
                 h('div', { className: 'text-3xl font-extrabold leading-tight', style: { color: '#17120d', fontVariantNumeric: 'tabular-nums' } }, value),
                 h('div', { className: 'text-xs font-semibold', style: subColor ? { color: subColor } : null }, sub)
             );
-            const record = (label, l) => h('div', { className: 'rounded-lg p-2 min-w-0', style: { border: '2px solid #17120d', background: '#ffe27a' } },
+            const record = (label, l) => h('div', { className: 'keep-light rounded-lg p-2 min-w-0', style: { border: '2px solid #17120d', background: '#ffe27a' } },
                 h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, label),
                 l ? h('div', { className: 'flex items-baseline justify-between gap-2' },
                     h('div', { className: 'text-base font-bold text-gray-900 truncate' }, l.runnerName),
@@ -1076,7 +1078,7 @@ function predictNext(times, gender, restMs) {
                     tile('Gemiddeld tempo', pace, `min/km · ${kmh ? kmh.toFixed(1) : '–'} km/u`, '#0891b2')
                 ),
                 h('div', { className: 'grid grid-cols-2 gap-2 mb-2' }, record('Snelste ronde', best), record('Snelste laatste uur', bestHour)),
-                h('div', { className: 'rounded-lg p-2', style: { background: '#d9f7d0', border: '2px solid #17120d' } },
+                h('div', { className: 'keep-light rounded-lg p-2', style: { background: '#d9f7d0', border: '2px solid #17120d' } },
                     h('div', { className: 'flex items-baseline justify-between' },
                         h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, 'Samen gelopen'),
                         h('div', { className: 'text-2xl font-extrabold text-gray-900' }, `${km.toFixed(1)} km`)
@@ -1764,7 +1766,7 @@ function predictNext(times, gender, restMs) {
             const showChrome = !isDisplayFullscreen && !IS_DISPLAY_ONLY;
             useEffect(() => {
                 if (IS_DISPLAY_ONLY) { if (view !== 'display') setView('display'); return; }
-                if (IS_SIGNUP) { if (view !== 'queue') setView('queue'); return; }
+                if (IS_SIGNUP) { if (view !== 'queue' && view !== 'admin') setView('queue'); return; }
                 if (publicView && view !== 'leaderboard' && view !== 'mine') setView('leaderboard');
             }, [publicView, view]);
 
@@ -3537,6 +3539,7 @@ function predictNext(times, gender, restMs) {
             };
 
             const dateTime = formatDateTime(currentTime);
+            const sTab = (v, label) => h('button', { onClick: () => setView(v), className: 'px-4 py-2 rounded-full font-bold text-sm', style: { border: '3px solid #17120d', background: view === v ? '#fff' : 'transparent', color: '#17120d', boxShadow: view === v ? '3px 3px 0 #17120d' : 'none' } }, label);
 
             return h('div', { 
                 className: `min-h-screen transition-colors ${
@@ -3674,7 +3677,7 @@ function predictNext(times, gender, restMs) {
 
                 // Content
                 // Wachtrij op volledig scherm: compacte oranje balk met grote klok, in dezelfde stijl als het grote scherm
-                IS_SIGNUP && h('div', { className: 'display-hdr bg-gradient-to-r from-humasol-orange to-humasol-brown text-white px-8 py-3 flex items-center justify-between gap-6' },
+                IS_SIGNUP && h('div', { className: 'display-hdr bg-gradient-to-r from-humasol-orange to-humasol-brown text-white px-8 py-3 flex flex-wrap items-center justify-between gap-4' },
                     h('div', { className: 'flex items-center gap-5' },
                         h('div', { className: 'leading-tight' },
                             h('div', { className: 'text-2xl font-bold' }, '24u Loop Leuven'),
@@ -3684,13 +3687,14 @@ function predictNext(times, gender, restMs) {
                             h(ClockHMS, { mainClass: 'text-5xl font-semibold tracking-tight leading-none', secClass: 'text-2xl font-medium opacity-70 ml-1 leading-none' }))
                     ),
                     h('div', { className: 'flex items-center gap-5' + (isDisplayFullscreen ? ' pr-14' : '') },
+                        !isDisplayFullscreen && h('div', { className: 'flex gap-2' }, sTab('queue', 'Wachtrij'), sTab('admin', 'Beheer')),
                         h(SyncChip, null),
                         h('div', { className: 'text-right leading-tight' },
-                            h('div', { className: 'text-sm uppercase tracking-wider font-semibold' }, 'Inschrijven & wachtrij'),
-                            h('div', { className: 'text-4xl font-extrabold' }, `${activeRunner && isRunning ? Math.max(0, queue.length - 1) : queue.length} wachtend`)
+                            h('div', { className: (isDisplayFullscreen ? 'text-4xl' : 'text-2xl') + ' font-extrabold whitespace-nowrap' }, `${activeRunner && isRunning ? Math.max(0, queue.length - 1) : queue.length} wachtend`)
                         ),
-                        !isDisplayFullscreen && h('button', { onClick: toggleDisplayFullscreen, className: 'flex items-center gap-2 px-4 py-2 rounded-full bg-white font-bold text-sm', style: { border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' } }, h(Icon, { name: 'expand', className: 'w-5 h-5' }), h('span', null, 'Volledig scherm')),
-                        h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-10 w-auto bg-white rounded-xl px-2 py-1', style: { border: '3px solid #17120d' } })
+                        !isDisplayFullscreen && h('button', { onClick: toggleDisplayFullscreen, className: 'flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm', style: { background: '#fff', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' } }, h(Icon, { name: 'expand', className: 'w-5 h-5' }), h('span', null, 'Volledig scherm')),
+                        !isDisplayFullscreen && h('button', { onClick: () => setDarkMode(!darkMode), className: 'px-3 py-2 rounded-full font-bold text-sm', style: { border: '3px solid #17120d', background: '#fff', color: '#17120d' }, title: 'Donkere of lichte weergave' }, darkMode ? 'Licht' : 'Donker'),
+                        h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-9 w-auto rounded-xl px-2 py-1', style: { background: '#fff', border: '3px solid #17120d' } })
                     ),
                     isDisplayFullscreen && h('button', {
                         onClick: toggleDisplayFullscreen, title: 'Volledig scherm verlaten (Esc)', 'aria-label': 'Volledig scherm verlaten',
@@ -3720,29 +3724,12 @@ function predictNext(times, gender, restMs) {
                     ),
 
                     // Low queue warning (shown on all views except display fullscreen)
-                    showChrome && !publicView && showLowQueueWarning && h('div', { 
-                        className: 'mb-6 bg-orange-100 border-4 border-orange-500 rounded-lg p-4 animate-pulse shadow-lg sticky top-20 z-20'
-                    },
-                        h('div', { className: 'flex items-center justify-between' },
-                            h('div', { className: 'flex items-center gap-3' },
-                                h('div', { className: 'text-4xl' }, ''),
-                                h('div', null,
-                                    h('h3', { className: 'text-xl font-bold text-orange-700' }, 
-                                        queue.length === 0 ? 'WACHTRIJ IS LEEG!' : 'WACHTRIJ BIJNA LEEG!'
-                                    ),
-                                    h('p', { className: 'text-orange-600 font-semibold' }, 
-                                        queue.length === 0 
-                                            ? 'Er staan geen lopers meer klaar. Voeg mensen toe!' 
-                                            : `Nog maar ${queue.length} ${queue.length === 1 ? 'loper' : 'lopers'} in de wachtrij. Vraag mensen om zich aan te melden!`
-                                    )
-                                )
-                            ),
-                            h('button', {
-                                onClick: () => setShowLowQueueWarning(false),
-                                className: 'text-orange-700 hover:text-orange-900 font-bold text-2xl px-2',
-                                title: 'Verberg waarschuwing'
-                            }, '×')
-                        )
+                    showChrome && !publicView && showLowQueueWarning && h('div', { className: 'keep-light mb-4 rounded-lg px-4 py-2 flex items-center justify-between gap-3', style: { background: '#ffd58a', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d' } },
+                        h('div', null,
+                            h('b', { className: 'text-gray-900' }, queue.length === 0 ? 'Wachtrij is leeg' : `Nog maar ${queue.length} ${queue.length === 1 ? 'loper' : 'lopers'} in de wachtrij`),
+                            h('span', { className: 'ml-3 text-sm text-gray-800' }, 'Roep mensen op om zich in te schrijven.')
+                        ),
+                        h('button', { onClick: () => setShowLowQueueWarning(false), className: 'font-bold text-xl px-2 text-gray-900', title: 'Verberg' }, '×')
                     ),
 
                     // Timer View
@@ -4026,7 +4013,7 @@ function predictNext(times, gender, restMs) {
                             ),
 
                             // Add new runner form
-                            h('div', { className: 'grid grid-cols-3 gap-4 mb-4' },
+                            h('div', { className: 'grid grid-cols-2 gap-3 mb-3' },
                                 h('input', {
                                     type: 'text',
                                     placeholder: 'Voornaam',
@@ -4040,17 +4027,16 @@ function predictNext(times, gender, restMs) {
                                     value: lastName,
                                     onChange: e => setLastName(e.target.value),
                                     className: 'px-4 py-3 border rounded-lg'
-                                }),
-                                h('select', {
-                                    value: genderInput,
-                                    onChange: e => setGenderInput(e.target.value),
-                                    className: 'px-4 py-3 border rounded-lg focus:border-indigo-500 focus:outline-none bg-white'
-                                },
-                                    h('option', { value: '' }, 'Gender...'),
-                                    h('option', { value: 'M' }, 'Man'),
-                                    h('option', { value: 'V' }, 'Vrouw'),
-                                    h('option', { value: 'X' }, 'Andere')
-                                )
+                                })
+                            ),
+                            // Geslacht: drie knoppen (sneller en duidelijker dan een keuzelijst)
+                            h('div', { className: 'grid grid-cols-3 gap-3 mb-4', role: 'radiogroup', 'aria-label': 'Gender' },
+                                [['M', 'Man'], ['V', 'Vrouw'], ['X', 'Andere']].map(([v, label]) => h('button', {
+                                    key: v, type: 'button', role: 'radio', 'aria-checked': genderInput === v,
+                                    onClick: () => setGenderInput(genderInput === v ? '' : v),
+                                    className: 'py-3 rounded-lg font-bold',
+                                    style: { border: '3px solid #17120d', background: genderInput === v ? '#f2a342' : '#fff', color: '#17120d', boxShadow: genderInput === v ? '3px 3px 0 #17120d' : 'none' }
+                                }, label))
                             ),
                             h('button', {
                                 onClick: addRunner,
@@ -4061,7 +4047,7 @@ function predictNext(times, gender, restMs) {
                             ),
 
                             // Algemene QR-code naar de lopers-app (wachtplaats, wachttijd en eigen tijden)
-                            h('div', { className: 'flex items-center gap-4 mb-4 p-3 rounded-lg', style: { background: '#ffd58a', border: '3px solid #17120d' } },
+                            h('div', { className: 'keep-light flex items-center gap-4 mb-4 p-3 rounded-lg', style: { background: '#ffd58a', border: '3px solid #17120d' } },
                                 h('div', { style: { flexShrink: 0, border: '3px solid #17120d', borderRadius: 8, overflow: 'hidden' } }, h(QrCode, { url: getPublicUrl(), size: 104 })),
                                 h('div', null,
                                     h('div', { className: 'font-extrabold text-gray-900 leading-tight' }, 'Volg je beurt op je gsm'),
@@ -4986,7 +4972,7 @@ function predictNext(times, gender, restMs) {
                                             h('div', { className: 'flex justify-center gap-3 w-full' },
                                                 // Lopers-app
                                                 h('div', { className: 'flex-1 min-w-0 flex flex-col items-center gap-1.5' },
-                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 bg-white', style: { border: '3px solid #17120d', color: '#17120d' } },
+                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1', style: { background: '#fff', border: '3px solid #17120d', color: '#17120d' } },
                                                         h('span', { className: 'relative flex h-2 w-2' },
                                                             h('span', { className: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75' }),
                                                             h('span', { className: 'relative inline-flex rounded-full h-2 w-2 bg-red-500' })),
@@ -4999,7 +4985,7 @@ function predictNext(times, gender, restMs) {
                                                 ),
                                                 // Instagram
                                                 h('div', { className: 'flex-1 min-w-0 flex flex-col items-center gap-1.5' },
-                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 bg-white', style: { border: '3px solid #17120d', color: '#17120d' } },
+                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1', style: { background: '#fff', border: '3px solid #17120d', color: '#17120d' } },
                                                         h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: '#17120d', strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-label': 'Instagram' }, h('rect', { x: 3, y: 3, width: 18, height: 18, rx: 5.5 }), h('circle', { cx: 12, cy: 12, r: 4.2 }), h('circle', { cx: 17.4, cy: 6.6, r: 1.1, fill: '#17120d', stroke: 'none' })),
                                                         h('span', { className: 'text-sm font-extrabold uppercase tracking-wide' }, 'Volg ons')
                                                     ),
