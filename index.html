@@ -117,7 +117,7 @@
         @keyframes lapPulse { 0%, 100% { background-color: rgba(251,146,60,.10); box-shadow: inset 4px 0 0 #fb923c; } 50% { background-color: rgba(251,146,60,.30); box-shadow: inset 4px 0 0 #f97316, 0 0 14px rgba(251,146,60,.5); } }
         @keyframes lapGold { 0%, 100% { background-color: rgba(250,204,21,.25); box-shadow: inset 5px 0 0 #eab308, 0 0 10px rgba(234,179,8,.5); } 50% { background-color: rgba(250,204,21,.6); box-shadow: inset 5px 0 0 #ca8a04, 0 0 28px rgba(234,179,8,.95); } }
         @keyframes lapFade { 0% { background-color: rgba(253,224,71,.55); box-shadow: inset 4px 0 0 #eab308; } 60% { background-color: rgba(253,224,71,.22); box-shadow: inset 4px 0 0 rgba(234,179,8,.7); } 100% { background-color: rgba(253,224,71,0); box-shadow: inset 4px 0 0 rgba(234,179,8,0); } }
-        .lap-fresh { animation: lapFade 46s ease-out forwards; }
+        .lap-fresh { animation: lapFade 56s ease-out forwards; }
         .lap-record { animation: lapGold 0.9s ease-in-out infinite; }
         @keyframes rowFlash { 0%, 100% { box-shadow: 0 0 0 0 rgba(251,146,60,0); } 15%, 55% { box-shadow: 0 0 0 3px rgba(251,146,60,.95), 0 0 22px rgba(251,146,60,.85); } 35%, 75% { box-shadow: 0 0 0 1px rgba(251,146,60,.35), 0 0 6px rgba(251,146,60,.35); } }
         @keyframes swapIn { 0% { opacity: 0; transform: translateY(16px); } 100% { opacity: 1; transform: none; } } 
@@ -796,8 +796,8 @@
                     const old = prev.current.get(id);
                     const doFlash = flash && !quiet;
                     if (old === undefined) {
-                        el.style.animation = 'swapIn .7s cubic-bezier(.2,.8,.2,1) both' + (doFlash ? ', lapFade 46s ease-out .3s forwards' : '');
-                        setTimeout(() => { el.style.animation = ''; }, doFlash ? 47000 : 1000);
+                        el.style.animation = 'swapIn .7s cubic-bezier(.2,.8,.2,1) both' + (doFlash ? ', lapFade 56s ease-out .3s forwards' : '');
+                        setTimeout(() => { el.style.animation = ''; }, doFlash ? 57000 : 1000);
                         return;
                     }
                     const dy = old - top;
@@ -808,8 +808,8 @@
                         setTimeout(() => { el.style.transition = ''; }, 900);
                     }
                     if (doFlash && val !== null && vals.current[id] !== undefined && vals.current[id] !== val) {
-                        el.style.animation = 'lapFade 46s ease-out forwards';
-                        setTimeout(() => { el.style.animation = ''; }, 47000);
+                        el.style.animation = 'lapFade 56s ease-out forwards';
+                        setTimeout(() => { el.style.animation = ''; }, 57000);
                     }
                 });
                 prev.current = next; vals.current = nv;
@@ -922,7 +922,7 @@
             React.useEffect(() => { const i = setInterval(() => setTick(n => n + 1), 1000); return () => clearInterval(i); }, []);
             const seen = React.useRef({});
             recent.forEach(l => { if (l.id && seen.current[l.id] === undefined) seen.current[l.id] = performance.now() < 8000 ? -1e9 : performance.now(); });
-            const FRESH_MS = 50000;
+            const FRESH_MS = 60000;
             const ago = (ts) => { const m = Math.floor((now - new Date(ts).getTime()) / 60000); return m < 1 ? 'zonet' : m < 60 ? `${m} min geleden` : `${Math.floor(m / 60)} u geleden`; };
             return h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3' },
                 h('div', { className: 'flex items-center justify-between border-b-2 pb-1 mb-1.5' },
