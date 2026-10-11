@@ -63,7 +63,7 @@
     <div><h1>24u Loop Leuven</h1><div class="sub">Humasol × Atlas Copco · Water for All</div></div>
     <a class="logo" href="https://www.instagram.com/humasol_vzw" target="_blank" rel="noopener"><img src="humasol_logo.png" alt="Humasol"></a>
   </div>
-  <a class="euro" href="https://www.atlascopco.com/nl-be/about-atlas-copco/water-for-all" target="_blank" rel="noopener" title="Meer over Water for All"><span>Opgehaald</span><b id="euro">€ 0</b><span style="font-size:15px">ⓘ</span></a>
+  <a class="euro" href="https://www.atlascopco.com/nl-be/about-atlas-copco/water-for-all" target="_blank" rel="noopener" title="Meer over Water for All"><span>Opgehaald</span><b id="euro">€ 0</b><span style="font-size:18px;line-height:1">›</span></a>
 </header>
 <nav id="nav"></nav>
 <main id="view"></main>
@@ -164,7 +164,7 @@ function statusCard(r, self = true) {
   const fn = esc((r.name || '').split(' ')[0]);
   if (isRunning() && active.runner.runnerId === r.id) {
     const st = startMs();
-    return `<div class="status run"><div class="k">🏃 ${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
+    return `<div class="status run"><div class="k">${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
   }
   const w = waiting(), idxs = w.map((q, i) => q.runnerId === r.id ? i : -1).filter((i) => i >= 0), idx = idxs.length ? idxs[0] : -1;
   if (idx === -1) return `<div class="status none"><div class="k">${self ? 'Je staat niet in de wachtrij' : fn + ' staat niet in de wachtrij'}</div>${self ? '<div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div>' : ''}</div>`;
@@ -218,10 +218,10 @@ function profile(r, self) {
       <div class="tile"><div class="k">Plaats (meeste rondes)</div><div class="v">${my.length ? '#' + lapRank : '–'}</div></div>
       <div class="tile"><div class="k">Plaats (snelste ronde)</div><div class="v">${best ? '#' + bestRank : '–'}</div></div>
       <div class="tile wide"><div class="k">${self ? 'Jij liep' : 'Liep'} bij voor Water for All</div><div class="v">€ ${my.length * EUR_PER_LAP}</div></div></div>
-      ${self && my.length ? `<button class="btn full" style="margin-top:12px" data-act="share">📤 Deel mijn resultaat</button>` : ''}</div>
+      ${self && my.length ? `<button class="btn full" style="margin-top:12px" data-act="share">Deel mijn resultaat</button>` : ''}</div>
     ${times.length >= 2 ? `<div class="card"><h2>${self ? 'Jouw' : 'Het'} tempo</h2>${tempoSvg(times)}</div>` : ''}
     <div class="card"><h2>${self ? 'Jouw rondes' : 'Rondes'}</h2>${my.length === 0 ? '<div class="empty">Nog geen rondes gelopen</div>' :
-      my.map((l, i) => ({ l, nr: i + 1 })).reverse().map(({ l, nr }) => `<div class="lap"><div class="t">${clock(l.timestamp)}</div><div class="n">ronde ${nr}${l.time === overall ? '<span class="badge">🏆 record</span>' : l.time === best && my.length > 1 ? '<span class="badge">PR</span>' : ''}</div><div class="r">${mmss(l.time)}</div></div>`).join('')}</div>`;
+      my.map((l, i) => ({ l, nr: i + 1 })).reverse().map(({ l, nr }) => `<div class="lap"><div class="t">${clock(l.timestamp)}</div><div class="n">ronde ${nr}${l.time === overall ? '<span class="badge">record</span>' : l.time === best && my.length > 1 ? '<span class="badge">PR</span>' : ''}</div><div class="r">${mmss(l.time)}</div></div>`).join('')}</div>`;
 }
 function resultsHtml(res, q, act = 'pick') {
   if (!q) return '';
@@ -250,7 +250,7 @@ function nowCard() {
   const groupRel = recent.length >= 5 ? sdRel(recent) : 0.15;
   const rel = Math.max(0.06, Math.min(0.25, mine.length >= 3 ? sdRel(mine) : groupRel));
   const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : ex * 1.12;
-  return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">🏃 Nu aan het lopen</div>
+  return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">Nu aan het lopen</div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${esc(active.runner.runnerName)}</div>
         <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">${mmssc(tnow() - st)}</div>
@@ -319,7 +319,7 @@ async function share() {
   const t = (l, v, xx, yy) => { card(xx, yy, 450, 200, '#fff'); x.fillStyle = '#6a5a48'; x.font = '600 36px "Bricolage Grotesque", sans-serif'; x.fillText(l, xx + 30, yy + 70); x.fillStyle = '#17120d'; x.font = '800 78px "Bricolage Grotesque", sans-serif'; x.fillText(v, xx + 30, yy + 160); };
   t('Afstand', (my.length * 0.515).toFixed(2).replace('.', ',') + ' km', 60, 710); t('Snelste ronde', mmss(best), 550, 710);
   t('Gemiddeld', mmss(avg), 60, 960); t('Voor Water for All', '€ ' + my.length * EUR_PER_LAP, 550, 960);
-  x.fillStyle = '#17120d'; x.font = '700 40px "Bricolage Grotesque", sans-serif'; x.fillText('Bedankt om mee te lopen! 💛', 60, 1260);
+  x.fillStyle = '#17120d'; x.font = '700 40px "Bricolage Grotesque", sans-serif'; x.fillText('Bedankt om mee te lopen!', 60, 1260);
   const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
   const file = new File([blob], '24u-loop-resultaat.png', { type: 'image/png' });
   try {

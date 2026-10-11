@@ -66,7 +66,7 @@
 </style>
 </head>
 <body>
-<header><h1>⏱ Chronometer</h1><span class="chip" id="chip"><i></i><span id="chipTxt">Verbinden…</span></span></header>
+<header><h1>Chronometer</h1><span class="chip" id="chip"><i></i><span id="chipTxt">Verbinden…</span></span></header>
 <div id="env"></div>
 <div id="banner"></div>
 <main id="view"></main>
@@ -158,7 +158,7 @@ function ask(title, text, { ok = 'Ja, doorgaan', danger = false, input = null, c
 // ===== schrijfacties (één atomaire batch; wacht niet op de server: werkt ook offline) =====
 function commit(batch) {
   pending++; render();
-  return batch.commit().then(() => { pending = Math.max(0, pending - 1); render(); }, (err) => { pending = Math.max(0, pending - 1); toast('⚠️ Opslaan mislukt: ' + (err.message || err.code), 8000); render(); });
+  return batch.commit().then(() => { pending = Math.max(0, pending - 1); render(); }, (err) => { pending = Math.max(0, pending - 1); toast('Opslaan mislukt: ' + (err.message || err.code), 8000); render(); });
 }
 function activeClear(batch) { (activeDocs.length ? activeDocs.map((d) => d.id) : ['current']).forEach((id) => batch.delete(ref('activeRunner', id))); }
 function setActive(batch, item, startISO) {
@@ -175,7 +175,7 @@ async function pressMain() {
     if (!w.length) return;
     lockButtons(1200); buzz(60);
     const b = db.batch(); setActive(b, w[0], new Date(tnow()).toISOString()); commit(b);
-    toast(`▶ ${w[0].runnerName} is vertrokken`, 2500);
+    toast(`${w[0].runnerName} is vertrokken`, 2500);
     return;
   }
   const st = startMs(), time = st ? tnow() - st : 0;
@@ -198,7 +198,7 @@ function finishLap(time, startNext, atISO) {
   lastAction = { lapId: lapRef.id, lapData, runnerDocId: rn ? rn.id : null, time, queueItem: qi ? { id: qi.id, data: { runnerId: qi.runnerId, runnerName: qi.runnerName, addedAt: qi.addedAt, order: qi.order || 0 } } : null, prevActive: a, at: Date.now(), nextName: nxt ? nxt.runnerName : null };
   try { localStorage.setItem('lastAction_' + NS, JSON.stringify(lastAction)); } catch (e) {}
   commit(b); lockButtons(1500); buzz([40, 40, 40]);
-  toast(`✓ ${run.runnerName}: ${mmssc(time)}${startNext && nxt ? `  →  ${nxt.runnerName} loopt` : ''}`, 5000);
+  toast(`Opgeslagen: ${run.runnerName} ${mmssc(time)}${startNext && nxt ? `  →  ${nxt.runnerName} loopt` : ''}`, 5000);
 }
 async function undo() {
   if (!lastAction) return;
@@ -212,7 +212,7 @@ async function undo() {
   activeDocs.filter((d) => d.id !== 'current').forEach((d) => b.delete(ref('activeRunner', d.id)));
   b.set(ref('activeRunner', 'current'), la.prevActive);
   lastAction = null; try { localStorage.removeItem('lastAction_' + NS); } catch (e) {}
-  commit(b); lockButtons(800); toast('↩ Ongedaan gemaakt: de timer loopt weer', 3500);
+  commit(b); lockButtons(800); toast('Ongedaan gemaakt: de timer loopt weer', 3500);
 }
 async function manualTime() {
   const a = activeData(); if (!a || !isRunning()) return;
@@ -283,7 +283,7 @@ async function resetAll() {
     for (let i = 0; i < snap.docs.length; i += 400) { const b = db.batch(); snap.docs.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit(); n += Math.min(400, snap.docs.length - i); }
   }
   lastAction = null; try { localStorage.removeItem('lastAction_' + NS); } catch (e) {}
-  toast(`🧹 ${n} documenten gewist`, 5000);
+  toast(`${n} documenten gewist`, 5000);
 }
 
 // ===== wakker houden =====
@@ -302,51 +302,53 @@ function renderChrome() {
   const st = connState(), chip = $('chip');
   chip.className = 'chip ' + (st === 'off' ? 'off' : st === 'sync' ? 'sync' : '');
   $('chipTxt').textContent = !loaded.queue ? 'Verbinden…' : st === 'off' ? (pending ? `Offline · ${pending} wacht` : 'Offline') : st === 'sync' ? `Verzenden (${pending})` : 'Verbonden';
-  $('env').innerHTML = NS ? `<div class="env">🧪 OEFENMODUS · ${esc(NS)} — de echte data blijft ongemoeid</div>` : '';
+  $('env').innerHTML = NS ? `<div class="env">OEFENMODUS · ${esc(NS)} — de echte data blijft ongemoeid</div>` : '';
   let ban = '';
-  if (st === 'off') ban = `<div class="banner red">📴 Geen verbinding. Je kan gewoon doorgaan: alles wordt bewaard op dit toestel en automatisch verstuurd zodra het internet terug is. Sluit of herlaad deze pagina niet.</div>`;
-  else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">⚠️ Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
-  else if (loaded.queue && isRunning() && waiting().length === 0) ban = `<div class="banner">⚠️ Er staat niemand meer na deze loper.</div>`;
+  if (st === 'off') ban = `<div class="banner red">Geen verbinding. Je kan gewoon doorgaan: alles wordt bewaard op dit toestel en automatisch verstuurd zodra het internet terug is. Sluit of herlaad deze pagina niet.</div>`;
+  else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
+  else if (loaded.queue && isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand meer na deze loper.</div>`;
   $('banner').innerHTML = ban;
-  $('nav').innerHTML = [['chrono', '⏱ Chrono'], ['queue', '👥 Rij'], ['laps', '🏁 Rondes'], ['more', '⚙️ Meer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
+  $('nav').innerHTML = [['chrono', 'Chrono'], ['queue', 'Rij'], ['laps', 'Rondes'], ['more', 'Meer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
 }
 function viewChrono() {
   const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
   let top = '', button = '';
   if (running) {
     const run = a.runner, ex = expected(run.runnerId);
-    top = `<div class="card now"><div class="k">🏃 Nu aan het lopen</div><div class="nm">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="sub">Verwacht ≈ ${mmss(ex)}</div></div>`;
-    button = w.length ? `<button class="big" data-act="main" ${busy ? 'disabled' : ''}>⏭ RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small></button>` : `<button class="big stop" data-act="main" ${busy ? 'disabled' : ''}>🏁 RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small></button>`;
+    top = `<div class="card now"><div class="k">Nu aan het lopen</div><div class="nm">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="sub">Verwacht ≈ ${mmss(ex)}</div></div>`;
+    button = w.length ? `<button class="big" data-act="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small></button>` : `<button class="big stop" data-act="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small></button>`;
   } else {
     top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm">${w.length ? esc(w[0].runnerName) : '—'}</div><div class="sub">${w.length ? 'is de eerste in de rij' : 'Wachtrij is leeg'}</div></div>`;
-    button = `<button class="big ${w.length ? '' : 'wait'}" data-act="main" ${(!w.length || busy) ? 'disabled' : ''}>▶ START<small>${w.length ? esc(w[0].runnerName) : 'wacht op een loper'}</small></button>`;
+    button = `<button class="big ${w.length ? '' : 'wait'}" data-act="main" ${(!w.length || busy) ? 'disabled' : ''}>START<small>${w.length ? esc(w[0].runnerName) : 'wacht op een loper'}</small></button>`;
   }
-  const undoCard = lastAction ? `<div class="undo"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">↩ Ongedaan</button></div>` : '';
+  const recentLaps = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
+  const undoCard = lastAction ? `<div class="undo"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button></div>` : '';
   const next = w.slice(running ? 0 : 1, (running ? 0 : 1) + 5).map((q, i) => { const idx = i + (running ? 0 : 1); return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   return `${top}${button}${undoCard}
-    ${running ? `<div class="row2"><button class="btn" data-act="manual">⌨ Tijd intikken</button><button class="btn" data-act="stop">⏹ Stoppen na deze</button></div><button class="btn danger" data-act="cancel">✕ Deze loop annuleren (niet opslaan)</button>` : ''}
-    <div class="card"><h2>${running ? 'Hierna' : 'Daarna'} <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>`;
+    ${running ? `<div class="row2"><button class="btn" data-act="manual">Tijd intikken</button><button class="btn" data-act="stop">Stoppen na deze</button></div><button class="btn danger" data-act="cancel">Loop annuleren (niet opslaan)</button>` : ''}
+    <div class="card"><h2>${running ? 'Hierna' : 'Daarna'} <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>
+    <div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>${recentLaps || '<div class="empty">Nog geen rondes</div>'}</div>`;
 }
 function viewQueue() {
   const w = waiting(), r = runItem(), a = activeData();
   return `<div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
-    ${isRunning() ? `<div class="row run"><div class="no">🏃</div><div class="nm">${esc(a.runner.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${startMs() || ''}">${mmssc(startMs() ? tnow() - startMs() : 0)}</div></div>` : ''}
+    ${isRunning() ? `<div class="row run"><div class="no">&gt;</div><div class="nm">${esc(a.runner.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${startMs() || ''}">${mmssc(startMs() ? tnow() - startMs() : 0)}</div></div>` : ''}
     ${w.length === 0 ? '<div class="empty">Geen lopers in de wachtrij</div>' : w.map((q, i) => `<div class="row"><div class="no">${i + 1}</div><div class="nm">${esc(q.runnerName)}<small>${waitText(waitMs(i), i)} · rond ${clock(tnow() + waitMs(i))}</small></div>
-      <button class="btn small" data-act="up" data-id="${esc(q.id)}" ${i === 0 ? 'disabled' : ''}>↑</button><button class="btn small" data-act="down" data-id="${esc(q.id)}" ${i === w.length - 1 ? 'disabled' : ''}>↓</button><button class="btn small danger" data-act="rm" data-id="${esc(q.id)}">✕</button></div>`).join('')}</div>`;
+      <button class="btn small" data-act="up" data-id="${esc(q.id)}" ${i === 0 ? 'disabled' : ''}>↑</button><button class="btn small" data-act="down" data-id="${esc(q.id)}" ${i === w.length - 1 ? 'disabled' : ''}>↓</button><button class="btn small danger" data-act="rm" data-id="${esc(q.id)}">Weg</button></div>`).join('')}</div>`;
 }
 function viewLaps() {
   const list = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 40);
   return `<div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>
     ${list.length === 0 ? '<div class="empty">Nog geen rondes</div>' : list.map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}<small>ronde ${l.lapNumber || '?'}</small></div><div class="w">${mmssc(l.time)}</div>
-      <button class="btn small" data-act="edit" data-id="${esc(l.id)}">✎</button><button class="btn small danger" data-act="del" data-id="${esc(l.id)}">🗑</button></div>`).join('')}</div>`;
+      <button class="btn small" data-act="edit" data-id="${esc(l.id)}">Pas aan</button><button class="btn small danger" data-act="del" data-id="${esc(l.id)}">Wis</button></div>`).join('')}</div>`;
 }
 function viewMore() {
   return `<div class="card"><h2>Dit toestel</h2>
-    <div class="row"><div class="nm">Scherm wakker houden<small>${wlOK ? 'actief: het scherm gaat niet uit' : 'niet actief: tik hieronder'}</small></div><button class="btn small ${wlOK ? 'ok' : 'primary'}" data-act="awake">${wlOK ? '✓' : 'Aan'}</button></div>
+    <div class="row"><div class="nm">Scherm wakker houden<small>${wlOK ? 'actief: het scherm gaat niet uit' : 'niet actief: tik hieronder'}</small></div><button class="btn small ${wlOK ? 'ok' : 'primary'}" data-act="awake">${wlOK ? 'Aan' : 'Zet aan'}</button></div>
     <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
     <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
-    <div class="card"><h2>Gegevens</h2><div class="row2"><button class="btn" data-act="csvLaps">⬇ Rondes (CSV)</button><button class="btn" data-act="csvRunners">⬇ Lopers (CSV)</button></div></div>
-    <div class="card"><h2>Gevaarlijke zone</h2><div class="sec" style="margin-bottom:8px">${NS ? `Wist enkel de oefenomgeving "${esc(NS)}"` : 'Wist het ECHTE event'}</div><button class="btn danger" style="width:100%" data-act="reset">🧹 Alle data wissen…</button></div>
+    <div class="card"><h2>Gegevens</h2><div class="row2"><button class="btn" data-act="csvLaps">Rondes (CSV)</button><button class="btn" data-act="csvRunners">Lopers (CSV)</button></div></div>
+    <div class="card"><h2>Gevaarlijke zone</h2><div class="sec" style="margin-bottom:8px">${NS ? `Wist enkel de oefenomgeving "${esc(NS)}"` : 'Wist het ECHTE event'}</div><button class="btn danger" style="width:100%" data-act="reset">Alle data wissen…</button></div>
     <div class="empty" style="font-size:12px">Chronometer · Humasol vzw</div>`;
 }
 let lastSig = '';
