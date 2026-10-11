@@ -124,7 +124,7 @@ function waitMs(idx) {
   let t = 0;
   if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(active.runner.runnerId) - (st ? Date.now() - st : 0)); }
   const w = waiting();
-  for (let j = 0; j < idx && j < w.length; j++) t += 3000 + expected(w[j].runnerId);
+  for (let j = 0; j < idx && j < w.length; j++) t += 2000 + expected(w[j].runnerId);
   return t;
 }
 function waitText(ms, idx) {
@@ -140,12 +140,12 @@ function statusCard(r, self = true) {
     const st = startMs();
     return `<div class="status run"><div class="k">🏃 ${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
   }
-  const w = waiting(), idx = w.findIndex((q) => q.runnerId === r.id);
+  const w = waiting(), idxs = w.map((q, i) => q.runnerId === r.id ? i : -1).filter((i) => i >= 0), idx = idxs.length ? idxs[0] : -1;
   if (idx === -1) return `<div class="status none"><div class="k">${self ? 'Je staat niet in de wachtrij' : fn + ' staat niet in de wachtrij'}</div>${self ? '<div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div>' : ''}</div>`;
   const ms = waitMs(idx);
   const head = self ? (idx === 0 ? 'Jij bent de volgende — sta klaar!' : `Je staat ${idx + 1}e in de rij`) : (idx === 0 ? `${fn} is de volgende` : `${fn} staat ${idx + 1}e in de rij`);
   const sub = idx === 0 ? `Start ${ms <= 5000 ? 'elk moment' : 'rond ' + clock(Date.now() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · start rond ${clock(Date.now() + ms)}`;
-  return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${waitText(ms, idx)}</div><div class="s">${sub}</div><div class="s" style="font-size:11px;margin-top:4px;color:var(--muted)">Dit is een schatting.</div></div>`;
+  return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${waitText(ms, idx)}</div><div class="s">${sub}</div>${idxs.length > 1 ? `<div class="s" style="margin-top:6px;font-weight:700">${self ? 'Daarna sta je' : fn + ' staat daarna'} ook nog ${idxs.slice(1).map((i) => (i + 1) + 'e (' + waitText(waitMs(i), i) + ')').join(' en ')} in de rij.</div>` : ''}<div class="s" style="font-size:11px;margin-top:4px;color:var(--muted)">Dit is een schatting.</div></div>`;
 }
 
 function tempoSvg(times) {
@@ -214,13 +214,29 @@ function viewSearch() {
     <div id="sres">${resultsHtml(res, q, 'view')}</div></div>`;
 }
 
+const TRACK_D = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 13 70';
+function nowCard() {
+  if (!isRunning()) return '';
+  const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
+  const mine = laps.filter((l) => l.runnerId === rid).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0, ex = expected(rid);
+  const fast = best ? Math.max(ex * 0.9, best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * 1.1, fast * 1.08) : ex * 1.12;
+  return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">🏃 Nu aan het lopen</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${esc(active.runner.runnerName)}</div>
+        <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">${mmssc(Date.now() - st)}</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:500">Verwacht ≈ ${mmss(ex)}</div></div>
+      <svg viewBox="0 0 260 140" style="width:46%;flex:none;overflow:visible" data-track data-start="${st}" data-fast="${fast}" data-slow="${slow}">
+        <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#fff6df" stroke-width="17"/>
+        <path class="tlo" d="${TRACK_D}" fill="none" stroke="#f2a342" stroke-width="17" pathLength="1" stroke-dasharray=".001 2" opacity=".55"/>
+        <path class="thi" d="${TRACK_D}" fill="none" stroke="#e8590c" stroke-width="17" pathLength="1" stroke-dasharray=".05 2"/>
+        <line x1="0" y1="70" x2="26" y2="70" stroke="#17120d" stroke-width="5"/></svg></div></div>`;
+}
 function viewQueue() {
   const w = waiting();
   const meR = runners.find((x) => x.id === me);
   const run = isRunning() ? active.runner : null, st = startMs();
-  return `${meR ? statusCard(meR) : '<div class="card" style="background:#ffd58a"><b>Tik hieronder op “Dit ben ik” bij je naam</b> om te zien hoe lang het nog duurt.</div>'}
+  return `${nowCard()}${meR ? statusCard(meR) : '<div class="card" style="background:#ffd58a"><b>Tik hieronder op “Dit ben ik” bij je naam</b> om te zien hoe lang het nog duurt.</div>'}
     <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
-      ${run ? `<div class="row" style="background:#ffd58a;border-color:#17120d"><div class="no">🏃</div><div class="nm">${esc(run.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div></div>` : ''}
       ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, 40).map((q, i) => {
         const ms = waitMs(i), mine = q.runnerId === me;
         return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(Date.now() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
@@ -306,6 +322,11 @@ snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') |
 // levende klok + wachttijd elke seconde bijwerken (zonder de pagina opnieuw op te bouwen)
 setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(Date.now() - st); });
+  document.querySelectorAll('svg[data-track]').forEach((el) => {
+    const e = Math.max(0, Date.now() - Number(el.dataset.start)), hi = Math.min(0.99, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
+    el.querySelector('.tlo').setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`);
+    const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo);
+  });
 }, 100);
 setInterval(() => { const ae = document.activeElement && document.activeElement.id; if (ae !== 'q' && ae !== 'sq') render(true); }, 10000);
 render(true);

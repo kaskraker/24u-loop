@@ -708,12 +708,14 @@
         // Het oranje stuk is waar de loper waarschijnlijk zit (bereik), het lichte stuk is al gelopen.
         const TRACK = { L: 150, r: 42, cxL: 55, cxR: 205, cy: 70 };
         const TRACK_PATH = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 13 70';
-        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '0 0 260 140', width: '100%', style: { display: 'block' } },
-            h('path', { d: TRACK_PATH, fill: 'none', stroke: 'rgba(148,163,184,.35)', strokeWidth: 18 }),
-            h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 18, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.35 }),
-            h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#ea580c', strokeWidth: 18, strokeLinecap: 'round', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
-            h('line', { x1: 3, y1: 70, x2: 23, y2: 70, stroke: '#1f2937', strokeWidth: 3 }),
-            label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#ea580c' }, label)
+        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '0 0 260 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
+            h('path', { d: TRACK_PATH, fill: 'none', stroke: '#17120d', strokeWidth: 26, strokeLinejoin: 'round' }),
+            h('path', { d: TRACK_PATH, fill: 'none', stroke: '#fff6df', strokeWidth: 17 }),
+            h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 17, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.55 }),
+            h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#e8590c', strokeWidth: 17, strokeLinecap: 'butt', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
+            h('line', { x1: 0, y1: 70, x2: 26, y2: 70, stroke: '#17120d', strokeWidth: 5 }),
+            h('text', { x: 36, y: 74, fontSize: 11, fontWeight: 800, fill: '#17120d' }, 'START'),
+            label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
         // ===== Klok die vloeiend oploopt zonder de hele app te herrenderen =====
@@ -1108,7 +1110,7 @@
 
             // ---- slide: loper in de spotlight ----
             const spark = (times, hi) => {
-                const W = 300, H = 120, n = times.length, mn = Math.min(...times), mx = Math.max(...times), rg = (mx - mn) || 1;
+                const W = 300, H = 96, n = times.length, mn = Math.min(...times), mx = Math.max(...times), rg = (mx - mn) || 1;
                 const X = (i) => 8 + (n === 1 ? (W - 16) / 2 : i * (W - 16) / (n - 1)), Y = (t) => 10 + ((t - mn) / rg) * (H - 24);   // sneller = hoger
                 const bestI = times.indexOf(mn);
                 return h('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', style: { display: 'block' } },
@@ -1119,9 +1121,9 @@
             };
             const spot = (kicker, name, big, sub, times, hi) => h('div', { className: 'text-center' },
                 label('🔦 In de spotlight · ' + kicker),
-                h('div', { className: 'text-3xl font-extrabold text-gray-900 truncate leading-tight mt-2' }, name),
-                h('div', { className: 'text-4xl font-extrabold leading-tight', style: { color: '#6366f1' } }, big),
-                h('div', { className: 'text-sm text-gray-600 mb-3' }, sub),
+                h('div', { className: 'text-2xl font-extrabold text-gray-900 truncate leading-tight mt-1' }, name),
+                h('div', { className: 'text-3xl font-extrabold leading-tight', style: { color: '#6366f1' } }, big),
+                h('div', { className: 'text-sm text-gray-600 mb-2' }, sub),
                 spark(times, hi)
             );
 
@@ -1480,6 +1482,16 @@
             const [showStaffLogin, setShowStaffLogin] = useState(false);
             const recentAddsRef = useRef({});
             const [seedStatus, setSeedStatus] = useState(null);
+            // Bevestigingsvenster in de stijl van de app (vervangt de bevestiging van de browser)
+            const [confirmDlg, setConfirmDlg] = useState(null);
+            const askConfirm = (text) => new Promise((resolve) => setConfirmDlg({ text, resolve }));
+            const answerConfirm = (ok) => { if (confirmDlg) confirmDlg.resolve(ok); setConfirmDlg(null); };
+            useEffect(() => {
+                if (!confirmDlg) return;
+                const onKey = (e) => { if (e.key === 'Escape') answerConfirm(false); };
+                window.addEventListener('keydown', onKey);
+                return () => window.removeEventListener('keydown', onKey);
+            }, [confirmDlg]);
             const [practiceHours, setPracticeHours] = useState(8);
             const [queueNotice, setQueueNotice] = useState(null);
             const [qDrag, setQDrag] = useState(null);     // index (in de wachtrij zonder de lopende loper) van de sleepte loper
@@ -2073,7 +2085,7 @@
             // Wachttijd tot de loper op plaats idx (0 = eerste in de rij na de lopende loper) mag starten:
             // rest van de lopende loper (zijn eigen verwachte tijd min wat al gelopen is) + de verwachte tijd van elke loper ervoor + wissel
             const estimateWaitMs = (idx) => {
-                const GAP = 3000;   // wissel tussen twee lopers (vorig jaar gemiddeld ~1,4 s, met marge)
+                const GAP = 2000;   // wissel tussen twee lopers (vorig jaar mediaan 0,9 s, 90% onder 1,6 s; met marge)
                 const waitingList = queue.filter((q, i) => !(activeRunner && isRunning && i === 0));
                 let t = 0;
                 if (activeRunner && isRunning) t = Math.max(5000, expectedLapMs(activeRunner.runnerId) - elapsedTime);
@@ -2384,7 +2396,7 @@
             };
 
             const cancelCurrentRun = async () => {
-                if (confirm('Weet je zeker dat je de huidige loop wilt annuleren zonder op te slaan?')) {
+                if (await askConfirm('Weet je zeker dat je de huidige loop wilt annuleren zonder op te slaan?')) {
                     setActiveRunner(null);
                     setElapsedTime(0);
                     setIsRunning(false);
@@ -2400,7 +2412,7 @@
                     return;
                 }
 
-                if (!confirm('Weet je zeker dat je het laatste ronde wilt verwijderen?')) {
+                if (!await askConfirm('Weet je zeker dat je het laatste ronde wilt verwijderen?')) {
                     return;
                 }
 
@@ -2430,7 +2442,7 @@
                 // Check if action is recent (within last 2 minutes for safety)
                 const twoMinutesAgo = Date.now() - (2 * 60 * 1000);
                 if (lastAction.stateSnapshot.timestamp < twoMinutesAgo) {
-                    if (!confirm('De laatste actie is meer dan 2 minuten geleden. Weet je zeker dat je deze wilt ongedaan maken?')) {
+                    if (!await askConfirm('De laatste actie is meer dan 2 minuten geleden. Weet je zeker dat je deze wilt ongedaan maken?')) {
                         return;
                     }
                 }
@@ -2438,7 +2450,7 @@
                 if (lastAction.type === 'lap') {
                     const snapshot = lastAction.stateSnapshot;
                     
-                    if (!confirm(`Weet je zeker dat je de laatste actie wilt ongedaan maken?\n\n${lastAction.lapData.runnerName}'s ronde (${formatTimeSimple(lastAction.lapData.time)}) wordt verwijderd en de timer gaat terug naar ${snapshot.activeRunner.runnerName}.`)) {
+                    if (!await askConfirm(`Weet je zeker dat je de laatste actie wilt ongedaan maken?\n\n${lastAction.lapData.runnerName}'s ronde (${formatTimeSimple(lastAction.lapData.time)}) wordt verwijderd en de timer gaat terug naar ${snapshot.activeRunner.runnerName}.`)) {
                         return;
                     }
 
@@ -2518,7 +2530,7 @@
             };
 
             const deleteLap = async (lap) => {
-                if (!confirm(`Weet je zeker dat je de ronde van ${lap.runnerName} (${formatTimeSimple(lap.time)}) wilt verwijderen?`)) {
+                if (!await askConfirm(`Weet je zeker dat je de ronde van ${lap.runnerName} (${formatTimeSimple(lap.time)}) wilt verwijderen?`)) {
                     return;
                 }
 
@@ -2669,7 +2681,7 @@
             };
 
             const removeFromQueue = async (queueItem) => {
-                if (confirm(`${queueItem.runnerName} uit de wachtrij verwijderen?`)) {
+                if (await askConfirm(`${queueItem.runnerName} uit de wachtrij verwijderen?`)) {
                     await firestoreWrapper.collection('queue').doc(queueItem.id).delete();
                 }
             };
@@ -2764,7 +2776,7 @@
             // ===== Oefenmodus (?ns=oefen): data van vorig jaar laden en snel een wachtrij vullen =====
             const seedPracticeData = async () => {
                 if (!NS) return;
-                if (!confirm(`Oefendata laden in "${NS}"?\n\nHet event van vorig jaar (met dummynamen) tot nu. Bestaande oefendata wordt overschreven. Je echte data blijft onaangeroerd.`)) return;
+                if (!await askConfirm(`Oefendata laden in "${NS}"?\n\nHet event van vorig jaar (met dummynamen) tot nu. Bestaande oefendata wordt overschreven. Je echte data blijft onaangeroerd.`)) return;
                 const sim = buildSimPlan(2026, Number(practiceHours) || 0);
                 const now = Date.now();
                 const finished = sim.plan.filter(l => l.f <= now);
@@ -2794,7 +2806,7 @@
             // Rondes tot nu komen meteen in de oefenomgeving; de rest wordt bewaard voor autoplay.
             const importPracticeCsv = async (file) => {
                 if (!NS || !file) return;
-                if (!confirm(`CSV importeren in "${NS}"?\n\nDit vervangt ALLE data in deze oefenomgeving. Je echte data blijft onaangeroerd.`)) return;
+                if (!await askConfirm(`CSV importeren in "${NS}"?\n\nDit vervangt ALLE data in deze oefenomgeving. Je echte data blijft onaangeroerd.`)) return;
                 try {
                     setSeedStatus({ running: true, text: 'CSV lezen…' });
                     const rows = parseCsv(await file.text());
@@ -3268,6 +3280,16 @@
             },
                 h(SyncBanner, null),
                 h(PracticeBadge, null),
+                confirmDlg && h('div', { className: 'fixed inset-0 z-[100] flex items-center justify-center p-4', style: { background: 'rgba(23,18,13,.55)' }, onClick: () => answerConfirm(false) },
+                    h('div', { className: 'bg-white rounded-lg shadow-lg p-6 w-full max-w-md', style: { animation: 'swapIn .25s ease-out both' }, onClick: (e) => e.stopPropagation() },
+                        h('div', { className: 'text-xl font-extrabold text-gray-900 mb-2' }, /verwijder|wissen|annuleren|ongedaan/i.test(confirmDlg.text) ? '⚠️ Zeker weten?' : 'Even bevestigen'),
+                        h('div', { className: 'text-gray-800 whitespace-pre-line mb-5' }, confirmDlg.text),
+                        h('div', { className: 'flex gap-3' },
+                            h('button', { onClick: () => answerConfirm(false), className: 'flex-1 px-4 py-3 rounded-lg font-bold bg-white text-gray-900 border-2 border-gray-900' }, 'Annuleren'),
+                            h('button', { autoFocus: true, onClick: () => answerConfirm(true), className: 'flex-1 px-4 py-3 rounded-lg font-bold text-white border-2 border-gray-900', style: { background: /verwijder|wissen|annuleren/i.test(confirmDlg.text) ? '#dc2626' : '#f2a342', color: /verwijder|wissen|annuleren/i.test(confirmDlg.text) ? '#fff' : '#17120d' } }, /verwijder|wissen/i.test(confirmDlg.text) ? 'Ja, verwijderen' : 'Ja, doorgaan')
+                        )
+                    )
+                ),
 
                 // Header (verberg in display fullscreen mode)
                 showChrome && h('div', { 
@@ -4686,44 +4708,36 @@
                                     h(LiveStats, { laps, formatTimeSimple }),
                                     h(LiveCharts, { laps, runners }),
 
-                                    // Humasol promo section with QR code (compact, right column)
-                                    h('div', { className: 'qr-promo bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg shadow-lg border-2 border-humasol-orange p-3' },
-                                        h('div', { className: 'flex flex-col items-center text-center space-y-2' },
-                                            // Logo
-                                            h('img', { 
-                                                src: 'humasol_logo.png', 
-                                                alt: 'Humasol Logo',
-                                                className: 'h-16 w-auto object-contain'
-                                            }),
-                                            // Slogan
-                                            h('div', { className: 'text-sm text-humasol-brown font-bold italic' }, '"Renewable technology for all"'),
-                                            // Divider
-                                            h('div', { className: 'w-full border-t-2 border-humasol-orange my-2' }),
-                                            // Twee QR-codes naast elkaar (wrapt onder elkaar op smalle schermen)
-                                            h('div', { className: 'flex justify-center gap-2 w-full' },
-                                                // Live volgen
+                                    // Humasol-blok met QR-codes (stijl "Gedurfd"): lopers-app en Instagram
+                                    h('div', { className: 'qr-promo rounded-lg shadow-lg p-3', style: { background: '#ffd58a' } },
+                                        h('div', { className: 'flex flex-col items-center text-center' },
+                                            h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-14 w-auto object-contain' }),
+                                            h('div', { className: 'text-sm font-bold italic mt-1', style: { color: '#17120d' } }, '"Renewable technology for all"'),
+                                            h('div', { className: 'w-full my-2', style: { borderTop: '3px solid #17120d' } }),
+                                            h('div', { className: 'flex justify-center gap-3 w-full' },
+                                                // Lopers-app
                                                 h('div', { className: 'flex-1 min-w-0 flex flex-col items-center gap-1.5' },
-                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-humasol-brown', style: { background: 'rgba(134,60,20,.12)' } },
+                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 bg-white', style: { border: '3px solid #17120d', color: '#17120d' } },
                                                         h('span', { className: 'relative flex h-2 w-2' },
                                                             h('span', { className: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75' }),
                                                             h('span', { className: 'relative inline-flex rounded-full h-2 w-2 bg-red-500' })),
-                                                        h('span', { className: 'text-sm font-extrabold uppercase tracking-wider' }, 'Volg live')
+                                                        h('span', { className: 'text-sm font-extrabold uppercase tracking-wide' }, 'Volg je beurt')
                                                     ),
-                                                    h('div', { className: 'w-full max-w-[150px]' },
-                                                        h(QrCode, { url: getPublicUrl(), size: '100%', blend: true })
+                                                    h('div', { className: 'w-full max-w-[150px] bg-white p-1.5', style: { border: '3px solid #17120d', borderRadius: 12, boxShadow: '3px 3px 0 #17120d' } },
+                                                        h(QrCode, { url: getPublicUrl(), size: '100%' })
                                                     ),
-                                                    h('div', { className: 'text-xs text-humasol-brown font-semibold leading-tight' }, 'Je tijden & rankings')
+                                                    h('div', { className: 'text-xs font-bold leading-tight', style: { color: '#17120d' } }, 'Je plaats in de rij,', h('br'), 'wachttijd & al je rondes')
                                                 ),
                                                 // Instagram
                                                 h('div', { className: 'flex-1 min-w-0 flex flex-col items-center gap-1.5' },
-                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-humasol-brown', style: { background: 'rgba(134,60,20,.12)' } },
+                                                    h('div', { className: 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 bg-white', style: { border: '3px solid #17120d', color: '#17120d' } },
                                                         h('img', { src: 'Instagram_icon.png', alt: 'Instagram', className: 'w-4 h-4' }),
-                                                        h('span', { className: 'text-sm font-extrabold uppercase tracking-wider' }, 'Volg ons')
+                                                        h('span', { className: 'text-sm font-extrabold uppercase tracking-wide' }, 'Volg ons')
                                                     ),
-                                                    h('div', { className: 'w-full max-w-[150px]' },
-                                                        h(QrCode, { url: 'https://www.instagram.com/humasol_vzw', size: '100%', blend: true })
+                                                    h('div', { className: 'w-full max-w-[150px] bg-white p-1.5', style: { border: '3px solid #17120d', borderRadius: 12, boxShadow: '3px 3px 0 #17120d' } },
+                                                        h(QrCode, { url: 'https://www.instagram.com/humasol_vzw', size: '100%' })
                                                     ),
-                                                    h('div', { className: 'text-xs text-humasol-brown font-semibold leading-tight' }, '@humasol_vzw')
+                                                    h('div', { className: 'text-xs font-bold leading-tight', style: { color: '#17120d' } }, '@humasol_vzw', h('br'), 'foto’s & nieuws')
                                                 )
                                             )
                                         )
@@ -5030,7 +5044,7 @@
                                         h('p', { className: 'text-sm text-red-700 mb-3 font-semibold' }, 'WAARSCHUWING: Dit verwijdert ALLE rondes, lopers en wachtrij data!'),
                                         h('button', {
                                             onClick: async () => {
-                                                if (confirm('LAATSTE WAARSCHUWING: Alle data wordt permanent verwijderd. Doorgaan?')) {
+                                                if (await askConfirm('LAATSTE WAARSCHUWING: Alle data wordt permanent verwijderd. Doorgaan?')) {
                                                     // Delete all data
                                                     for (let lap of laps) {
                                                         await firestoreWrapper.collection('laps').doc(lap.id).delete();
