@@ -4069,24 +4069,14 @@ function predictNext(times, gender, restMs) {
                             ),
 
                             // Add new runner form
-                            h('div', { className: 'flex gap-3 mb-4 items-stretch' },
-                                h('div', { className: 'flex-1 min-w-0 flex flex-col gap-3' },
-                                    h('input', { type: 'text', placeholder: 'Voornaam', value: firstName, onChange: e => setFirstName(e.target.value), className: 'px-4 py-3 border rounded-lg w-full' }),
-                                    h('input', { type: 'text', placeholder: 'Achternaam', value: lastName, onChange: e => setLastName(e.target.value), className: 'px-4 py-3 border rounded-lg w-full' })
-                                ),
-                                // Geslacht: knoppen (sneller en duidelijker dan een keuzelijst); X = overige
-                                h('div', { className: 'grid gap-3', style: { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr auto', width: 168 }, role: 'radiogroup', 'aria-label': 'Gender' },
-                                    [['M', 'Man'], ['V', 'Vrouw']].map(([v, label]) => h('button', {
-                                        key: v, type: 'button', role: 'radio', 'aria-checked': genderInput === v,
-                                        onClick: () => setGenderInput(genderInput === v ? '' : v),
-                                        className: 'rounded-lg font-extrabold',
-                                        style: { border: '3px solid #17120d', background: genderInput === v ? '#f2a342' : '#fff', color: '#17120d', boxShadow: genderInput === v ? '3px 3px 0 #17120d' : 'none' }
-                                    }, label)),
-                                    h('button', {
-                                        type: 'button', role: 'radio', 'aria-checked': genderInput === 'X', 'aria-label': 'Andere', title: 'Andere / liever niet zeggen',
-                                        onClick: () => setGenderInput(genderInput === 'X' ? '' : 'X'),
-                                        className: 'rounded-lg font-bold py-2', style: { gridColumn: 'span 2', border: '3px solid #17120d', background: genderInput === 'X' ? '#f2a342' : '#fff', color: '#17120d', boxShadow: genderInput === 'X' ? '3px 3px 0 #17120d' : 'none' }
-                                    }, 'X')
+                            h('div', { className: 'grid grid-cols-3 gap-3 mb-4' },
+                                h('input', { type: 'text', placeholder: 'Voornaam', value: firstName, onChange: e => setFirstName(e.target.value), className: 'px-4 py-3 border rounded-lg' }),
+                                h('input', { type: 'text', placeholder: 'Achternaam', value: lastName, onChange: e => setLastName(e.target.value), className: 'px-4 py-3 border rounded-lg' }),
+                                h('select', { value: genderInput, onChange: e => setGenderInput(e.target.value), className: 'px-4 py-3 border rounded-lg focus:border-indigo-500 focus:outline-none bg-white' },
+                                    h('option', { value: '' }, 'Gender...'),
+                                    h('option', { value: 'M' }, 'Man'),
+                                    h('option', { value: 'V' }, 'Vrouw'),
+                                    h('option', { value: 'X' }, 'X')
                                 )
                             ),
                             h('button', {
