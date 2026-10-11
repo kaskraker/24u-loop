@@ -3442,89 +3442,23 @@ function predictNext(times, gender, restMs) {
             trackRanks('mostLapsWomen', lapsByRunnerWomen);
             trackRanks('bestAverage', avgTimeByRunner);
 
-            // Get most likely runners based on recent activity (last 2 hours)
+            // Snelle selectie: wie komt waarschijnlijk zo meteen terug? Lopers van de laatste 3 uur die nog niet in de wachtrij staan of lopen,
+            // geordend op hoe dicht hun rust bij hun eigen gewoonlijke rust ligt (mediaan van hun vorige pauzes, anders 20 min).
             const getMostLikelyRunners = () => {
-                // --- Parameters om te 'tunen' ---
-
-                // Hoeveel minuten heeft iemand nodig om te herstellen?
-                // Na 10 min is de herstelfactor ~63%. Na 20 min ~86%.
-                const FATIGUE_DECAY_MINUTES = 10; 
-
-                // Hoe lang blijft iemand 'aanwezig' na z'n laatste loopje?
-                // Na 60 min is de aanwezigheidsfactor nog ~37%. Na 120 min nog ~13%.
-                const PRESENCE_DECAY_MINUTES = 60;
-
-                // Hoeveel gewicht geef je aan activiteit vs. paraatheid? (moet samen 1.0 zijn)
-                const WEIGHT_ACTIVITY = 0.5;
-                const WEIGHT_READINESS = 0.5;
-
-                // --- Berekening ---
-                
-                const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-                
-                // Filter laps from last 2 hours
-                const recentLaps = laps.filter(lap => new Date(lap.timestamp) > twoHoursAgo);
-                
-                // Count frequency per runner
-                const runnerFrequency = {};
-                recentLaps.forEach(lap => {
-                    if (!runnerFrequency[lap.runnerId]) {
-                        runnerFrequency[lap.runnerId] = {
-                            runnerId: lap.runnerId,
-                            runnerName: lap.runnerName,
-                            count: 0,
-                            lastTime: new Date(lap.timestamp)
-                        };
-                    }
-                    runnerFrequency[lap.runnerId].count++;
-                    const lapTime = new Date(lap.timestamp);
-                    if (lapTime > runnerFrequency[lap.runnerId].lastTime) {
-                        runnerFrequency[lap.runnerId].lastTime = lapTime;
-                    }
+                const now = Date.now(), skip = new Set(queue.map(q => q.runnerId));
+                if (activeRunner && isRunning) skip.add(activeRunner.runnerId);
+                const by = {};
+                [...laps].sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)).forEach(l => { (by[l.runnerId] = by[l.runnerId] || []).push(l); });
+                const out = [];
+                Object.values(by).forEach(ls => {
+                    const last = ls[ls.length - 1], mins = (now - new Date(last.timestamp).getTime()) / 60000;
+                    if (skip.has(last.runnerId) || mins > 180) return;
+                    const rests = []; for (let i = 1; i < ls.length; i++) { const r = (new Date(ls[i].timestamp) - new Date(ls[i - 1].timestamp) - ls[i].time) / 60000; if (r > 0.5 && r < 240) rests.push(r); }
+                    rests.sort((x, y) => x - y);
+                    const typical = rests.length ? rests[Math.floor(rests.length / 2)] : 20;
+                    out.push({ runnerId: last.runnerId, runnerName: last.runnerName, laps: ls.length, mins, typical, due: mins >= typical * 0.7, score: Math.abs(mins - typical) / typical });
                 });
-                
-                const now = Date.now();
-                
-                // Calculate composite score for each runner
-                const runnersWithScore = Object.values(runnerFrequency).map(runner => {
-                    const minutesSinceLastLap = (now - runner.lastTime.getTime()) / (1000 * 60);
-                    
-                    // 1. Activiteitsscore (idem als jouw frequencyScore)
-                    // Beloon lopers die de laatste uren actief waren.
-                    const activityScore = runner.count * 10;
-                    
-                    // 2. Paraatheidsscore (de nieuwe 'recency')
-                    // Dit berekent de "piek": 
-                    
-                    // Factor 1: Herstel (stijgt van 0 naar 1)
-                    // (1 - e^(-t/10)) -> 0 als t=0, stijgt snel.
-                    const recoveryFactor = (1 - Math.exp(-minutesSinceLastLap / FATIGUE_DECAY_MINUTES));
-                    
-                    // Factor 2: Aanwezigheid (daalt van 1 naar 0)
-                    // e^(-t/60) -> 1 als t=0, daalt traag.
-                    const presenceFactor = Math.exp(-minutesSinceLastLap / PRESENCE_DECAY_MINUTES);
-                    
-                    // De 'paraatheid' is de combinatie van beide: je moet hersteld ZIJN én nog aanwezig ZIJN.
-                    // Dit geeft een score die piekt rond 20-30 minuten.
-                    const readinessScore = 100 * recoveryFactor * presenceFactor;
-                    
-                    // 3. Totaalscore
-                    // Een gebalanceerde som van de twee scores.
-                    const totalScore = (activityScore * WEIGHT_ACTIVITY) + (readinessScore * WEIGHT_READINESS);
-                    
-                    return {
-                        ...runner, // Belangrijk: behoudt runnerId, runnerName, count
-                        activityScore,
-                        readinessScore,
-                        totalScore,
-                        minutesSinceLastLap // Handig om te debuggen
-                    };
-                });
-                
-                // Sorteer en neem de top 5
-                const sorted = runnersWithScore.sort((a, b) => b.totalScore - a.totalScore);
-                
-                return sorted.slice(0, 5);
+                return out.sort((x, y) => x.score - y.score).slice(0, 8);
             };
 
             // Autocomplete functionality
@@ -4058,6 +3992,21 @@ function predictNext(times, gender, restMs) {
                                 )
                             ),
 
+                            // Snelle selectie: terugkerende lopers met één tik in de wachtrij
+                            mostLikelyRunners.length > 0 && h('div', { className: 'mb-4' },
+                                h('div', { className: 'flex items-baseline justify-between mb-2' },
+                                    h('label', { className: 'text-sm font-extrabold text-gray-900' }, 'Net gelopen: tik om weer aan te sluiten'),
+                                    h('span', { className: 'text-xs text-gray-600' }, 'oranje = waarschijnlijk klaar')),
+                                h('div', { className: 'grid grid-cols-2 gap-2' },
+                                    mostLikelyRunners.map((r) => h('button', {
+                                        key: r.runnerId, onClick: () => selectQuickRunner(r),
+                                        className: 'px-3 py-2 rounded-lg text-left',
+                                        style: { border: '3px solid #17120d', background: r.due ? '#ffd58a' : '#fff', boxShadow: r.due ? '3px 3px 0 #17120d' : 'none', color: '#17120d' }
+                                    },
+                                        h('div', { className: 'font-extrabold leading-tight truncate' }, r.runnerName),
+                                        h('div', { className: 'text-xs text-gray-700' }, `${r.mins < 1 ? 'net' : Math.round(r.mins) + ' min geleden'} · ${r.laps} ${r.laps === 1 ? 'ronde' : 'rondes'}`))))
+                            ),
+
                             // OR divider
                             h('div', { className: 'relative mb-4' },
                                 h('div', { className: 'absolute inset-0 flex items-center' },
@@ -4095,34 +4044,6 @@ function predictNext(times, gender, restMs) {
                                     h('div', { className: 'text-sm text-gray-800 mt-1 leading-snug' }, 'Scan de code: je plaats in de wachtrij, hoe lang het nog duurt en al je rondetijden.')
                                 )
                             ),
-
-                            // Quick selection (NU ONDERAAN)
-                            mostLikelyRunners.length > 0 && h('div', { className: 'relative mb-4' },
-                                h('div', { className: 'absolute inset-0 flex items-center' },
-                                    h('div', { className: 'w-full border-t border-gray-300' })
-                                ),
-                                h('div', { className: 'relative flex justify-center text-sm' },
-                                    h('span', { className: 'px-2 bg-white text-gray-500' }, 'of snelle selectie')
-                                )
-                            ),
-
-                            mostLikelyRunners.length > 0 && h('div', null,
-                                h('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Recent Actief'),
-                                h('div', { className: 'grid grid-cols-1 gap-2' },
-                                    mostLikelyRunners.map((runner, idx) =>
-                                        h('button', {
-                                            key: idx,
-                                            onClick: () => selectQuickRunner(runner),
-                                            className: 'w-full px-4 py-3 bg-green-50 hover:bg-green-100 border-2 border-green-200 hover:border-green-400 rounded-lg text-left transition-colors'
-                                        },
-                                            h('div', { className: 'flex items-center justify-between' },
-                                                h('span', { className: 'font-semibold text-green-800' }, runner.runnerName),
-                                                h('span', { className: 'text-sm text-green-600' }, `${runner.count}x recent`)
-                                            )
-                                        )
-                                    )
-                                )
-                            )
                         )
                         ),
                         // Rechts: wie loopt nu en de wachtrij
