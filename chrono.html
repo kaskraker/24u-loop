@@ -8,7 +8,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>24u Loop · Chronometer</title>
 <link rel="icon" href="icon-192.png">
-<link rel="manifest" href="chrono.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-title" content="Chrono">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -100,6 +99,8 @@ const firebaseConfig = {
   storageBucket: "u-loop-leuven-2026.firebasestorage.app", messagingSenderId: "1032849674125", appId: "1:1032849674125:web:110054a3b61ba10eedb7c4"
 };
 const params = new URLSearchParams(location.search);
+// Naam van het beginscherm-icoon: oefen en echt zijn zo te onderscheiden (en de pagina bewaart zijn eigen link, inclusief ?ns=)
+(function () { const ns = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, ''); const t = ns ? 'Chrono OEFEN' : 'Chrono'; const m = document.querySelector('meta[name=apple-mobile-web-app-title]'); if (m) m.content = t; document.title = ns ? '24u Loop · Chronometer (oefen)' : '24u Loop · Chronometer'; })();
 const NS = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, '');
 const col = (n) => NS ? `${NS}_${n}` : n;
 const $ = (id) => document.getElementById(id);
