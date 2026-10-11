@@ -1091,6 +1091,10 @@ function predictNext(times, gender, restMs) {
         };
 
         // ===== Infographics naast de live statistieken: wisselt om de ~11 s tussen leuke grafieken en een "loper in de spotlight" =====
+        // Vorig jaar (24u Loop Leuven 2025), opgeteld per half uur sinds de start: totaal aantal rondes en aantal verschillende lopers (geen namen).
+        const LAST_YEAR = { laps: [0, 18, 37, 55, 73, 90, 107, 126, 143, 160, 178, 195, 211, 228, 245, 262, 279, 297, 314, 332, 349, 367, 383, 400, 417, 434, 452, 470, 486, 502, 518, 534, 552, 570, 587, 603, 622, 640, 658, 676, 695, 714, 733, 750, 768, 786, 805, 825, 844],
+            runners: [0, 12, 21, 26, 34, 48, 59, 71, 82, 92, 104, 118, 124, 140, 150, 159, 165, 173, 173, 182, 186, 193, 199, 206, 210, 212, 215, 218, 222, 226, 228, 233, 241, 248, 250, 259, 266, 276, 280, 282, 288, 293, 299, 303, 309, 312, 316, 320, 321] };
+        const lastYearAt = (arr, elapsedMs) => { const x = Math.max(0, Math.min(48, elapsedMs / 1800e3)), i = Math.floor(x); return i >= 48 ? arr[48] : arr[i] + (arr[i + 1] - arr[i]) * (x - i); };
         const LiveCharts = ({ laps, runners }) => {
             const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
             const [qh, setQh] = React.useState([]);
@@ -1364,6 +1368,40 @@ function predictNext(times, gender, restMs) {
                     h('div', { className: 'text-xs text-gray-700' }, 'lengte van de wachtrij, laatste 3 uur'));
             };
 
+            // ---- slides: vergelijking met vorig jaar ----
+            const lyData = () => {
+                const now = Date.now(), endAt = new Date(); endAt.setHours(20, 0, 0, 0); if (endAt.getTime() <= now) endAt.setDate(endAt.getDate() + 1);
+                const start = endAt.getTime() - 24 * 3600e3, el = Math.min(24 * 3600e3, Math.max(0, now - start));
+                const stamps = laps.map(l => new Date(l.timestamp).getTime()).sort((a, b) => a - b);
+                const series = []; for (let i = 0; i <= Math.floor(el / 1800e3); i++) series.push([i / 48, stamps.filter(t => t - start <= i * 1800e3).length]);
+                series.push([el / 86400e3, stamps.length]);
+                return { el, series, nowLaps: laps.length, thenLaps: Math.round(lastYearAt(LAST_YEAR.laps, el)), nowRun: d.nRunners, thenRun: Math.round(lastYearAt(LAST_YEAR.runners, el)) };
+            };
+            const lyChart = () => {
+                const y = lyData(), diff = y.nowLaps - y.thenLaps, W = 300, Ht = 112, L = 26, top = 900, X = (f) => L + f * (W - L - 6), Y = (v) => Ht - (v / top) * (Ht - 8);
+                const proj = y.el > 2 * 3600e3 ? Math.round(y.nowLaps / (y.el / 86400e3)) : 0;
+                return h('div', { className: 'text-center' }, label('Tegenover vorig jaar'),
+                    h('div', { className: 'text-3xl font-extrabold leading-tight', style: { color: diff >= 0 ? '#2fb344' : '#dc2626' } }, diff === 0 ? 'Gelijk met vorig jaar' : `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)} ${Math.abs(diff) === 1 ? 'ronde' : 'rondes'} ${diff > 0 ? 'voor' : 'achter'}`),
+                    h('div', { className: 'text-xs text-gray-700 mb-1' }, `Vorig jaar waren dat er op dit moment ${y.thenLaps}`),
+                    h('svg', { viewBox: `0 0 ${W} ${Ht + 18}`, width: '100%', style: { display: 'block' } },
+                        [0, 400, 800].map(v => h('g', { key: v }, h('line', { x1: L, x2: W - 6, y1: Y(v), y2: Y(v), stroke: '#e5e7eb', strokeWidth: 1 }), h('text', { x: L - 3, y: Y(v) + 3, fontSize: 8, textAnchor: 'end', fill: '#6b7280', fontWeight: 600 }, v))),
+                        [[0, '20u'], [.25, '02u'], [.5, '08u'], [.75, '14u'], [1, '20u']].map(([f, t]) => h('text', { key: t + f, x: X(f), y: Ht + 12, fontSize: 8, textAnchor: 'middle', fill: '#6b7280', fontWeight: 600 }, t)),
+                        h('polyline', { points: LAST_YEAR.laps.map((v, i) => `${X(i / 48)},${Y(v)}`).join(' '), fill: 'none', stroke: '#9ca3af', strokeWidth: 2.5, strokeDasharray: '5 4' }),
+                        y.series.length > 1 && h('polyline', { points: y.series.map(([f, v]) => `${X(f)},${Y(v)}`).join(' '), fill: 'none', stroke: '#e8590c', strokeWidth: 3.5, strokeLinejoin: 'round', strokeLinecap: 'round' }),
+                        h('circle', { cx: X(y.el / 86400e3), cy: Y(y.nowLaps), r: 5, fill: '#e8590c', stroke: '#17120d', strokeWidth: 2.5 })),
+                    h('div', { className: 'flex justify-center gap-4 text-[11px] font-bold text-gray-700' }, h('span', { style: { color: '#e8590c' } }, '━ dit jaar'), h('span', null, '┅ vorig jaar')),
+                    proj ? h('div', { className: 'text-sm font-bold text-gray-900 mt-1' }, `Aan dit tempo eindigen we rond ${proj} rondes (vorig jaar: ${LAST_YEAR.laps[48]})`) : null);
+            };
+            const lyRunners = () => {
+                const y = lyData(), mx = Math.max(1, y.nowRun, y.thenRun, y.nowLaps / Math.max(1, y.nowRun)), diff = y.nowRun - y.thenRun;
+                const col = (n, lbl, color) => h('div', { className: 'flex flex-col items-center justify-end', style: { height: 150, width: 110 } },
+                    h('div', { className: 'text-3xl font-extrabold' }, n), h('div', { style: { width: '100%', height: Math.max(8, (n / Math.max(1, y.nowRun, y.thenRun)) * 100), background: color, border: '3px solid #17120d', borderRadius: '10px 10px 0 0', transition: 'height .8s ease' } }), h('div', { className: 'text-xs font-bold text-gray-800 mt-1' }, lbl));
+                return h('div', { className: 'text-center' }, label('Verschillende lopers: nu en vorig jaar'),
+                    h('div', { className: 'flex justify-center items-end gap-6 mt-2' }, col(y.thenRun, 'vorig jaar', '#d1d5db'), col(y.nowRun, 'dit jaar', '#e8590c')),
+                    h('div', { className: 'text-xl font-extrabold mt-3', style: { color: diff >= 0 ? '#2fb344' : '#dc2626' } }, diff === 0 ? 'Evenveel lopers' : `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)} ${Math.abs(diff) === 1 ? 'loper' : 'lopers'} ${diff > 0 ? 'meer' : 'minder'} op dit moment`),
+                    h('div', { className: 'text-xs text-gray-700' }, 'dezelfde tijd na de start'));
+            };
+
             // ---- slide: aftellen naar het einde ----
             const countdown = () => {
                 const hrs = Math.floor(d.remaining / 3600e3), mins = Math.floor((d.remaining % 3600e3) / 60e3), done = Math.floor(d.elapsedFrac * 24);
@@ -1392,6 +1430,7 @@ function predictNext(times, gender, restMs) {
             dyn.push((r) => ['km' + r, distance(r)]);
             if (laps.length >= 30) dyn.push(() => ['tempo', tempoHour()]);
             if (qh.filter(x => x.t > Date.now() - 24 * 3600e3).length >= 3) dyn.push(() => ['queue', queueSlide()]);
+            if (laps.length >= 5 && Date.now() - (() => { const e = new Date(); e.setHours(20, 0, 0, 0); if (e.getTime() <= Date.now()) e.setDate(e.getDate() + 1); return e.getTime() - 24 * 3600e3; })() > 1800e3) { dyn.push(() => ['ly', lyChart()]); dyn.push(() => ['lyr', lyRunners()]); }
             dyn.push(() => ['countdown', countdown()]);
             dyn.push(() => ['humasol', humasol()]);
             const stat = [];
@@ -1403,6 +1442,8 @@ function predictNext(times, gender, restMs) {
             let cur;
             if (within === 3 && stat.length) { const sl = stat[groupNo % stat.length]; cur = [sl[0], sl[1]()]; }
             else { const dk = k - Math.floor((k + (stat.length ? 1 : 0)) / 4) * (stat.length ? 1 : 0); cur = dyn[dk % dyn.length](Math.floor(dk / dyn.length)); }
+            const forced = new URLSearchParams(window.location.search).get('weetje');   // ?weetje=ly toont één bepaald weetje (voor testen)
+            if (forced === 'ly') cur = ['ly', lyChart()]; else if (forced === 'lyr') cur = ['lyr', lyRunners()];
             const SLIDE_MS = Number(new URLSearchParams(window.location.search).get('slidems')) || 11000;
 
             return h('div', { className: 'chart-card bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3 flex flex-col' },
@@ -1754,6 +1795,7 @@ function predictNext(times, gender, restMs) {
             const [lastName, setLastName] = useState('');
             const [isTimerView, setIsTimerView] = useState(false);
             const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+            const [adminTab, setAdminTab] = useState('overzicht'), [runnerSearch, setRunnerSearch] = useState(''), [wipeText, setWipeText] = useState(''), [editRunnerId, setEditRunnerId] = useState(''), [editRunnerName, setEditRunnerName] = useState(''), [adminMsg, setAdminMsg] = useState('');
             const [adminPassword, setAdminPassword] = useState('');
             const [showResetConfirm, setShowResetConfirm] = useState(false);
             const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(new URLSearchParams(window.location.search).get('fs') === '1');   // ?fs=1: toon meteen de volledig-scherm-opmaak (voor testen)
@@ -1979,14 +2021,8 @@ function predictNext(times, gender, restMs) {
             });
             const [myRunnerQuery, setMyRunnerQuery] = useState('');
             const rankTrackRef = useRef({ t0: Date.now(), lists: {} }); // Positiewijzigingen in ranglijsten
-            const [darkMode, setDarkMode] = useState(() => {
-                // Check localStorage for saved preference, default to false
-                // ?dark=1 of ?dark=0 in de link wint van de bewaarde keuze (handig voor het grote scherm, dat geen knop heeft)
-                const q = new URLSearchParams(window.location.search).get('dark');
-                if (q === '1' || q === '0') return q === '1';
-                const saved = localStorage.getItem('darkMode');
-                return saved ? JSON.parse(saved) : false;
-            });
+            const darkMode = false, setDarkMode = () => {};   // donkere modus is bewust verwijderd
+            try { localStorage.removeItem('darkMode'); document.body.classList.remove('dark-mode'); } catch (e) {}
             const [showInstallPrompt, setShowInstallPrompt] = useState(false);
             const [installPromptEvent, setInstallPromptEvent] = useState(null);
             const [draggedIndex, setDraggedIndex] = useState(null); // For drag & drop queue reordering
@@ -3180,6 +3216,40 @@ function predictNext(times, gender, restMs) {
                 await firestoreWrapper.collection('queue').updateMany(updates);
             };
 
+            // ===== Beheer: lopers aanpassen, verwijderen en alles wissen =====
+            const setRunnerGender = async (r, g) => { await firestoreWrapper.collection('runners').doc(r.id).update({ gender: g }); };
+            const saveRunnerName = async (r) => {
+                const nm = tidyName(editRunnerName); setEditRunnerId('');
+                if (!nm || nm === r.name) return;
+                const parts = nm.split(' ');
+                await firestoreWrapper.collection('runners').doc(r.id).update({ name: nm, firstName: parts[0], lastName: parts.slice(1).join(' ') });
+                const myLaps = laps.filter(l => l.runnerId === r.id).map(l => ({ id: l.id, data: { runnerName: nm } }));
+                if (myLaps.length) await firestoreWrapper.collection('laps').updateMany(myLaps);
+                const myQ = queue.filter(q => q.runnerId === r.id).map(q => ({ id: q.id, data: { runnerName: nm } }));
+                if (myQ.length) await firestoreWrapper.collection('queue').updateMany(myQ);
+                if (activeRunner && activeRunner.runnerId === r.id) { try { await firestoreWrapper.collection('activeRunner').doc('current').update({ 'runner.runnerName': nm }); } catch (e) {} }
+                setAdminMsg(`${r.name} heet nu ${nm}`);
+            };
+            const removeRunner = async (r) => {
+                if (activeRunner && isRunning && activeRunner.runnerId === r.id) { setAdminMsg(`${r.name} loopt nu: wacht tot de ronde klaar is`); return; }
+                const n = laps.filter(l => l.runnerId === r.id).length;
+                if (!(await askConfirm(`${r.name} verwijderen${n ? ` samen met ${n} ${n === 1 ? 'ronde' : 'rondes'}` : ''}? Dit kan niet ongedaan gemaakt worden.`))) return;
+                const lids = laps.filter(l => l.runnerId === r.id).map(l => l.id), qids = queue.filter(q => q.runnerId === r.id).map(q => q.id);
+                if (lids.length) await firestoreWrapper.collection('laps').deleteMany(lids);
+                if (qids.length) await firestoreWrapper.collection('queue').deleteMany(qids);
+                await firestoreWrapper.collection('runners').doc(r.id).delete();
+                setAdminMsg(`${r.name} is verwijderd`);
+            };
+            const wipeAll = async () => {
+                if (wipeText.trim().toUpperCase() !== 'WISSEN') return;
+                if (!(await askConfirm(`Laatste controle: ALLE rondes, lopers en de wachtrij worden gewist${NS ? ` in de oefenomgeving "${NS}"` : ' van het ECHTE event'}. Doorgaan?`))) return;
+                await firestoreWrapper.collection('laps').deleteMany(laps.map(l => l.id));
+                await firestoreWrapper.collection('runners').deleteMany(runners.map(r => r.id));
+                await firestoreWrapper.collection('queue').deleteMany(queue.map(q => q.id));
+                await clearActiveRunnerInFirebase();
+                try { for (const name of ['meta'].concat(NS ? ['replay'] : [])) { const snap = await db.collection(colName(name)).get(); await firestoreWrapper.collection(name).deleteMany(snap.docs.map(d => d.id)); } } catch (e) { console.warn('extra wissen:', e.message); }
+                setWipeText(''); setAdminMsg('Alles is gewist.');
+            };
             const unlockAdmin = () => {
                 // Eenvoudig admin-wachtwoord (staat leesbaar in de broncode)
                 if (adminPassword === STAFF_PIN) {
@@ -3585,19 +3655,6 @@ function predictNext(times, gender, restMs) {
                                 // Connection status indicator
                                 h('div', { className: 'flex items-center gap-2' },
                                     h(SyncChip, null),
-                                    // Dark mode toggle
-                                    h('button', {
-                                        onClick: () => setDarkMode(!darkMode),
-                                        className: `flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-                                            darkMode 
-                                                ? 'bg-indigo-900 text-indigo-300 hover:bg-indigo-800' 
-                                                : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                                        }`,
-                                        title: darkMode ? 'Schakel over naar lichte modus' : 'Schakel over naar donkere modus'
-                                    },
-                                        h('span', { className: 'text-sm' }, darkMode ? '🌙' : '☀️'),
-                                        h('span', null, darkMode ? 'Donker' : 'Licht')
-                                    ),
                                     // (de knop "Installeer" is bewust verwijderd: niet nuttig op een pc)
                                     false && h('button', {
                                         onClick: handleInstallClick,
@@ -3693,7 +3750,6 @@ function predictNext(times, gender, restMs) {
                             h('div', { className: (isDisplayFullscreen ? 'text-4xl' : 'text-2xl') + ' font-extrabold whitespace-nowrap' }, `${activeRunner && isRunning ? Math.max(0, queue.length - 1) : queue.length} wachtend`)
                         ),
                         !isDisplayFullscreen && h('button', { onClick: toggleDisplayFullscreen, className: 'flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm', style: { background: '#fff', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' } }, h(Icon, { name: 'expand', className: 'w-5 h-5' }), h('span', null, 'Volledig scherm')),
-                        !isDisplayFullscreen && h('button', { onClick: () => setDarkMode(!darkMode), className: 'px-3 py-2 rounded-full font-bold text-sm', style: { border: '3px solid #17120d', background: '#fff', color: '#17120d' }, title: 'Donkere of lichte weergave' }, darkMode ? 'Licht' : 'Donker'),
                         h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-9 w-auto rounded-xl px-2 py-1', style: { background: '#fff', border: '3px solid #17120d' } })
                     ),
                     isDisplayFullscreen && h('button', {
@@ -4013,30 +4069,25 @@ function predictNext(times, gender, restMs) {
                             ),
 
                             // Add new runner form
-                            h('div', { className: 'grid grid-cols-2 gap-3 mb-3' },
-                                h('input', {
-                                    type: 'text',
-                                    placeholder: 'Voornaam',
-                                    value: firstName,
-                                    onChange: e => setFirstName(e.target.value),
-                                    className: 'px-4 py-3 border rounded-lg'
-                                }),
-                                h('input', {
-                                    type: 'text',
-                                    placeholder: 'Achternaam',
-                                    value: lastName,
-                                    onChange: e => setLastName(e.target.value),
-                                    className: 'px-4 py-3 border rounded-lg'
-                                })
-                            ),
-                            // Geslacht: drie knoppen (sneller en duidelijker dan een keuzelijst)
-                            h('div', { className: 'grid grid-cols-3 gap-3 mb-4', role: 'radiogroup', 'aria-label': 'Gender' },
-                                [['M', 'Man'], ['V', 'Vrouw'], ['X', 'Andere']].map(([v, label]) => h('button', {
-                                    key: v, type: 'button', role: 'radio', 'aria-checked': genderInput === v,
-                                    onClick: () => setGenderInput(genderInput === v ? '' : v),
-                                    className: 'py-3 rounded-lg font-bold',
-                                    style: { border: '3px solid #17120d', background: genderInput === v ? '#f2a342' : '#fff', color: '#17120d', boxShadow: genderInput === v ? '3px 3px 0 #17120d' : 'none' }
-                                }, label))
+                            h('div', { className: 'flex gap-3 mb-4 items-stretch' },
+                                h('div', { className: 'flex-1 min-w-0 flex flex-col gap-3' },
+                                    h('input', { type: 'text', placeholder: 'Voornaam', value: firstName, onChange: e => setFirstName(e.target.value), className: 'px-4 py-3 border rounded-lg w-full' }),
+                                    h('input', { type: 'text', placeholder: 'Achternaam', value: lastName, onChange: e => setLastName(e.target.value), className: 'px-4 py-3 border rounded-lg w-full' })
+                                ),
+                                // Geslacht: knoppen (sneller en duidelijker dan een keuzelijst); X = overige
+                                h('div', { className: 'grid gap-3', style: { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr auto', width: 168 }, role: 'radiogroup', 'aria-label': 'Gender' },
+                                    [['M', 'Man'], ['V', 'Vrouw']].map(([v, label]) => h('button', {
+                                        key: v, type: 'button', role: 'radio', 'aria-checked': genderInput === v,
+                                        onClick: () => setGenderInput(genderInput === v ? '' : v),
+                                        className: 'rounded-lg font-extrabold',
+                                        style: { border: '3px solid #17120d', background: genderInput === v ? '#f2a342' : '#fff', color: '#17120d', boxShadow: genderInput === v ? '3px 3px 0 #17120d' : 'none' }
+                                    }, label)),
+                                    h('button', {
+                                        type: 'button', role: 'radio', 'aria-checked': genderInput === 'X', 'aria-label': 'Andere', title: 'Andere / liever niet zeggen',
+                                        onClick: () => setGenderInput(genderInput === 'X' ? '' : 'X'),
+                                        className: 'rounded-lg font-bold py-2', style: { gridColumn: 'span 2', border: '3px solid #17120d', background: genderInput === 'X' ? '#f2a342' : '#fff', color: '#17120d', boxShadow: genderInput === 'X' ? '3px 3px 0 #17120d' : 'none' }
+                                    }, 'X')
+                                )
                             ),
                             h('button', {
                                 onClick: addRunner,
@@ -5002,326 +5053,110 @@ function predictNext(times, gender, restMs) {
                         )
                     ),
 
-                    // Admin View
-                    view === 'admin' && h('div', { className: 'space-y-6' },
-                        !isAdminUnlocked ? (
-                            h('div', { className: 'bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto' },
-                                h('h2', { className: 'text-2xl font-semibold mb-6 text-center flex items-center justify-center' },
-                                    h(Icon, { name: 'shield', className: 'w-6 h-6 mr-2 text-humasol-orange' }),
-                                    'Admin Toegang'
-                                ),
-                                h('p', { className: 'text-gray-600 mb-4 text-center' }, 'Voer het admin wachtwoord in'),
-                                h('input', {
-                                    type: 'password',
-                                    placeholder: 'Wachtwoord',
-                                    value: adminPassword,
-                                    onChange: e => setAdminPassword(e.target.value),
-                                    onKeyPress: e => e.key === 'Enter' && unlockAdmin(),
-                                    className: 'w-full px-4 py-3 border rounded-lg mb-4'
-                                }),
-                                h('button', {
-                                    onClick: unlockAdmin,
-                                    className: 'w-full bg-humasol-orange hover:bg-humasol-brown text-white font-semibold py-3 rounded-lg'
-                                }, 'Ontgrendelen'),
-                            )
-                        ) : (
-                            h('div', { className: 'space-y-6' },
-                                NS && h('div', { className: 'rounded-lg shadow-lg p-5 border-4 border-orange-400 bg-orange-50' },
-                                    h('h2', { className: 'text-lg font-bold text-orange-700 mb-1' }, `Oefenmodus: "${NS}"`),
-                                    h('p', { className: 'text-sm text-gray-700 mb-3' }, 'Je werkt in aparte oefencollecties; de echte data blijft onaangeroerd. Laad het event van vorig jaar (dummynamen) tot nu, vul een wachtrij en probeer dan de inschrijflaptop, het grote scherm en de chronometer samen uit.'),
-                                    h('label', { className: 'flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-800 mb-3' },
-                                        '⏱ Het event is nu al',
-                                        h('input', { type: 'number', min: 1, max: 23, value: practiceHours, onChange: (e) => setPracticeHours(e.target.value), className: 'w-20 px-2 py-1 border rounded-lg text-center' }),
-                                        'uur bezig',
-                                        h('span', { className: 'text-xs font-normal text-gray-600' }, '(geldt voor "Laad oefendata" en voor de CSV-import hieronder)')
-                                    ),
-                                    h('div', { className: 'flex flex-wrap gap-3 items-center' },
-                                        h('button', { onClick: seedPracticeData, disabled: !!(seedStatus && seedStatus.running), className: 'px-4 py-2 rounded-lg bg-humasol-orange hover:bg-humasol-brown text-white font-semibold disabled:opacity-50' }, 'Laad oefendata (vorig jaar t.e.m. nu)'),
-                                        h('button', { onClick: queueRandomRunners, className: 'px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold' }, 'Zet 12 lopers in de wachtrij'),
-                                        seedStatus && h('span', { className: 'text-sm font-semibold text-orange-800' }, seedStatus.text)
-                                    ),
-                                    h('div', { className: 'mt-3 pt-3 border-t border-orange-200' },
-                                        h('div', { className: 'text-sm font-semibold text-gray-800 mb-1' }, 'Echte data van vorig jaar (met echte namen)'),
-                                        h('div', { className: 'text-xs text-gray-600 mb-2' }, 'Kies het bestand 24u_loop_leuven_….csv uit de map. Dit vervangt alles in de oefenomgeving; de namen blijven in je eigen Firebase en komen niet in de code.'),
-                                        h('input', { type: 'file', accept: '.csv', onChange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; importPracticeCsv(f); }, className: 'text-sm' })
-                                    ),
-                                    h('div', { className: 'mt-3 pt-3 border-t border-orange-200' },
-                                        h('div', { className: 'text-sm font-semibold text-gray-800 mb-1' }, '▶ Het event automatisch laten doorlopen'),
-                                        h('div', { className: 'text-xs text-gray-600 mb-2' }, 'Na het importeren van vorig jaar: open het grote scherm met "&autoplay=1". Dat venster schrijft de rest van het event op het juiste moment weg (rondes, lopende loper, wachtrij), en alle andere vensters volgen. Laat dat venster open staan.'),
-                                        h('button', {
-                                            onClick: () => { const u = new URL(window.location.href); u.searchParams.set('mode', 'display'); u.searchParams.set('autoplay', '1'); window.location.href = u.toString(); },
-                                            className: 'px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold'
-                                        }, '▶ Start autoplay op het grote scherm (dit venster)')
-                                    ),
-                                    h('p', { className: 'text-xs text-gray-500 mt-2' }, 'Alles weer wissen: scroll naar "Reset Alle Data" (wist enkel deze oefenomgeving).')
-                                ),
-                                h('div', { className: 'bg-white rounded-lg shadow-lg p-6 flex flex-col sm:flex-row items-center gap-6' },
-                                    h(QrCode, { url: getPublicUrl(), size: 200 }),
-                                    h('div', { className: 'flex-1 text-center sm:text-left' },
-                                        h('h2', { className: 'text-lg font-semibold mb-1' }, 'Publieke link voor lopers'),
-                                        h('p', { className: 'text-sm text-gray-600 mb-2' }, 'Lopers scannen deze QR-code om de rankings en hun eigen tijden te volgen (alleen lezen).'),
-                                        h('div', { className: 'text-xs font-mono break-all bg-gray-50 rounded p-2 mb-2' }, getPublicUrl()),
-                                        h('button', {
-                                            onClick: () => { navigator.clipboard && navigator.clipboard.writeText(getPublicUrl()); },
-                                            className: 'px-4 py-2 bg-humasol-orange hover:bg-humasol-brown text-white rounded-lg text-sm font-semibold'
-                                        }, 'Kopieer link')
-                                    )
-                                ),
-                                h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
-                                    h('div', { className: 'flex justify-between items-center mb-4' },
-                                        h('h2', { className: 'text-lg font-semibold text-red-600' }, 'Admin Functies'),
-                                        h('button', {
-                                            onClick: () => { try { localStorage.removeItem('staffActive'); } catch (e) {} setIsAdminUnlocked(false); setIsStaff(false); setView('leaderboard'); },
-                                            className: 'text-sm text-red-600 hover:text-red-800 mr-4'
-                                        }, 'Dit toestel uitloggen'),
-                                        h('button', {
-                                            onClick: () => setIsAdminUnlocked(false),
-                                            className: 'text-sm text-gray-600 hover:text-gray-900'
-                                        }, 'Vergrendelen')
-                                    ),
-                                    h('p', { className: 'text-sm text-gray-600' }, 'Gebruik deze functies alleen bij fouten!')
-                                ),
+                    // Admin View (opnieuw opgebouwd: tabbladen, duidelijke blokken)
+                    view === 'admin' && (() => {
+                        const INK = '#17120d';
+                        const bt = (label, onClick, kind = 'ghost', extra = {}) => h('button', { onClick, disabled: extra.disabled, className: 'px-4 py-3 rounded-lg font-bold ' + (extra.cls || ''), style: { border: `3px solid ${INK}`, background: kind === 'primary' ? '#f2a342' : kind === 'danger' ? '#fecaca' : kind === 'ok' ? '#d9f7d0' : '#fff', color: INK, boxShadow: extra.disabled ? 'none' : `3px 3px 0 ${INK}`, opacity: extra.disabled ? .45 : 1 } }, label);
+                        const ico = (d) => h('svg', { viewBox: '0 0 24 24', width: 18, height: 18, fill: 'none', stroke: 'currentColor', strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d }));
+                        const ib = (d, onClick, title, red) => h('button', { onClick, title, 'aria-label': title, className: 'flex-none', style: { width: 40, height: 40, display: 'grid', placeItems: 'center', border: `3px solid ${INK}`, borderRadius: 10, background: red ? '#fecaca' : '#fff', color: INK, boxShadow: `2px 2px 0 ${INK}` } }, ico(d));
+                        const TRASH = 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7', EDIT = 'M4 20l4-1 11-11-3-3L5 16l-1 4zM14 7l3 3';
+                        const card = (title, ...kids) => h('div', { className: 'bg-white rounded-lg shadow-lg p-5' }, title && h('h2', { className: 'text-lg font-extrabold mb-3' }, title), ...kids);
+                        const note = (t) => h('div', { className: 'text-sm text-gray-700 mb-3' }, t);
 
-                                h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
-                                    h('h3', { className: 'text-lg font-semibold mb-4' }, 'Snelle Acties'),
-                                    h('div', { className: 'space-y-3' },
-                                        h('button', {
-                                            onClick: deleteLastLap,
-                                            disabled: laps.length === 0,
-                                            className: 'w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg flex items-center justify-center space-x-2'
-                                        },
-                                            h(Icon, { name: 'trash', className: 'w-5 h-5' }),
-                                            h('span', null, `Verwijder Laatste Ronde ${laps.length > 0 ? `(${laps[laps.length - 1].runnerName})` : ''}`)
-                                        ),
-                                        activeRunner && h('button', {
-                                            onClick: cancelCurrentRun,
-                                            className: 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center space-x-2'
-                                        },
-                                            h(Icon, { name: 'x', className: 'w-5 h-5' }),
-                                            h('span', null, 'Stop Huidige Timer Zonder Opslaan')
-                                        )
-                                    )
-                                ),
+                        if (!isAdminUnlocked) {
+                            return h('div', { className: 'bg-white rounded-lg shadow-lg p-8 max-w-md mx-auto' },
+                                h('h2', { className: 'text-2xl font-extrabold mb-1 text-center' }, 'Beheer'),
+                                h('p', { className: 'text-gray-700 mb-4 text-center' }, 'Voer het wachtwoord in om verder te gaan.'),
+                                h('input', { type: 'password', placeholder: 'Wachtwoord', value: adminPassword, onChange: e => setAdminPassword(e.target.value), onKeyPress: e => e.key === 'Enter' && unlockAdmin(), className: 'w-full px-4 py-3 border rounded-lg mb-4' }),
+                                bt('Ontgrendelen', unlockAdmin, 'primary', { cls: 'w-full' })
+                            );
+                        }
+                        const waitingN = queue.filter((q, i) => !(activeRunner && isRunning && i === 0)).length;
+                        const tabs = [['overzicht', 'Overzicht'], ['rondes', 'Rondes'], ['lopers', 'Lopers'], ['gegevens', 'Gegevens']].concat(NS ? [['oefenen', 'Oefenen']] : []).concat([['wissen', 'Wissen']]);
+                        const tile = (k, v, sub) => h('div', { className: 'rounded-lg p-3', style: { border: `3px solid ${INK}`, background: '#fff6df' } }, h('div', { className: 'text-xs font-extrabold uppercase tracking-wide text-gray-700' }, k), h('div', { className: 'text-4xl font-extrabold leading-tight' }, v), sub && h('div', { className: 'text-xs text-gray-700' }, sub));
+                        let body = null;
 
-                                h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
-                                    h('h3', { className: 'text-lg font-semibold mb-4 flex items-center' },
-                                        h(Icon, { name: 'chart', className: 'w-5 h-5 mr-2 text-green-600' }),
-                                        'Data Export'
-                                    ),
-                                    h('p', { className: 'text-sm text-gray-600 mb-4' }, 'Download alle data voor analyse in Excel of andere tools'),
-                                    h('div', { className: 'space-y-3' },
-                                        h('button', {
-                                            onClick: exportToCSV,
-                                            disabled: laps.length === 0,
-                                            className: 'w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg flex items-center justify-center space-x-2'
-                                        },
-                                            h('span', null, ''),
-                                            h('span', null, `Export Alle Rondes (${laps.length}) naar CSV`)
-                                        ),
-                                        h('button', {
-                                            onClick: exportRunnersToCSV,
-                                            disabled: runners.length === 0,
-                                            className: 'w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-semibold py-3 rounded-lg flex items-center justify-center space-x-2'
-                                        },
-                                            h('span', null, ''),
-                                            h('span', null, `Export Alle Lopers (${runners.length}) naar CSV`)
-                                        )
-                                    ),
-                                    h('div', { className: 'mt-3 p-3 bg-blue-50 rounded-lg' },
-                                        h('p', { className: 'text-xs text-blue-700' },
-                                            h('strong', null, 'Tips: '),
-                                            'Open CSV bestanden in Excel, Google Sheets of LibreOffice Calc voor verdere analyse en grafieken.'
-                                        )
-                                    )
+                        if (adminTab === 'overzicht') {
+                            body = h('div', { className: 'space-y-5' },
+                                h('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-3' }, tile('Lopers', runners.length), tile('Rondes', laps.length, `${(laps.length * 0.515).toFixed(1).replace('.', ',')} km`), tile('In de wachtrij', waitingN), tile('Opgehaald', `€ ${(laps.length * EUR_PER_LAP).toLocaleString('nl-BE')}`, `€ ${EUR_PER_LAP} per ronde`)),
+                                h('div', { className: 'grid md:grid-cols-2 gap-5' },
+                                    card('Snelle acties', note('Voor als er iets misging aan de chronometer.'),
+                                        h('div', { className: 'flex flex-col gap-3' },
+                                            bt(`Laatste ronde verwijderen${laps.length ? ` (${[...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0].runnerName})` : ''}`, deleteLastLap, 'danger', { disabled: !laps.length }),
+                                            bt(activeRunner && isRunning ? `Huidige loop van ${activeRunner.runnerName} annuleren` : 'Huidige loop annuleren', cancelCurrentRun, 'ghost', { disabled: !(activeRunner && isRunning) }))),
+                                    card('Lopers-app', note('Lopers scannen deze code om hun plaats in de wachtrij en hun tijden te volgen.'),
+                                        h('div', { className: 'flex gap-4 items-center' }, h('div', { style: { border: `3px solid ${INK}`, borderRadius: 10, overflow: 'hidden', flexShrink: 0 } }, h(QrCode, { url: getPublicUrl(), size: 110 })),
+                                            h('div', { className: 'min-w-0' }, h('div', { className: 'text-xs break-all text-gray-700 mb-2' }, getPublicUrl()), bt('Kopieer link', () => { navigator.clipboard && navigator.clipboard.writeText(getPublicUrl()); setAdminMsg('Link gekopieerd'); }, 'ghost', { cls: 'py-2' }))))
                                 ),
+                                card('Omgeving', h('div', { className: 'font-bold' }, NS ? `Oefenmodus: "${NS}"` : 'ECHT event'), note(NS ? 'Je werkt in aparte oefengegevens; de echte data blijft ongemoeid.' : 'Wat je hier doet, gebeurt met de echte data. Test altijd in de oefenmodus.')));
+                        } else if (adminTab === 'rondes') {
+                            const q = adminLapSearchQuery.trim().toLowerCase();
+                            const list = [...laps].filter(l => !q || (l.runnerName || '').toLowerCase().includes(q)).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 80);
+                            body = card(`Rondes (${laps.length})`,
+                                h('div', { className: 'flex gap-3 mb-3 flex-wrap' }, h('input', { type: 'text', placeholder: 'Zoek op naam…', value: adminLapSearchQuery, onChange: e => setAdminLapSearchQuery(e.target.value), className: 'flex-1 min-w-[200px] px-4 py-3 border rounded-lg' }), bt(showAddLapForm ? 'Sluiten' : '+ Ronde toevoegen', () => setShowAddLapForm(!showAddLapForm), 'ok')),
+                                showAddLapForm && h('div', { className: 'mb-4 p-4 rounded-lg', style: { border: `3px solid ${INK}`, background: '#d9f7d0' } },
+                                    note('Handmatig een ronde toevoegen (bv. als een tijd gemist werd).'),
+                                    h('div', { className: 'grid md:grid-cols-3 gap-3 mb-3' },
+                                        h('select', { value: newLapRunnerId, onChange: e => setNewLapRunnerId(e.target.value), className: 'px-3 py-3 border rounded-lg' }, h('option', { value: '' }, 'Kies een loper…'), [...runners].sort((a, b) => a.name.localeCompare(b.name)).map(r => h('option', { key: r.id, value: r.id }, r.name))),
+                                        h('input', { type: 'text', placeholder: 'Tijd (m:ss)', value: newLapTime, onChange: e => setNewLapTime(e.target.value), className: 'px-3 py-3 border rounded-lg' }),
+                                        h('input', { type: 'datetime-local', value: newLapTimestamp, onChange: e => setNewLapTimestamp(e.target.value), className: 'px-3 py-3 border rounded-lg' })),
+                                    bt('Ronde toevoegen', addNewLapManually, 'primary', { disabled: !newLapRunnerId || !newLapTime })),
+                                list.length === 0 ? h('div', { className: 'text-center text-gray-500 py-8' }, q ? 'Geen rondes gevonden' : 'Nog geen rondes') :
+                                h('div', { className: 'space-y-2', style: { maxHeight: '60vh', overflowY: 'auto' } }, list.map(lap => h('div', { key: lap.id, className: 'flex items-center gap-3 p-3 rounded-lg', style: { background: '#fff6df' } },
+                                    editingLapId === lap.id ? h(React.Fragment, null,
+                                        h('div', { className: 'flex-1 min-w-0 font-bold' }, lap.runnerName), h('input', { type: 'text', value: editingLapTime, onChange: e => setEditingLapTime(e.target.value), placeholder: 'm:ss', className: 'w-28 px-3 py-2 border rounded-lg' }),
+                                        bt('Opslaan', () => saveEditedLap(lap), 'ok', { cls: 'py-2' }), bt('Annuleren', cancelEditingLap, 'ghost', { cls: 'py-2' })) :
+                                    h(React.Fragment, null,
+                                        h('div', { className: 'flex-1 min-w-0' }, h('div', { className: 'font-bold truncate' }, lap.runnerName), h('div', { className: 'text-xs text-gray-600' }, new Date(lap.timestamp).toLocaleString('nl-BE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }))),
+                                        h('div', { className: 'text-xl font-extrabold' }, formatTimeSimple(lap.time)),
+                                        ib(EDIT, () => startEditingLap(lap), 'Tijd aanpassen'), ib(TRASH, () => deleteLap(lap), 'Verwijderen', true))))),
+                                laps.length > 80 && h('div', { className: 'text-xs text-gray-600 mt-2' }, 'Enkel de laatste 80 worden getoond: gebruik de zoekbalk voor een naam.'));
+                        } else if (adminTab === 'lopers') {
+                            const q = runnerSearch.trim().toLowerCase();
+                            const list = [...runners].filter(r => !q || (r.name || '').toLowerCase().includes(q)).sort((a, b) => (a.name || '').localeCompare(b.name || '')).slice(0, 60);
+                            const gbtn = (r, g, label) => h('button', { key: g, onClick: () => setRunnerGender(r, g), className: 'px-3 py-1 rounded-lg font-bold text-sm', style: { border: `2px solid ${INK}`, background: r.gender === g ? '#f2a342' : '#fff', color: INK } }, label);
+                            body = card(`Lopers (${runners.length})`,
+                                note('Pas een naam of het geslacht aan, of verwijder een loper (ook zijn rondes).'),
+                                h('input', { type: 'text', placeholder: 'Zoek op naam…', value: runnerSearch, onChange: e => setRunnerSearch(e.target.value), className: 'w-full px-4 py-3 border rounded-lg mb-3' }),
+                                list.length === 0 ? h('div', { className: 'text-center text-gray-500 py-8' }, 'Geen lopers gevonden') :
+                                h('div', { className: 'space-y-2', style: { maxHeight: '60vh', overflowY: 'auto' } }, list.map(r => {
+                                    const n = laps.filter(l => l.runnerId === r.id).length;
+                                    return h('div', { key: r.id, className: 'flex items-center gap-3 p-3 rounded-lg flex-wrap', style: { background: '#fff6df' } },
+                                        editRunnerId === r.id ? h('input', { autoFocus: true, type: 'text', value: editRunnerName, onChange: e => setEditRunnerName(e.target.value), onKeyDown: e => { if (e.key === 'Enter') saveRunnerName(r); if (e.key === 'Escape') setEditRunnerId(''); }, className: 'flex-1 min-w-[160px] px-3 py-2 border rounded-lg' })
+                                            : h('div', { className: 'flex-1 min-w-[160px]' }, h('div', { className: 'font-bold' }, r.name), h('div', { className: 'text-xs text-gray-600' }, `${n} ${n === 1 ? 'ronde' : 'rondes'}`)),
+                                        h('div', { className: 'flex gap-1' }, gbtn(r, 'M', 'Man'), gbtn(r, 'V', 'Vrouw'), gbtn(r, 'X', 'X')),
+                                        editRunnerId === r.id ? bt('Opslaan', () => saveRunnerName(r), 'ok', { cls: 'py-2' }) : ib(EDIT, () => { setEditRunnerId(r.id); setEditRunnerName(r.name); }, 'Naam aanpassen'),
+                                        ib(TRASH, () => removeRunner(r), 'Loper verwijderen', true));
+                                })));
+                        } else if (adminTab === 'gegevens') {
+                            body = card('Gegevens downloaden', note('Een kopie van alle rondes of lopers als csv-bestand (te openen in Excel). Doe dit gerust regelmatig tijdens het event als back-up.'),
+                                h('div', { className: 'grid sm:grid-cols-2 gap-3' }, bt(`Alle rondes (${laps.length})`, exportToCSV, 'primary'), bt(`Alle lopers (${runners.length})`, exportRunnersToCSV, 'primary')));
+                        } else if (adminTab === 'oefenen' && NS) {
+                            body = h('div', { className: 'space-y-5' },
+                                card('Oefendata laden', note('Laad het event van vorig jaar (dummynamen of de echte csv) tot nu, vul een wachtrij en probeer dan de inschrijflaptop, het grote scherm en de chronometer samen uit.'),
+                                    h('label', { className: 'flex flex-wrap items-center gap-2 text-sm font-semibold mb-3' }, 'Het event is nu al', h('input', { type: 'number', min: 1, max: 23, step: 0.1, value: practiceHours, onChange: (e) => setPracticeHours(e.target.value), className: 'w-24 px-2 py-2 border rounded-lg text-center' }), 'uur bezig'),
+                                    h('div', { className: 'flex flex-wrap gap-3 items-center' }, bt('Laad oefendata (dummynamen)', seedPracticeData, 'primary', { disabled: !!(seedStatus && seedStatus.running) }), bt('Zet 12 lopers in de wachtrij', queueRandomRunners, 'ok'), seedStatus && h('span', { className: 'text-sm font-bold' }, seedStatus.text))),
+                                card('Echte data van vorig jaar (csv)', note('Kies het bestand 24u_loop_leuven_….csv. Dit vervangt alles in de oefenomgeving; de namen blijven in je eigen Firebase en komen niet in de code.'),
+                                    h('input', { type: 'file', accept: '.csv', onChange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; importPracticeCsv(f); }, className: 'text-sm' })),
+                                card('Automatisch laten doorlopen', note('Open het grote scherm met autoplay. Dat venster schrijft de rest van het event op het juiste moment weg; laat het openstaan.'),
+                                    bt('Start autoplay op het grote scherm (dit venster)', () => { const u = new URL(window.location.href); u.searchParams.set('mode', 'display'); u.searchParams.set('autoplay', '1'); window.location.href = u.toString(); }, 'primary')));
+                        } else if (adminTab === 'wissen') {
+                            body = h('div', { className: 'rounded-lg p-5', style: { border: '3px solid #dc2626', background: '#fee2e2', boxShadow: `5px 5px 0 ${INK}` } },
+                                h('h2', { className: 'text-lg font-extrabold mb-2', style: { color: '#991b1b' } }, 'Alles wissen'),
+                                note(`Dit verwijdert ALLE rondes, lopers en de wachtrij${NS ? ` van de oefenomgeving "${NS}"` : ' van het ECHTE event'}. Het kan niet ongedaan gemaakt worden. Download eerst een csv bij "Gegevens".`),
+                                h('input', { type: 'text', placeholder: 'Typ WISSEN om te bevestigen', value: wipeText, onChange: e => setWipeText(e.target.value), className: 'w-full px-4 py-3 border rounded-lg mb-3' }),
+                                bt('Alles wissen', wipeAll, 'danger', { disabled: wipeText.trim().toUpperCase() !== 'WISSEN' }));
+                        }
 
-                                // Collapsible section for managing all laps
-                                h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
-                                    h('button', {
-                                        onClick: () => setShowAllLapsAdmin(!showAllLapsAdmin),
-                                        className: 'group w-full flex items-center justify-between mb-4 text-left rounded-lg px-4 py-3 border-2 border-transparent hover:border-humasol-orange hover:bg-orange-50 cursor-pointer transition-colors'
-                                    },
-                                        h('h3', { className: 'text-lg font-semibold transition-colors group-hover:text-humasol-brown' }, `Beheer Alle Rondes (${laps.length})`),
-                                        h('span', { className: 'text-2xl text-gray-700 transition-colors group-hover:text-humasol-orange' }, showAllLapsAdmin ? '▲' : '▼')
-                                    ),
-                                    
-                                    showAllLapsAdmin && h('div', null,
-                                        // Search box
-                                        h('div', { className: 'mb-4' },
-                                            h('input', {
-                                                type: 'text',
-                                                placeholder: 'Zoek op naam...',
-                                                value: adminLapSearchQuery,
-                                                onChange: e => setAdminLapSearchQuery(e.target.value),
-                                                className: 'w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-humasol-orange focus:outline-none'
-                                            })
-                                        ),
-                                        
-                                        // Add new lap button
-                                        h('button', {
-                                            onClick: () => setShowAddLapForm(!showAddLapForm),
-                                            className: 'w-full mb-4 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg flex items-center justify-center gap-2'
-                                        },
-                                            h(Icon, { name: 'plus', className: 'w-5 h-5' }),
-                                            h('span', null, showAddLapForm ? 'Annuleer Nieuwe Ronde' : 'Nieuwe Ronde Toevoegen')
-                                        ),
-                                        
-                                        // Add new lap form
-                                        showAddLapForm && h('div', { className: 'mb-4 p-4 bg-green-50 border-2 border-green-300 rounded-lg' },
-                                            h('h4', { className: 'font-semibold mb-3 text-green-800' }, 'Voeg Handmatig Ronde Toe'),
-                                            h('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3 mb-3' },
-                                                h('select', {
-                                                    value: newLapRunnerId,
-                                                    onChange: e => setNewLapRunnerId(e.target.value),
-                                                    className: 'px-3 py-2 border rounded-lg'
-                                                },
-                                                    h('option', { value: '' }, 'Selecteer loper...'),
-                                                    [...runners].sort((a, b) => a.name.localeCompare(b.name)).map(runner =>
-                                                        h('option', { key: runner.id, value: runner.id }, runner.name)
-                                                    )
-                                                ),
-                                                h('input', {
-                                                    type: 'text',
-                                                    placeholder: 'Tijd (MM:SS)',
-                                                    value: newLapTime,
-                                                    onChange: e => setNewLapTime(e.target.value),
-                                                    className: 'px-3 py-2 border rounded-lg font-mono'
-                                                }),
-                                                h('input', {
-                                                    type: 'datetime-local',
-                                                    value: newLapTimestamp,
-                                                    onChange: e => setNewLapTimestamp(e.target.value),
-                                                    className: 'px-3 py-2 border rounded-lg'
-                                                })
-                                            ),
-                                            h('button', {
-                                                onClick: addNewLapManually,
-                                                disabled: !newLapRunnerId || !newLapTime,
-                                                className: 'w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-semibold rounded-lg'
-                                            }, 'Ronde Toevoegen')
-                                        ),
-                                        
-                                        // Laps list
-                                        (() => {
-                                            // Filter laps based on search query
-                                            const filteredLaps = laps.filter(lap => {
-                                                if (!adminLapSearchQuery.trim()) return true;
-                                                return lap.runnerName.toLowerCase().includes(adminLapSearchQuery.toLowerCase());
-                                            });
-                                            
-                                            // Sort by timestamp (newest first)
-                                            const sortedLaps = [...filteredLaps].sort((a, b) => 
-                                                new Date(b.timestamp) - new Date(a.timestamp)
-                                            );
-                                            
-                                            return h('div', null,
-                                                sortedLaps.length === 0 ? 
-                                                    h('div', { className: 'text-center text-gray-400 py-8' }, 
-                                                        adminLapSearchQuery.trim() ? 'Geen rondes gevonden' : 'Nog geen rondes'
-                                                    ) :
-                                                    h('div', { className: 'space-y-2 max-h-96 overflow-y-auto' },
-                                                        sortedLaps.map((lap, idx) =>
-                                                            h('div', {
-                                                                key: lap.id || idx,
-                                                                className: 'p-3 bg-gray-50 rounded-lg border border-gray-200'
-                                                            },
-                                                                editingLapId === lap.id ? (
-                                                                    // Edit mode
-                                                                    h('div', { className: 'space-y-2' },
-                                                                        h('div', { className: 'flex items-center gap-2' },
-                                                                            h('span', { className: 'font-medium text-sm' }, lap.runnerName),
-                                                                            h('input', {
-                                                                                type: 'text',
-                                                                                value: editingLapTime,
-                                                                                onChange: e => setEditingLapTime(e.target.value),
-                                                                                placeholder: 'MM:SS',
-                                                                                className: 'flex-1 px-2 py-1 border rounded text-sm font-mono'
-                                                                            })
-                                                                        ),
-                                                                        h('div', { className: 'flex gap-2' },
-                                                                            h('button', {
-                                                                                onClick: () => saveEditedLap(lap),
-                                                                                className: 'flex-1 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded font-semibold'
-                                                                            }, '✓ Opslaan'),
-                                                                            h('button', {
-                                                                                onClick: cancelEditingLap,
-                                                                                className: 'flex-1 px-3 py-1 bg-gray-400 hover:bg-gray-500 text-white text-sm rounded'
-                                                                            }, '✗ Annuleren')
-                                                                        )
-                                                                    )
-                                                                ) : (
-                                                                    // Display mode
-                                                                    h('div', { className: 'flex justify-between items-center' },
-                                                                        h('div', { className: 'flex-1' },
-                                                                            h('div', { className: 'font-medium text-sm' }, lap.runnerName),
-                                                                            h('div', { className: 'text-xs text-gray-500' }, 
-                                                                                new Date(lap.timestamp).toLocaleString('nl-NL', { 
-                                                                                    day: '2-digit',
-                                                                                    month: '2-digit',
-                                                                                    year: 'numeric',
-                                                                                    hour: '2-digit', 
-                                                                                    minute: '2-digit',
-                                                                                    second: '2-digit'
-                                                                                })
-                                                                            )
-                                                                        ),
-                                                                        h('div', { className: 'flex items-center gap-2' },
-                                                                            h('span', { className: 'text-indigo-600 font-mono font-semibold' }, formatTimeSimple(lap.time)),
-                                                                            h('button', {
-                                                                                onClick: () => startEditingLap(lap),
-                                                                                className: 'px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded',
-                                                                                title: 'Tijd aanpassen'
-                                                                            }, ''),
-                                                                            h('button', {
-                                                                                onClick: () => deleteLap(lap),
-                                                                                className: 'px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded',
-                                                                                title: 'Verwijderen'
-                                                                            }, '')
-                                                                        )
-                                                                    )
-                                                                )
-                                                            )
-                                                        )
-                                                    )
-                                            );
-                                        })()
-                                    )
-                                ),
-
-                                h('div', { className: 'bg-red-50 border-2 border-red-300 rounded-lg p-6' },
-                                    h('h3', { className: 'text-lg font-semibold mb-4 text-red-700' }, 'Gevaarlijke Zone'),
-                                    h('p', { className: 'text-sm text-red-600 mb-4' }, 'Deze acties kunnen niet ongedaan gemaakt worden!'),
-                                    h('button', {
-                                        onClick: () => setShowResetConfirm(!showResetConfirm),
-                                        className: 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg mb-2'
-                                    }, showResetConfirm ? 'Annuleer' : 'Reset Alle Data'),
-                                    showResetConfirm && h('div', { className: 'mt-4 p-4 bg-white rounded border-2 border-red-400' },
-                                        h('p', { className: 'text-sm text-red-700 mb-3 font-semibold' }, 'WAARSCHUWING: Dit verwijdert ALLE rondes, lopers en wachtrij data!'),
-                                        h('button', {
-                                            onClick: async () => {
-                                                if (await askConfirm('LAATSTE WAARSCHUWING: Alle data wordt permanent verwijderd. Doorgaan?')) {
-                                                    // Delete all data
-                                                    for (let lap of laps) {
-                                                        await firestoreWrapper.collection('laps').doc(lap.id).delete();
-                                                    }
-                                                    for (let runner of runners) {
-                                                        await firestoreWrapper.collection('runners').doc(runner.id).delete();
-                                                    }
-                                                    for (let q of queue) {
-                                                        await firestoreWrapper.collection('queue').doc(q.id).delete();
-                                                    }
-                                                    await clearActiveRunnerInFirebase();
-                                                    setShowResetConfirm(false);
-                                                    alert('Alle data is verwijderd');
-                                                }
-                                            },
-                                            className: 'w-full bg-red-700 hover:bg-red-800 text-white font-bold py-2 rounded'
-                                        }, 'JA, VERWIJDER ALLES')
-                                    )
-                                )
-                            )
-                        )
-                    )
+                        return h('div', { className: 'space-y-5 max-w-5xl mx-auto' },
+                            h('div', { className: 'flex items-center justify-between gap-3 flex-wrap' },
+                                h('h1', { className: 'text-3xl font-extrabold' }, 'Beheer'),
+                                h('div', { className: 'flex gap-2' }, bt('Vergrendel', () => { setIsAdminUnlocked(false); setAdminMsg(''); }, 'ghost', { cls: 'py-2' }),
+                                    !IS_SIGNUP && bt('Uitloggen', () => { try { localStorage.removeItem('staffActive'); } catch (e) {} setIsAdminUnlocked(false); setIsStaff(false); setView('leaderboard'); }, 'ghost', { cls: 'py-2' }))),
+                            h('div', { className: 'flex gap-2 flex-wrap' }, tabs.map(([k, l]) => h('button', { key: k, onClick: () => { setAdminTab(k); setAdminMsg(''); }, className: 'px-4 py-2 rounded-full font-bold', style: { border: `3px solid ${INK}`, background: adminTab === k ? '#f2a342' : '#fff', color: INK, boxShadow: adminTab === k ? `3px 3px 0 ${INK}` : 'none' } }, l))),
+                            adminMsg && h('div', { className: 'rounded-lg px-4 py-2 font-bold', style: { border: `3px solid ${INK}`, background: '#d9f7d0' } }, adminMsg),
+                            body);
+                    })()
                 ),
 
                 // PIN-scherm (medewerkers) bovenop de publieke weergave
