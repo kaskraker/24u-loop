@@ -1,5 +1,5 @@
 // Service Worker for 24u Loop Leuven PWA
-const CACHE_NAME = '24u-loop-v8';
+const CACHE_NAME = '24u-loop-v9';
 const urlsToCache = [
   './index.html',
   './manifest.json',

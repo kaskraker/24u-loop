@@ -738,14 +738,15 @@
         // Het oranje stuk is waar de loper waarschijnlijk zit (bereik), het lichte stuk is al gelopen.
         const TRACK = { L: 150, r: 42, cxL: 55, cxR: 205, cy: 70 };
         const TRACK_PATH = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 13 70';
-        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '-80 0 340 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
+        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '-92 0 352 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#17120d', strokeWidth: 26, strokeLinejoin: 'round' }),
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#ffffff', strokeWidth: 17 }),
             h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 17, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.55 }),
             h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#e8590c', strokeWidth: 17, strokeLinecap: 'butt', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
             h('line', { x1: 0, y1: 70, x2: 26, y2: 70, stroke: '#17120d', strokeWidth: 5 }),
             // het Humasol-icoon links van de piste: zo staat ook de stand opgesteld
-            h('svg', { x: -78, y: 41, width: 66, height: 57, viewBox: '25 75 465 400' }, h('image', { href: 'humasol_icon.png', width: 512, height: 512 })),
+            h('rect', { x: -86, y: 38, width: 66, height: 64, rx: 14, fill: '#ffffff', stroke: '#17120d', strokeWidth: 4 }),
+            h('svg', { x: -80, y: 46, width: 54, height: 48, viewBox: '25 75 465 400' }, h('image', { href: 'humasol_icon.png', width: 512, height: 512 })),
             label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
@@ -899,7 +900,7 @@
                         h(LiveClock, { startTime, running, format: formatTime, className: 'text-5xl font-mono font-bold text-orange-600 mt-1' }),
                         n > 0 && h('div', { className: 'text-xs text-gray-500 mt-1' }, `Verwacht ≈ ${formatTimeSimple(expected)}`)
                     ),
-                    h('div', { style: { width: 300, flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
+                    h('div', { style: { width: 320, flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
                 )
             );
         };
