@@ -187,7 +187,7 @@ const ME_KEY = 'myRunnerId' + (NS ? '_' + NS : '');   // per omgeving onthouden 
 let me = ''; try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) {}
 if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
 let tab = params.get('tab') || 'queue';   // opent altijd bij de wachtrij en de huidige loper
-let query = '', squery = '', viewId = '';
+let query = '', squery = '', viewId = '', showAllQ = false;
 const $ = (id) => document.getElementById(id);
 
 // ---------- helpers ----------
@@ -321,13 +321,15 @@ function viewQueue() {
   const w = waiting();
   const meR = runners.find((x) => x.id === me);
   const run = isRunning() ? active.runner : null, st = startMs();
-  return `${nowCard()}${meR ? statusCard(meR) : '<div class="card" style="background:#ffd58a"><b>Tik hieronder op “Dit ben ik” bij je naam</b> om te zien hoe lang het nog duurt.</div>'}
+  const prompt = '<div class="card" style="background:#ffd58a"><b>Tik hieronder op “Dit ben ik” bij je naam</b> om te zien hoe lang het nog duurt.</div>';
+  const LIM = showAllQ ? 60 : 8;
+  return `${meR ? statusCard(meR) + nowCard() : nowCard() + prompt}
     <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
-      ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, 40).map((q, i) => {
+      ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, LIM).map((q, i) => {
         const ms = waitMs(i), mine = q.runnerId === me;
         return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
       }).join('')}
-      ${w.length > 40 ? `<div class="empty">… en nog ${w.length - 40}</div>` : ''}</div>
+      ${w.length > LIM ? `<button class="btn small full" data-act="qall" style="margin-top:4px">Toon alle ${w.length} wachtenden</button>` : showAllQ && w.length > 8 ? '<button class="btn small full" data-act="qall" style="margin-top:4px">Toon minder</button>' : ''}</div>
     <div class="card"><h2>Net gelopen <small>laatste ${recent.length || ''} rondes</small></h2>
       ${recent.length === 0 ? '<div class="empty">Nog geen rondes</div>' : recent.map((l) => {
         const ago = Math.max(0, Math.round((tnow() - new Date(l.timestamp).getTime()) / 60000)), rec = SUM && SUM.record && l.time <= SUM.record.t;
@@ -381,7 +383,7 @@ function showCelebration(c) {
 function render(force) {
   syncWatches(); checkCelebrate();
   $('euro').textContent = '€ ' + (totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE');
-  $('nav').innerHTML = [['queue', 'Wachtrij'], ['mine', 'Mijn tijden'], ['search', 'Zoeken'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
+  $('nav').innerHTML = [['queue', 'Live'], ['mine', 'Mijn tijden'], ['search', 'Zoeken'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
   const ae = document.activeElement && document.activeElement.id;
   const typing = ae === 'q' || ae === 'sq';
   if (typing && !force) {
@@ -440,6 +442,7 @@ document.addEventListener('click', (e) => {
   if (a === 'pickme') { me = t.dataset.id; viewId = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem(ME_KEY); } catch (e) {} render(true); }
   if (a === 'share') share();
+  if (a === 'qall') { showAllQ = !showAllQ; render(true); }
 });
 document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } if (e.target.id === 'sq') { squery = e.target.value; render(false); } });
 
