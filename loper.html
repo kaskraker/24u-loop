@@ -305,11 +305,11 @@ function nowCard() {
       <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${esc(active.runner.runnerName)}</div>
         <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">0:00.00</div>
         ${mine.length ? `<div style="font-size:12px;color:var(--muted);font-weight:500">Verwacht ≈ ${mmss(ex)}</div>` : ''}</div>
-      <svg viewBox="-92 0 352 140" style="width:58%;flex:none;overflow:visible" data-track data-start="${st}" data-fast="${fast}" data-slow="${slow}">
+      <svg viewBox="0 0 260 140" style="width:46%;flex:none;overflow:visible" data-track data-start="${st}" data-fast="${fast}" data-slow="${slow}">
         <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
         <path class="tlo" d="${TRACK_D}" fill="none" stroke="#f2a342" stroke-width="17" pathLength="1" stroke-dasharray=".001 2" opacity=".55"/>
         <path class="thi" d="${TRACK_D}" fill="none" stroke="#e8590c" stroke-width="17" pathLength="1" stroke-dasharray=".05 2"/>
-        <line x1="0" y1="70" x2="26" y2="70" stroke="#17120d" stroke-width="5"/><rect x="-86" y="38" width="66" height="64" rx="14" fill="#fff" stroke="#17120d" stroke-width="4"/><svg x="-80" y="46" width="54" height="48" viewBox="25 75 465 400"><image href="humasol_icon.png" width="512" height="512"/></svg></svg></div></div>`;
+        <line x1="0" y1="70" x2="26" y2="70" stroke="#17120d" stroke-width="5"/></svg></div></div>`;
 }
 function viewQueue() {
   const w = waiting();
