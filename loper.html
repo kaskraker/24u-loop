@@ -323,7 +323,7 @@ snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') |
 setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(Date.now() - st); });
   document.querySelectorAll('svg[data-track]').forEach((el) => {
-    const e = Math.max(0, Date.now() - Number(el.dataset.start)), hi = Math.min(0.99, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
+    const e = Math.max(0, Date.now() - Number(el.dataset.start)), hi = Math.min(1, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
     el.querySelector('.tlo').setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`);
     const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo);
   });

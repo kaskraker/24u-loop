@@ -739,6 +739,14 @@
             return h('div', { ref, className, style: { fontVariantNumeric: 'tabular-nums', ...style } }, format(0));
         };
 
+        // Klok (uu:mm + seconden) met een eigen timer, los van de rest van de pagina
+        const ClockHMS = ({ mainClass, secClass }) => {
+            const [now, setNow] = React.useState(new Date());
+            React.useEffect(() => { const i = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(i); }, []);
+            const p2 = (n) => String(n).padStart(2, '0');
+            return h(React.Fragment, null, h('span', { className: mainClass }, `${p2(now.getHours())}:${p2(now.getMinutes())}`), h('span', { className: secClass }, p2(now.getSeconds())));
+        };
+
         // Recent toegevoegde tijden (laatste 30 min): enkel de tijd-tekst wordt oranje
         const RECENT_MS = 30 * 60 * 1000;
         const isRecent = (ts) => Date.now() - new Date(ts).getTime() < RECENT_MS;
@@ -792,7 +800,7 @@
                 const draw = (now) => {
                     const { fastMs: fm, slowMs: sm, t0 } = par.current;
                     const el = Math.max(0, Date.now() - t0);
-                    const thi = Math.min(0.99, el / fm);
+                    const thi = Math.min(1, el / fm);
                     const tlo = Math.max(0, Math.min(thi - 0.05, el / sm));
                     // Nieuwe loper: het oude bereik vervaagt (0,25 s), het nieuwe verschijnt vanaf de start (0,25 s)
                     if (lastT0 !== null && t0 !== lastT0 && shown.current) sw = { at: now, frozen: { ...shown.current } };
@@ -843,7 +851,7 @@
             const best = n ? Math.min(...mine.map(l => l.time)) : null;
             const fastMs = best ? Math.max(expected * (1 - rel), best * 0.99) : expected * 0.82;   // nog nooit gelopen: brede marge
             const slowMs = best ? Math.max(expected * (1 + rel), fastMs * 1.08) : expected * 1.12;
-            const hi = Math.min(0.99, elapsedTime / fastMs);
+            const hi = Math.min(1, elapsedTime / fastMs);
             const lo = Math.max(0, Math.min(hi - 0.05, elapsedTime / slowMs));
             const metersMid = Math.round(((lo + hi) / 2) * 515 / 10) * 10;
             const swapKey = `${activeRunner.runnerId}_${+startTime}`;
@@ -878,7 +886,7 @@
                 });
                 return { overall, hour, runner, count };
             }, [laps]);
-            const recent = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, SHOW);
+            const recent = React.useMemo(() => [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, SHOW), [laps]);
             const now = Date.now();
             // Nieuw binnengekomen ronde: 50 s lang uitlichten (gemeten vanaf het moment dat dit scherm ze ziet, dus los van klokverschillen)
             const [, setTick] = React.useState(0);
@@ -925,6 +933,8 @@
         // ===== Display links: volgende lopers mét PR, wachttijd en verwacht startuur =====
         const DisplayNext = ({ waiting, runners, laps, estimateWaitMs, formatTimeSimple }) => {
             const SHOW = 7;
+            const [, setTick] = React.useState(0);   // ververst enkel dit blok elke 2 s (wachttijden), niet de hele pagina
+            React.useEffect(() => { const i = setInterval(() => setTick((n) => n + 1), 2000); return () => clearInterval(i); }, []);
             const list = waiting.slice(0, SHOW);
             const pb = {};
             laps.forEach(l => { if (pb[l.runnerId] === undefined || l.time < pb[l.runnerId]) pb[l.runnerId] = l.time; });
@@ -1514,6 +1524,7 @@
             const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(new URLSearchParams(window.location.search).get('fs') === '1');   // ?fs=1: toon meteen de volledig-scherm-opmaak (voor testen)
             const [fsButtonVisible, setFsButtonVisible] = useState(true);
             const displayRootRef = useRef(null);
+            const fitDisplayRef = useRef(null);
 
             // Wat ziet dit toestel? (read-only publiek, groot scherm, inschrijflaptop of medewerker)
             const publicView = IS_PUBLIC || (!isStaff && !IS_SIGNUP && !IS_DISPLAY_ONLY);
@@ -1642,21 +1653,28 @@
                     root.style.zoom = '';
                     return;
                 }
+                let tm = null;
                 const fit = () => {
+                    const cur = parseFloat(root.style.zoom) || 1;
                     root.style.zoom = '1';
                     const natural = root.getBoundingClientRect().height;
                     const z = Math.max(0.5, Math.min(1.15, (window.innerHeight - 4) / natural));
-                    root.style.zoom = Math.abs(z - 1) < 0.01 ? '' : String(z);
+                    const next = Math.abs(z - 1) < 0.01 ? '' : String(z);
+                    root.style.zoom = Math.abs(z - cur) < 0.004 ? (cur === 1 ? '' : String(cur)) : next;   // niet verspringen bij minieme verschillen
                 };
+                const soon = () => { clearTimeout(tm); tm = setTimeout(fit, 300); };
+                fitDisplayRef.current = soon;
                 fit();
-                const id = setInterval(fit, 2000);
-                window.addEventListener('resize', fit);
+                const id = setInterval(fit, 30000);
+                window.addEventListener('resize', soon);
                 return () => {
-                    clearInterval(id);
-                    window.removeEventListener('resize', fit);
+                    clearTimeout(tm); clearInterval(id); fitDisplayRef.current = null;
+                    window.removeEventListener('resize', soon);
                     root.style.zoom = '';
                 };
             }, [isDisplayFullscreen, view]);
+            // opnieuw passen als de inhoud van lengte verandert (andere wachtrij, nieuwe ronde)
+            useEffect(() => { if (fitDisplayRef.current) fitDisplayRef.current(); }, [queue.length, laps.length, runners.length, activeRunner && activeRunner.runnerId]);
 
             // Display/fullscreen: nooit scrollbalken
             useEffect(() => {
@@ -1909,7 +1927,7 @@
                     // De zichtbare klok is een eigen LiveClock; dit getal (schattingen, piste) hoeft maar 2x per seconde
                     interval = setInterval(() => {
                         setElapsedTime(Date.now() - startTime);
-                    }, (IS_DISPLAY_ONLY || URL_MODE === 'public') ? 2000 : 500);
+                    }, (IS_DISPLAY_ONLY || URL_MODE === 'public') ? 30000 : 500);
                 } else {
                     setElapsedTime(0);
                 }
@@ -2088,7 +2106,7 @@
                 const GAP = 2000;   // wissel tussen twee lopers (vorig jaar mediaan 0,9 s, 90% onder 1,6 s; met marge)
                 const waitingList = queue.filter((q, i) => !(activeRunner && isRunning && i === 0));
                 let t = 0;
-                if (activeRunner && isRunning) t = Math.max(5000, expectedLapMs(activeRunner.runnerId) - elapsedTime);
+                if (activeRunner && isRunning) t = Math.max(5000, expectedLapMs(activeRunner.runnerId) - (startTime ? Date.now() - startTime : elapsedTime));
                 for (let j = 0; j < idx && j < waitingList.length; j++) t += GAP + expectedLapMs(waitingList[j].runnerId);
                 return t;
             };
@@ -3258,7 +3276,7 @@
             // Get current date and time
             const [currentTime, setCurrentTime] = useState(new Date());
             useEffect(() => {
-                const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+                const timer = setInterval(() => setCurrentTime(new Date()), 30000);   // enkel de datum; de klok heeft een eigen timer
                 return () => clearInterval(timer);
             }, []);
 
@@ -3423,9 +3441,8 @@
                             h('div', { className: 'text-2xl font-bold' }, '24u Loop Leuven'),
                             h('div', { className: 'text-base' }, dateTime.date)
                         ),
-                        (() => { const [hh, mm, ss] = dateTime.time.split(':'); return h('div', { className: 'flex items-baseline rounded-xl px-4 py-1 bg-black/20 border border-white/25', style: { fontVariantNumeric: 'tabular-nums' } },
-                            h('span', { className: 'text-5xl font-semibold tracking-tight leading-none' }, `${hh}:${mm}`),
-                            h('span', { className: 'text-2xl font-medium opacity-70 ml-1 leading-none' }, ss)); })()
+                        h('div', { className: 'flex items-baseline rounded-xl px-4 py-1 bg-black/20 border border-white/25', style: { fontVariantNumeric: 'tabular-nums' } },
+                            h(ClockHMS, { mainClass: 'text-5xl font-semibold tracking-tight leading-none', secClass: 'text-2xl font-medium opacity-70 ml-1 leading-none' }))
                     ),
                     h('div', { className: 'text-right leading-tight pr-14' },
                         h('div', { className: 'text-sm uppercase tracking-wider font-semibold' }, 'Inschrijven & wachtrij'),
@@ -4573,15 +4590,13 @@
                                 h('div', { className: 'flex items-center gap-6 lg:justify-self-start' },
                                     // Titel en datum, met de grote klok rechts ervan
                                     (() => {
-                                        const [hh, mm, ss] = dateTime.time.split(':');
                                         return h('div', { className: 'flex items-center gap-5' },
                                             h('div', { className: 'leading-tight' },
                                                 h('div', { className: 'text-2xl font-bold' }, '24u Loop Leuven'),
                                                 h('div', { className: 'text-base opacity-95' }, dateTime.date)
                                             ),
                                             h('div', { className: 'flex items-baseline rounded-xl px-4 py-1 bg-black/20 border border-white/25 shadow-inner', style: { fontVariantNumeric: 'tabular-nums' } },
-                                                h('span', { className: 'text-6xl font-semibold tracking-tight leading-none' }, `${hh}:${mm}`),
-                                                h('span', { className: 'text-3xl font-medium opacity-70 ml-1 leading-none' }, ss)
+                                                h(ClockHMS, { mainClass: 'text-6xl font-semibold tracking-tight leading-none', secClass: 'text-3xl font-medium opacity-70 ml-1 leading-none' })
                                             )
                                         );
                                     })(),
