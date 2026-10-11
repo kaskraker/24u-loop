@@ -84,6 +84,31 @@ const NS = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, '');
 const col = (n) => NS ? `${NS}_${n}` : n;
 const EUR_PER_LAP = 5;
 
+// ===== Gedeelde tijd: elk toestel corrigeert zijn eigen klok met de tijd van de server (HTTP Date-header) =====
+// Zo lopen de klok op het grote scherm, de chronometer en de gsm's van de lopers gelijk, ook als een klok enkele seconden afwijkt.
+let TIME_OFFSET = 0;
+const tnow = () => Date.now() + TIME_OFFSET;
+async function syncClock() {
+  try {
+    let lo = -Infinity, hi = Infinity;
+    for (let i = 0; i < 6; i++) {
+      const t0 = Date.now();
+      const res = await fetch(location.pathname + '?_t=' + t0 + '_' + i, { method: 'HEAD', cache: 'no-store' });
+      const t1 = Date.now(), d = res.headers.get('Date');
+      if (!d) continue;
+      const mid = (t0 + t1) / 2, srv = new Date(d).getTime();   // de server rondt af naar beneden op de seconde
+      lo = Math.max(lo, srv - mid); hi = Math.min(hi, srv + 1000 - mid);
+      await new Promise((r) => setTimeout(r, 170));
+    }
+    if (isFinite(lo) && isFinite(hi)) {
+      const est = lo <= hi ? (lo + hi) / 2 : (lo + hi) / 2;
+      if (Math.abs(est) < 10 * 60e3) TIME_OFFSET = est;
+    }
+  } catch (e) { /* offline: eigen klok blijven gebruiken */ }
+}
+syncClock(); setInterval(syncClock, 10 * 60e3);
+
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
@@ -114,7 +139,7 @@ function groupAvg() {
 }
 let statCache = null;
 function stats() {
-  if (statCache && statCache.n === laps.length && Date.now() - statCache.at < 15000) return statCache;
+  if (statCache && statCache.n === laps.length && tnow() - statCache.at < 15000) return statCache;
   const per = {}; laps.forEach((l) => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; });
   statCache = { n: laps.length, at: Date.now(), per, group: groupAvg() };
   return statCache;
@@ -122,7 +147,7 @@ function stats() {
 function expected(rid) { const s = stats(), e = s.per[rid]; return e ? (e.sum + s.group * 2) / (e.n + 2) : s.group; }
 function waitMs(idx) {
   let t = 0;
-  if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(active.runner.runnerId) - (st ? Date.now() - st : 0)); }
+  if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(active.runner.runnerId) - (st ? tnow() - st : 0)); }
   const w = waiting();
   for (let j = 0; j < idx && j < w.length; j++) t += 2000 + expected(w[j].runnerId);
   return t;
@@ -138,13 +163,13 @@ function statusCard(r, self = true) {
   const fn = esc((r.name || '').split(' ')[0]);
   if (isRunning() && active.runner.runnerId === r.id) {
     const st = startMs();
-    return `<div class="status run"><div class="k">🏃 ${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
+    return `<div class="status run"><div class="k">🏃 ${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
   }
   const w = waiting(), idxs = w.map((q, i) => q.runnerId === r.id ? i : -1).filter((i) => i >= 0), idx = idxs.length ? idxs[0] : -1;
   if (idx === -1) return `<div class="status none"><div class="k">${self ? 'Je staat niet in de wachtrij' : fn + ' staat niet in de wachtrij'}</div>${self ? '<div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div>' : ''}</div>`;
   const ms = waitMs(idx);
   const head = self ? (idx === 0 ? 'Jij bent de volgende — sta klaar!' : `Je staat ${idx + 1}e in de rij`) : (idx === 0 ? `${fn} is de volgende` : `${fn} staat ${idx + 1}e in de rij`);
-  const sub = idx === 0 ? `Start ${ms <= 5000 ? 'elk moment' : 'rond ' + clock(Date.now() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · start rond ${clock(Date.now() + ms)}`;
+  const sub = idx === 0 ? `Start ${ms <= 5000 ? 'elk moment' : 'rond ' + clock(tnow() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · start rond ${clock(tnow() + ms)}`;
   return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${waitText(ms, idx)}</div><div class="s">${sub}</div>${idxs.length > 1 ? `<div class="s" style="margin-top:6px;font-weight:700">${self ? 'Daarna sta je' : fn + ' staat daarna'} ook nog ${idxs.slice(1).map((i) => (i + 1) + 'e (' + waitText(waitMs(i), i) + ')').join(' en ')} in de rij.</div>` : ''}<div class="s" style="font-size:11px;margin-top:4px;color:var(--muted)">Dit is een schatting.</div></div>`;
 }
 
@@ -219,11 +244,15 @@ function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
   const mine = laps.filter((l) => l.runnerId === rid).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0, ex = expected(rid);
-  const fast = best ? Math.max(ex * 0.9, best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * 1.1, fast * 1.08) : ex * 1.12;
+  const sdRel = (arr) => { const m = arr.reduce((a, b) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length) / m; };
+  const hourAgo = tnow() - 3600e3, recent = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo).map((l) => l.time);
+  const groupRel = recent.length >= 5 ? sdRel(recent) : 0.15;
+  const rel = Math.max(0.06, Math.min(0.25, mine.length >= 3 ? sdRel(mine) : groupRel));
+  const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : ex * 1.12;
   return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">🏃 Nu aan het lopen</div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${esc(active.runner.runnerName)}</div>
-        <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">${mmssc(Date.now() - st)}</div>
+        <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">${mmssc(tnow() - st)}</div>
         <div style="font-size:12px;color:var(--muted);font-weight:500">Verwacht ≈ ${mmss(ex)}</div></div>
       <svg viewBox="0 0 260 140" style="width:46%;flex:none;overflow:visible" data-track data-start="${st}" data-fast="${fast}" data-slow="${slow}">
         <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#fff6df" stroke-width="17"/>
@@ -239,7 +268,7 @@ function viewQueue() {
     <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
       ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, 40).map((q, i) => {
         const ms = waitMs(i), mine = q.runnerId === me;
-        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(Date.now() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
+        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
       }).join('')}
       ${w.length > 40 ? `<div class="empty">… en nog ${w.length - 40}</div>` : ''}</div>`;
 }
@@ -321,9 +350,9 @@ snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') |
 
 // levende klok + wachttijd elke seconde bijwerken (zonder de pagina opnieuw op te bouwen)
 setInterval(() => {
-  document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(Date.now() - st); });
+  document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
   document.querySelectorAll('svg[data-track]').forEach((el) => {
-    const e = Math.max(0, Date.now() - Number(el.dataset.start)), hi = Math.min(1, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
+    const e = Math.max(0, tnow() - Number(el.dataset.start)), hi = Math.min(1, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
     el.querySelector('.tlo').setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`);
     const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo);
   });

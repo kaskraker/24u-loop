@@ -1,5 +1,5 @@
 // Service Worker for 24u Loop Leuven PWA
-const CACHE_NAME = '24u-loop-v6';
+const CACHE_NAME = '24u-loop-v7';
 const urlsToCache = [
   './index.html',
   './manifest.json',
@@ -71,8 +71,9 @@ self.addEventListener('fetch', (event) => {
   // De app-pagina zelf: netwerk eerst (je krijgt altijd de nieuwste versie), met de bewaarde versie als
   // terugval wanneer je offline bent of de verbinding te traag is (4 s). Werkt voor elke ?mode=... variant.
   const reqUrl = new URL(event.request.url);
+  const isLoper = reqUrl.pathname.endsWith('/loper.html') || reqUrl.pathname.endsWith('/loper');
   const isAppPage = event.request.mode === 'navigate' &&
-    (reqUrl.pathname.endsWith('/') || reqUrl.pathname.endsWith('/index.html'));
+    (reqUrl.pathname.endsWith('/') || reqUrl.pathname.endsWith('/index.html') || isLoper);
   if (isAppPage) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
@@ -82,11 +83,11 @@ self.addEventListener('fetch', (event) => {
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))
         ]);
         if (net && net.status === 200) {
-          cache.put('./index.html', net.clone());   // altijd de laatste goede versie bewaren
+          cache.put(isLoper ? './loper.html' : './index.html', net.clone());   // altijd de laatste goede versie bewaren
         }
         return net;
       } catch (err) {
-        const cached = await cache.match('./index.html') || await caches.match(event.request, { ignoreSearch: true });
+        const cached = await cache.match(isLoper ? './loper.html' : './index.html') || await caches.match(event.request, { ignoreSearch: true });
         if (cached) return cached;
         return new Response(
           '<html><body><h1>Offline</h1><p>Je bent offline en deze pagina is nog niet bewaard. Open hem eerst één keer met internet.</p></body></html>',

@@ -669,6 +669,32 @@
         const IS_PUBLIC = URL_MODE === 'public';
         const IS_SIGNUP = URL_MODE === 'signup';
         const IS_DISPLAY_ONLY = URL_MODE === 'display';
+
+        // ===== Gedeelde tijd: elk toestel corrigeert zijn eigen klok met de tijd van de server (HTTP Date-header) =====
+        // Zo lopen de klok op het grote scherm, de chronometer en de gsm's van de lopers gelijk, ook als een klok enkele seconden afwijkt.
+        let TIME_OFFSET = 0;
+        const tnow = () => Date.now() + TIME_OFFSET;
+        async function syncClock() {
+          try {
+            let lo = -Infinity, hi = Infinity;
+            for (let i = 0; i < 6; i++) {
+              const t0 = Date.now();
+              const res = await fetch(location.pathname + '?_t=' + t0 + '_' + i, { method: 'HEAD', cache: 'no-store' });
+              const t1 = Date.now(), d = res.headers.get('Date');
+              if (!d) continue;
+              const mid = (t0 + t1) / 2, srv = new Date(d).getTime();   // de server rondt af naar beneden op de seconde
+              lo = Math.max(lo, srv - mid); hi = Math.min(hi, srv + 1000 - mid);
+              await new Promise((r) => setTimeout(r, 170));
+            }
+            if (isFinite(lo) && isFinite(hi)) {
+              const est = lo <= hi ? (lo + hi) / 2 : (lo + hi) / 2;
+              if (Math.abs(est) < 10 * 60e3) TIME_OFFSET = est;
+            }
+          } catch (e) { /* offline: eigen klok blijven gebruiken */ }
+        }
+        syncClock(); setInterval(syncClock, 10 * 60e3);
+
+
         const readStaff = () => {
             if (SIM_MODE) return true;
             try { return localStorage.getItem('staffActive') === '1'; } catch (e) { return false; }
@@ -728,12 +754,12 @@
                 const t0 = +startTime;
                 let raf, last = '';
                 const tick = () => {
-                    const txt = format(Math.max(0, Date.now() - t0));
+                    const txt = format(Math.max(0, tnow() - t0));
                     if (txt !== last) { el.textContent = txt; last = txt; }
                     raf = requestAnimationFrame(tick);
                 };
                 tick();
-                const iv = setInterval(() => { const txt = format(Math.max(0, Date.now() - t0)); if (txt !== last) { el.textContent = txt; last = txt; } }, 100);   // vangnet als het venster op de achtergrond staat
+                const iv = setInterval(() => { const txt = format(Math.max(0, tnow() - t0)); if (txt !== last) { el.textContent = txt; last = txt; } }, 100);   // vangnet als het venster op de achtergrond staat
                 return () => { cancelAnimationFrame(raf); clearInterval(iv); };
             }, [startTime, running]);
             return h('div', { ref, className, style: { fontVariantNumeric: 'tabular-nums', ...style } }, format(0));
@@ -799,7 +825,7 @@
                 let raf, lastT0 = null, sw = null;
                 const draw = (now) => {
                     const { fastMs: fm, slowMs: sm, t0 } = par.current;
-                    const el = Math.max(0, Date.now() - t0);
+                    const el = Math.max(0, tnow() - t0);
                     const thi = Math.min(1, el / fm);
                     const tlo = Math.max(0, Math.min(thi - 0.05, el / sm));
                     // Nieuwe loper: het oude bereik vervaagt (0,25 s), het nieuwe verschijnt vanaf de start (0,25 s)
@@ -1548,7 +1574,7 @@
                 const tick = () => {
                     if (stopped) return;
                     clearTimeout(timer);
-                    const now = Date.now();
+                    const now = tnow();
                     // 1. afgelopen rondes opslaan (met de juiste totalen van de loper)
                     const have = new Set(lapsRef.current.map(l => l.id));
                     const due = plan.filter(l => l.finishTs <= now && !have.has(lapId(l.seq)) && !applied.has(l.seq));
@@ -1922,11 +1948,11 @@
                 
                 if (isRunning && startTime) {
                     // Immediate update
-                    setElapsedTime(Date.now() - startTime);
+                    setElapsedTime(tnow() - startTime);
                     
                     // De zichtbare klok is een eigen LiveClock; dit getal (schattingen, piste) hoeft maar 2x per seconde
                     interval = setInterval(() => {
-                        setElapsedTime(Date.now() - startTime);
+                        setElapsedTime(tnow() - startTime);
                     }, (IS_DISPLAY_ONLY || URL_MODE === 'public') ? 30000 : 500);
                 } else {
                     setElapsedTime(0);
@@ -1942,7 +1968,7 @@
                 const handleVisibilityChange = () => {
                     if (!document.hidden && isRunning && startTime) {
                         // Page is visible again, force immediate timer update
-                        setElapsedTime(Date.now() - startTime);
+                        setElapsedTime(tnow() - startTime);
                         console.log('✅ Timer resynchroniseerd na terugkeer naar app');
                     }
                 };
@@ -2106,7 +2132,7 @@
                 const GAP = 2000;   // wissel tussen twee lopers (vorig jaar mediaan 0,9 s, 90% onder 1,6 s; met marge)
                 const waitingList = queue.filter((q, i) => !(activeRunner && isRunning && i === 0));
                 let t = 0;
-                if (activeRunner && isRunning) t = Math.max(5000, expectedLapMs(activeRunner.runnerId) - (startTime ? Date.now() - startTime : elapsedTime));
+                if (activeRunner && isRunning) t = Math.max(5000, expectedLapMs(activeRunner.runnerId) - (startTime ? tnow() - startTime : elapsedTime));
                 for (let j = 0; j < idx && j < waitingList.length; j++) t += GAP + expectedLapMs(waitingList[j].runnerId);
                 return t;
             };
@@ -2249,7 +2275,7 @@
                     await writeActiveRunnerDoc({
                         runner: runner,
                         isRunning: running,
-                        startTime: running ? new Date().toISOString() : null
+                        startTime: running ? new Date(tnow()).toISOString() : null
                     });
                 } catch (error) {
                     console.error('Error updating active runner:', error);
@@ -2276,7 +2302,7 @@
                         ignoreFirebaseUpdatesRef.current = true;
                         
                         // Update local state immediately
-                        const now = Date.now();
+                        const now = tnow();
                         setActiveRunner(queue[0]);
                         setIsRunning(true);
                         setStartTime(now);
@@ -2291,7 +2317,7 @@
                         }, 500);
                     } else {
                         // Save current and start next
-                        await saveLap(startTime ? Date.now() - startTime : elapsedTime, true);
+                        await saveLap(startTime ? tnow() - startTime : elapsedTime, true);
                     }
                 } finally {
                     // Reset debounce flag after 5 seconds to prevent accidental double-clicks
@@ -2300,7 +2326,7 @@
             };
 
             const stopWithoutNext = async () => {
-                await saveLap(startTime ? Date.now() - startTime : elapsedTime, false);
+                await saveLap(startTime ? tnow() - startTime : elapsedTime, false);
             };
 
             const saveManualTime = () => {
@@ -2325,7 +2351,7 @@
                 const runner = runners.find(r => r.id === activeRunner.runnerId);
                 
                 // Calculate start time (current time minus elapsed time)
-                const finishTime = new Date();
+                const finishTime = new Date(tnow());
                 const startTime = new Date(finishTime.getTime() - timeMs);
 
                 // Check if this is a personal record
@@ -2383,7 +2409,7 @@
                     // Update local state FIRST (before Firebase) to prevent UI flicker
                     if (startNext && queue.length > 1) {
                         // Start next runner immediately in local state
-                        const now = Date.now();
+                        const now = tnow();
                         setActiveRunner(queue[1]);
                         setStartTime(now);
                         setElapsedTime(0);
