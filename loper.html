@@ -100,6 +100,7 @@ const EUR_PER_LAP = 5;
 // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
 // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
 const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
+const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waarschijnlijke eerste ronde (mediaan): voor de piste; het gemiddelde hierboven is voor de wachttijden (sommen)
 
 
 // ===== Gedeelde tijd: elk toestel corrigeert zijn eigen klok met de tijd van de server (HTTP Date-header) =====
@@ -261,7 +262,7 @@ const TRACK_D = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 
 function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
-  const mine = laps.filter((l) => l.runnerId === rid).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0, ex = expected(rid);
+  const mine = laps.filter((l) => l.runnerId === rid).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0, rnn = runners.find((x) => x.id === rid), ex = mine.length ? expected(rid) : (FIRST_LAP_TYPICAL_MS[rnn && rnn.gender] || FIRST_LAP_TYPICAL_MS.X);
   const sdRel = (arr) => { const m = arr.reduce((a, b) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length) / m; };
   const hourAgo = tnow() - 3600e3, recent = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo).map((l) => l.time);
   const groupRel = recent.length >= 5 ? sdRel(recent) : 0.15;

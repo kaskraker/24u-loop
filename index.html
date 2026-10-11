@@ -872,7 +872,7 @@
             const personalAvg = n ? mine.reduce((sum, l) => sum + l.time, 0) / n : null;
             // verwachte rondetijd: eigen gemiddelde, licht bijgestuurd naar het groepsgemiddelde bij weinig rondes
             const prior = FIRST_LAP_MS[me && me.gender] || FIRST_LAP_MS.X;
-            const expected = personalAvg ? (personalAvg * n + prior * 2) / (n + 2) : prior;
+            const expected = personalAvg ? (personalAvg * n + prior * 2) / (n + 2) : (FIRST_LAP_TYPICAL_MS[me && me.gender] || FIRST_LAP_TYPICAL_MS.X);
             // spreiding: hoe regelmatig loopt deze loper (of de groep bij weinig rondes)? Dat bepaalt de breedte van het bereik
             const groupRel = base.length >= 5 ? sdOf(base.map(l => l.time)) / overallAvg : 0.15;
             const rel = Math.max(0.06, Math.min(0.25, n >= 3 ? sdOf(mine.map(l => l.time)) / personalAvg : groupRel));
@@ -1007,6 +1007,7 @@
         // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
         // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
         const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
+const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waarschijnlijke eerste ronde (mediaan): voor de piste; het gemiddelde hierboven is voor de wachttijden (sommen)
 
         // Weetjes over Humasol voor in de wisselende kaart. Pas gerust aan of vul aan met eigen feiten.
         const HUMASOL_FACTS = ['Opgericht in 2008', 'Renewable technology for all'];
