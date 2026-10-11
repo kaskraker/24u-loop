@@ -4006,7 +4006,7 @@ function predictNext(times, gender, restMs) {
                                 h('div', { style: { flexShrink: 0, border: '3px solid #17120d', borderRadius: 8, overflow: 'hidden' } }, h(QrCode, { url: getPublicUrl(), size: 104 })),
                                 h('div', null,
                                     h('div', { className: 'font-extrabold text-gray-900 leading-tight' }, 'Volg je beurt op je gsm'),
-                                    h('div', { className: 'text-sm text-gray-800 mt-1 leading-snug' }, 'Scan de code: je plaats in de wachtrij, hoe lang het nog duurt en al je rondetijden.')
+                                    h('div', { className: 'text-sm text-gray-800 mt-1 leading-snug' }, 'Scan de code en zie waar je staat in de wachtrij, hoe lang het nog duurt en al je rondetijden.')
                                 )
                             ),
                         )
@@ -4908,7 +4908,7 @@ function predictNext(times, gender, restMs) {
                                                     h('div', { className: 'w-full max-w-[150px] bg-white p-1.5', style: { border: '3px solid #17120d', borderRadius: 12, boxShadow: '3px 3px 0 #17120d' } },
                                                         h(QrCode, { url: getPublicUrl(), size: '100%' })
                                                     ),
-                                                    h('div', { className: 'text-xs font-bold leading-tight', style: { color: '#17120d' } }, 'Je plaats in de rij,', h('br'), 'wachttijd & al je rondes')
+                                                    h('div', { className: 'text-xs font-bold leading-tight', style: { color: '#17120d' } }, 'Zie waar je staat,', h('br'), 'je wachttijd & al je rondes')
                                                 ),
                                                 // Instagram
                                                 h('div', { className: 'flex-1 min-w-0 flex flex-col items-center gap-1.5' },
