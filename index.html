@@ -1464,7 +1464,7 @@ function predictNext(times, gender, restMs) {
                 connecting: { dot: 'bg-gray-400 animate-pulse', text: 'Verbinden…', cls: 'bg-gray-100 text-gray-700', title: 'Verbinden met de server' },
                 online: { dot: 'bg-green-500', text: 'Verbonden', cls: 'bg-green-100 text-green-700', title: `Alles gesynchroniseerd · laatste update ${fmtClock(st.lastServer)}` },
                 syncing: { dot: 'bg-blue-500 animate-pulse', text: `Synchroniseren (${st.pending})`, cls: 'bg-blue-100 text-blue-700', title: 'Wijzigingen worden verstuurd naar de server' },
-                offline: { dot: 'bg-red-500 animate-pulse', text: st.pending > 0 ? `Offline · ${st.pending} wacht` : 'Offline', cls: 'bg-red-100 text-red-700', title: `Geen verbinding sinds ${fmtClock(st.offlineSince)} · ${st.pending} wijzigingen bewaard op dit toestel` },
+                offline: { dot: 'bg-red-500 animate-pulse', text: st.pending > 0 ? `Offline · ${st.pending} wachtend` : 'Offline', cls: 'bg-red-100 text-red-700', title: `Geen verbinding sinds ${fmtClock(st.offlineSince)} · ${st.pending} wijzigingen bewaard op dit toestel` },
                 error: { dot: 'bg-red-500', text: 'Opslaan mislukt', cls: 'bg-red-100 text-red-700', title: st.error || 'Fout' }
             };
             const c = map[st.state] || map.connecting;
@@ -2484,7 +2484,7 @@ function predictNext(times, gender, restMs) {
                 if (queueNotice.type === 'dup') {
                     return h('div', { className: 'mb-4 rounded-lg border-2 border-blue-400 bg-blue-50 p-3 text-sm text-blue-900' },
                         h('div', { className: 'font-semibold' }, queueNotice.text),
-                        queueNotice.runner && h('div', { className: 'mt-1' }, 'Wil je hem/haar toch nog een keer achteraan toevoegen?'),
+                        queueNotice.runner && h('div', { className: 'mt-1' }, 'Wil je deze loper toch nog eens achteraan toevoegen?'),
                         h('div', { className: 'flex gap-2 mt-2' },
                             queueNotice.runner && h('button', { onClick: async () => handleAddResult(await enqueueRunner(queueNotice.runner, true)), className: 'px-3 py-1.5 rounded-lg font-bold bg-humasol-orange text-white' }, 'Ja, nog een keer'),
                             h('button', { onClick: () => setQueueNotice(null), className: 'px-3 py-1.5 rounded-lg font-bold bg-white border-2 border-blue-400 text-blue-900' }, queueNotice.runner ? 'Nee, laat maar' : 'Oké')
@@ -2696,7 +2696,7 @@ function predictNext(times, gender, restMs) {
                     });
                 } else if (!success) {
                     // If save failed, keep the timer running so data isn't lost
-                    console.error('Ronde opslaan mislukt - timer blijft lopen');
+                    console.error('Ronde opslaan mislukt: de timer blijft lopen');
                 }
             };
 
@@ -2717,7 +2717,7 @@ function predictNext(times, gender, restMs) {
                     return;
                 }
 
-                if (!await askConfirm('Weet je zeker dat je het laatste ronde wilt verwijderen?')) {
+                if (!await askConfirm('Weet je zeker dat je de laatste ronde wilt verwijderen?')) {
                     return;
                 }
 
@@ -2790,7 +2790,7 @@ function predictNext(times, gender, restMs) {
                             // Clear the current active runner from Firebase
                             await clearActiveRunnerInFirebase();
                         }
-                    }, 'Kan undo niet uitvoeren');
+                    }, 'Ongedaan maken is niet gelukt');
 
                     if (success) {
                         // 4. Restore local state IMMEDIATELY (before Firebase updates)
@@ -3564,7 +3564,7 @@ function predictNext(times, gender, restMs) {
                                         className: `text-xs sm:text-sm transition-colors ${
                                             darkMode ? 'text-gray-400' : 'text-humasol-gray'
                                         }` 
-                                    }, 'Dinsdag 20:00 - Woensdag 20:00')
+                                    }, '24 uur · 20:00 tot 20:00')
                                 ),
                                 // Connection status indicator
                                 h('div', { className: 'flex items-center gap-2' },
@@ -3776,7 +3776,7 @@ function predictNext(times, gender, restMs) {
                                     h('div', { className: 'text-center' },
                                         h('div', { className: 'text-3xl mb-2' }, ''),
                                         h('div', { className: 'text-lg font-bold text-humasol-brown' }, 'GEEN VOLGENDE LOPER!'),
-                                        h('div', { className: 'text-sm text-humasol-gray mt-1' }, 'Denk eraan om meer mensen toe te voegen')
+                                        h('div', { className: 'text-sm text-humasol-gray mt-1' }, 'Voeg snel nog iemand toe aan de wachtrij')
                                     )
                                 ),
 
@@ -3791,13 +3791,13 @@ function predictNext(times, gender, restMs) {
                                     h('button', {
                                         onClick: stopWithoutNext,
                                         className: 'flex-1 sm:flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-4 rounded-lg'
-                                    }, 'Stop Zonder Volgende')
+                                    }, 'Stoppen zonder volgende loper')
                                 ),
                                 h('div', { className: 'flex gap-2' },
                                     h('button', {
                                         onClick: cancelCurrentRun,
                                         className: 'flex-1 bg-gray-400 hover:bg-gray-500 text-white py-2 rounded text-sm'
-                                    }, 'Annuleer Zonder Opslaan'),
+                                    }, 'Annuleren zonder op te slaan'),
                                     lastAction && h('button', {
                                         onClick: undoLastAction,
                                         disabled: !lastAction,
@@ -3808,7 +3808,7 @@ function predictNext(times, gender, restMs) {
                                     )
                                 )
                             ) : h('div', { className: 'text-center py-8' },
-                                h('div', { className: 'text-gray-400 mb-4' }, 'Geen actieve loper'),
+                                h('div', { className: 'text-gray-400 mb-4' }, 'Er loopt niemand'),
                                 queue.length > 0 ? h('div', null,
                                     h('div', { className: 'text-lg mb-4' }, 'Volgende: ', h('strong', null, queue[0].runnerName)),
                                     h('button', {
@@ -3816,14 +3816,14 @@ function predictNext(times, gender, restMs) {
                                         className: 'w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-4 rounded-lg flex items-center justify-center space-x-2 mb-4'
                                     },
                                         h(Icon, { name: 'play', className: 'w-6 h-6' }),
-                                        h('span', null, 'Start Eerste Loper')
+                                        h('span', null, 'Eerste loper starten')
                                     ),
                                     lastAction && h('button', {
                                         onClick: undoLastAction,
                                         className: 'w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2'
                                     },
                                         h('span', null, '↶'),
-                                        h('span', null, 'Laatste Actie Ongedaan Maken')
+                                        h('span', null, 'Laatste actie ongedaan maken')
                                     )
                                 ) : h('div', null,
                                     h('div', { className: 'text-gray-500 mb-4' }, 'Voeg lopers toe'),
@@ -3832,7 +3832,7 @@ function predictNext(times, gender, restMs) {
                                         className: 'bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-lg font-semibold flex items-center justify-center gap-2 mx-auto'
                                     },
                                         h('span', null, '↶'),
-                                        h('span', null, 'Laatste Actie Ongedaan Maken')
+                                        h('span', null, 'Laatste actie ongedaan maken')
                                     )
                                 )
                             )
@@ -3924,7 +3924,7 @@ function predictNext(times, gender, restMs) {
                         // Links: nieuwe loper toevoegen (bovenaan, zonder scrollen)
                         h('div', { className: 'lg:col-span-2 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto' + (isDisplayFullscreen || IS_SIGNUP ? ' lg:max-h-[calc(100vh-9rem)]' : '') },
                         h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
-                            h('h2', { className: 'text-lg font-semibold mb-4 text-gray-900' }, 'Nieuwe Loper Toevoegen'),
+                            h('h2', { className: 'text-lg font-semibold mb-4 text-gray-900' }, 'Nieuwe loper toevoegen'),
                             renderQueueNotice(),
                             
                             // Name input with autocomplete (EERST)
@@ -4088,7 +4088,7 @@ function predictNext(times, gender, restMs) {
                                                 h('button', { disabled: idx === 0, onClick: () => move(idx, 0), className: `${iconBtn} bg-gray-200 hover:bg-gray-300 text-gray-700`, title: 'Helemaal bovenaan zetten' }, '⤒'),
                                                 h('button', { disabled: idx === 0, onClick: () => move(idx, idx - 1), className: `${iconBtn} bg-gray-200 hover:bg-gray-300 text-gray-700`, title: 'Eén plaats naar voor' }, '▲'),
                                                 h('button', { disabled: idx === waiting.length - 1, onClick: () => move(idx, idx + 1), className: `${iconBtn} bg-gray-200 hover:bg-gray-300 text-gray-700`, title: 'Eén plaats naar achter' }, '▼'),
-                                                h('button', { onClick: () => removeFromQueue(runner), className: `${iconBtn} bg-red-500 hover:bg-red-600 text-white ml-1`, title: 'Verwijder uit de wachtrij' }, h(Icon, { name: 'trash', className: 'w-4 h-4' }))
+                                                h('button', { onClick: () => removeFromQueue(runner), className: `${iconBtn} bg-red-500 hover:bg-red-600 text-white ml-1`, title: 'Uit de wachtrij verwijderen' }, h(Icon, { name: 'trash', className: 'w-4 h-4' }))
                                             )
                                         ))
                                     )
@@ -4107,7 +4107,7 @@ function predictNext(times, gender, restMs) {
                                 onClick: () => toggleLeaderboard('fastestOverall'),
                                 className: 'group w-full flex items-center justify-between mb-4 text-left rounded-lg px-4 py-3 border-2 border-transparent hover:border-humasol-orange hover:bg-orange-50 cursor-pointer transition-colors'
                             },
-                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-humasol-brown' }, 'Snelste Rondes (Algemeen)'),
+                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-humasol-brown' }, 'Snelste rondes (algemeen)'),
                                 h('span', { className: 'text-2xl text-gray-700 transition-colors group-hover:text-humasol-orange' }, collapsedLeaderboards.fastestOverall ? '▼' : '▲')
                             ),
                             !collapsedLeaderboards.fastestOverall && (
@@ -4141,7 +4141,7 @@ function predictNext(times, gender, restMs) {
                                 onClick: () => toggleLeaderboard('fastestMen'),
                                 className: 'group w-full flex items-center justify-between mb-4 text-left rounded-lg px-4 py-3 border-2 border-transparent hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-colors'
                             },
-                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-blue-600' }, 'Snelste Rondes (Mannen)'),
+                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-blue-600' }, 'Snelste rondes (mannen)'),
                                 h('span', { className: 'text-2xl text-gray-700 transition-colors group-hover:text-blue-600' }, collapsedLeaderboards.fastestMen ? '▼' : '▲')
                             ),
                             !collapsedLeaderboards.fastestMen && (
@@ -4172,7 +4172,7 @@ function predictNext(times, gender, restMs) {
                                 onClick: () => toggleLeaderboard('fastestWomen'),
                                 className: 'group w-full flex items-center justify-between mb-4 text-left rounded-lg px-4 py-3 border-2 border-transparent hover:border-pink-500 hover:bg-pink-50 cursor-pointer transition-colors'
                             },
-                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-pink-600' }, 'Snelste Rondes (Vrouwen)'),
+                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-pink-600' }, 'Snelste rondes (vrouwen)'),
                                 h('span', { className: 'text-2xl text-gray-700 transition-colors group-hover:text-pink-600' }, collapsedLeaderboards.fastestWomen ? '▼' : '▲')
                             ),
                             !collapsedLeaderboards.fastestWomen && (
@@ -4203,7 +4203,7 @@ function predictNext(times, gender, restMs) {
                                 onClick: () => toggleLeaderboard('mostLapsOverall'),
                                 className: 'group w-full flex items-center justify-between mb-4 text-left rounded-lg px-4 py-3 border-2 border-transparent hover:border-humasol-orange hover:bg-orange-50 cursor-pointer transition-colors'
                             },
-                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-humasol-brown' }, 'Meeste Rondes (Algemeen)'),
+                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-humasol-brown' }, 'Meeste rondes (algemeen)'),
                                 h('span', { className: 'text-2xl text-gray-700 transition-colors group-hover:text-humasol-orange' }, collapsedLeaderboards.mostLapsOverall ? '▼' : '▲')
                             ),
                             !collapsedLeaderboards.mostLapsOverall && (
@@ -4232,7 +4232,7 @@ function predictNext(times, gender, restMs) {
                                 onClick: () => toggleLeaderboard('mostLapsMen'),
                                 className: 'group w-full flex items-center justify-between mb-4 text-left rounded-lg px-4 py-3 border-2 border-transparent hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-colors'
                             },
-                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-blue-600' }, 'Meeste Rondes (Mannen)'),
+                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-blue-600' }, 'Meeste rondes (mannen)'),
                                 h('span', { className: 'text-2xl text-gray-700 transition-colors group-hover:text-blue-600' }, collapsedLeaderboards.mostLapsMen ? '▼' : '▲')
                             ),
                             !collapsedLeaderboards.mostLapsMen && (
@@ -4258,7 +4258,7 @@ function predictNext(times, gender, restMs) {
                                 onClick: () => toggleLeaderboard('mostLapsWomen'),
                                 className: 'group w-full flex items-center justify-between mb-4 text-left rounded-lg px-4 py-3 border-2 border-transparent hover:border-pink-500 hover:bg-pink-50 cursor-pointer transition-colors'
                             },
-                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-pink-600' }, 'Meeste Rondes (Vrouwen)'),
+                                h('h2', { className: 'text-lg font-semibold transition-colors group-hover:text-pink-600' }, 'Meeste rondes (vrouwen)'),
                                 h('span', { className: 'text-2xl text-gray-700 transition-colors group-hover:text-pink-600' }, collapsedLeaderboards.mostLapsWomen ? '▼' : '▲')
                             ),
                             !collapsedLeaderboards.mostLapsWomen && (
@@ -4807,7 +4807,7 @@ function predictNext(times, gender, restMs) {
                                 h('div', { className: 'grid grid-cols-3 gap-4' },
                                     // Top 10 fastest laps - Women
                                     h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-pink-200 p-3' },
-                                        h('h3', { className: 'text-lg font-bold mb-2 text-pink-600 border-b-2 border-pink-200 pb-1' }, `Top ${DISPLAY_TOP_N} Snelste Rondes Vrouwen`),
+                                        h('h3', { className: 'text-lg font-bold mb-2 text-pink-600 border-b-2 border-pink-200 pb-1' }, `Top ${DISPLAY_TOP_N} snelste rondes vrouwen`),
                                         fastestLapsWomen.length === 0 ? h('div', { className: 'text-center text-gray-400 py-4 text-xs' }, 'Nog geen data') :
                                         h(FlipBox, { className: 'space-y-1', flash: true },
                                             fastestLapsWomen.slice(0, DISPLAY_TOP_N).map((lap, idx) =>
@@ -4832,7 +4832,7 @@ function predictNext(times, gender, restMs) {
 
                                     // Top 10 fastest laps - Men
                                     h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-blue-200 p-3' },
-                                        h('h3', { className: 'text-lg font-bold mb-2 text-blue-600 border-b-2 border-blue-200 pb-1' }, `Top ${DISPLAY_TOP_N} Snelste Rondes Mannen`),
+                                        h('h3', { className: 'text-lg font-bold mb-2 text-blue-600 border-b-2 border-blue-200 pb-1' }, `Top ${DISPLAY_TOP_N} snelste rondes mannen`),
                                         fastestLapsMen.length === 0 ? h('div', { className: 'text-center text-gray-400 py-4 text-xs' }, 'Nog geen data') :
                                         h(FlipBox, { className: 'space-y-1', flash: true },
                                             fastestLapsMen.slice(0, DISPLAY_TOP_N).map((lap, idx) =>
@@ -4857,7 +4857,7 @@ function predictNext(times, gender, restMs) {
 
                                     // Top 10 most laps
                                     h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3' },
-                                        h('h3', { className: 'text-lg font-bold mb-2 text-gray-800 border-b-2 pb-1' }, `Top ${DISPLAY_TOP_N} Meeste Rondes`),
+                                        h('h3', { className: 'text-lg font-bold mb-2 text-gray-800 border-b-2 pb-1' }, `Top ${DISPLAY_TOP_N} meeste rondes`),
                                         lapsByRunner.length === 0 ? h('div', { className: 'text-center text-gray-400 py-4 text-xs' }, 'Nog geen data') :
                                         h(FlipBox, { className: 'space-y-1', flash: true },
                                             lapsByRunner.slice(0, DISPLAY_TOP_N).map((runner, idx) => {
