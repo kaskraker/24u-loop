@@ -3442,25 +3442,6 @@ function predictNext(times, gender, restMs) {
             trackRanks('mostLapsWomen', lapsByRunnerWomen);
             trackRanks('bestAverage', avgTimeByRunner);
 
-            // Snelle selectie: wie komt waarschijnlijk zo meteen terug? Lopers van de laatste 3 uur die nog niet in de wachtrij staan of lopen,
-            // geordend op hoe dicht hun rust bij hun eigen gewoonlijke rust ligt (mediaan van hun vorige pauzes, anders 20 min).
-            const getMostLikelyRunners = () => {
-                const now = Date.now(), skip = new Set(queue.map(q => q.runnerId));
-                if (activeRunner && isRunning) skip.add(activeRunner.runnerId);
-                const by = {};
-                [...laps].sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)).forEach(l => { (by[l.runnerId] = by[l.runnerId] || []).push(l); });
-                const out = [];
-                Object.values(by).forEach(ls => {
-                    const last = ls[ls.length - 1], mins = (now - new Date(last.timestamp).getTime()) / 60000;
-                    if (skip.has(last.runnerId) || mins > 180) return;
-                    const rests = []; for (let i = 1; i < ls.length; i++) { const r = (new Date(ls[i].timestamp) - new Date(ls[i - 1].timestamp) - ls[i].time) / 60000; if (r > 0.5 && r < 240) rests.push(r); }
-                    rests.sort((x, y) => x - y);
-                    const typical = rests.length ? rests[Math.floor(rests.length / 2)] : 20;
-                    out.push({ runnerId: last.runnerId, runnerName: last.runnerName, laps: ls.length, mins, typical, due: mins >= typical * 0.7, score: Math.abs(mins - typical) / typical });
-                });
-                return out.sort((x, y) => x.score - y.score).slice(0, 8);
-            };
-
             // Autocomplete functionality
             const getNameSuggestions = () => {
                 if (!nameInput.trim()) return [];
@@ -3496,7 +3477,6 @@ function predictNext(times, gender, restMs) {
                 handleAddResult(await enqueueRunner({ id: runner.runnerId, name: runner.runnerName }));
             };
 
-            const mostLikelyRunners = getMostLikelyRunners();
 
             // Build UI
             const navButton = (viewName, icon, label) => h('button', {
@@ -3990,21 +3970,6 @@ function predictNext(times, gender, restMs) {
                                         )
                                     )
                                 )
-                            ),
-
-                            // Snelle selectie: terugkerende lopers met één tik in de wachtrij
-                            mostLikelyRunners.length > 0 && h('div', { className: 'mb-4' },
-                                h('div', { className: 'flex items-baseline justify-between mb-2' },
-                                    h('label', { className: 'text-sm font-extrabold text-gray-900' }, 'Net gelopen: tik om weer aan te sluiten'),
-                                    h('span', { className: 'text-xs text-gray-600' }, 'oranje = waarschijnlijk klaar')),
-                                h('div', { className: 'grid grid-cols-2 gap-2' },
-                                    mostLikelyRunners.map((r) => h('button', {
-                                        key: r.runnerId, onClick: () => selectQuickRunner(r),
-                                        className: 'px-3 py-2 rounded-lg text-left',
-                                        style: { border: '3px solid #17120d', background: r.due ? '#ffd58a' : '#fff', boxShadow: r.due ? '3px 3px 0 #17120d' : 'none', color: '#17120d' }
-                                    },
-                                        h('div', { className: 'font-extrabold leading-tight truncate' }, r.runnerName),
-                                        h('div', { className: 'text-xs text-gray-700' }, `${r.mins < 1 ? 'net' : Math.round(r.mins) + ' min geleden'} · ${r.laps} ${r.laps === 1 ? 'ronde' : 'rondes'}`))))
                             ),
 
                             // OR divider
