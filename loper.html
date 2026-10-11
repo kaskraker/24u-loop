@@ -104,7 +104,17 @@ const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
 const EW_FIRST = 0.7, EW_NEXT = 0.6;
-function predictNext(times, gender) { let e = FIRST_LAP_MS[gender] || FIRST_LAP_MS.X; times.forEach((x, i) => { const w = i === 0 ? EW_FIRST : EW_NEXT; e = e * (1 - w) + x * w; }); return e; }
+// Na een lange rust (vanaf 1 u, volledig effect vanaf 4 u) loopt iemand weer 'fris': dan schuift de voorspelling voor de helft op naar het gemiddelde van de snelste helft van zijn rondes.
+// Op de data van vorig jaar: na >2 u rust gemiddelde fout 4,1 s i.p.v. 4,6 s (weinig meetpunten: 58). Uur van de nacht en korte rust gaven geen duidelijke winst.
+function predictNext(times, gender, restMs) {
+  let e = FIRST_LAP_MS[gender] || FIRST_LAP_MS.X;
+  times.forEach((x, i) => { const w = i === 0 ? EW_FIRST : EW_NEXT; e = e * (1 - w) + x * w; });
+  if (restMs > 3600e3 && times.length >= 2) {
+    const w = Math.min(1, (restMs - 3600e3) / (3 * 3600e3)) * 0.5, sorted = [...times].sort((a, b) => a - b), k = Math.max(1, Math.floor(sorted.length / 2));
+    e = e * (1 - w) + (sorted.slice(0, k).reduce((a, b) => a + b, 0) / k) * w;
+  }
+  return e;
+}
    // meest waarschijnlijke eerste ronde (mediaan): voor de piste; het gemiddelde hierboven is voor de wachttijden (sommen)
 
 
@@ -142,8 +152,8 @@ function buildMeta(runnersArr, lapsArr) {
   const by = {};
   lapsArr.forEach((l) => { const e = by[l.runnerId] || (by[l.runnerId] = { n: 0, tt: 0, best: Infinity, sq: 0 }); e.n++; e.tt += l.time; if (l.time < e.best) e.best = l.time; });
   lapsArr.forEach((l) => { const e = by[l.runnerId], m = e.tt / e.n; e.sq += (l.time - m) * (l.time - m); });
-  const seqs = {}; [...lapsArr].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach((l) => { (seqs[l.runnerId] = seqs[l.runnerId] || []).push(l.time); });
-  const list = runnersArr.map((r) => { const e = by[r.id]; return { i: r.id, n: r.name || '', g: r.gender || 'X', l: e ? e.n : 0, t: e ? Math.round(e.tt) : 0, b: e ? Math.round(e.best) : 0, s: e && e.n >= 3 ? +(Math.sqrt(e.sq / e.n) / (e.tt / e.n)).toFixed(3) : 0, e: e ? Math.round(predictNext(seqs[r.id] || [], r.gender)) : 0 }; });
+  const seqs = {}, lastAt = {}; [...lapsArr].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach((l) => { (seqs[l.runnerId] = seqs[l.runnerId] || []).push(l.time); lastAt[l.runnerId] = new Date(l.timestamp).getTime(); });
+  const list = runnersArr.map((r) => { const e = by[r.id]; return { i: r.id, n: r.name || '', g: r.gender || 'X', l: e ? e.n : 0, t: e ? Math.round(e.tt) : 0, b: e ? Math.round(e.best) : 0, s: e && e.n >= 3 ? +(Math.sqrt(e.sq / e.n) / (e.tt / e.n)).toFixed(3) : 0, e: e ? Math.round(predictNext(seqs[r.id] || [], r.gender, Date.now() - (lastAt[r.id] || Date.now()))) : 0 }; });
   const gOf = {}; runnersArr.forEach((r) => { gOf[r.id] = r.gender; });
   const sorted = [...lapsArr].sort((a, b) => a.time - b.time);
   const top = (arr) => arr.slice(0, 10).map((l) => ({ id: l.runnerId, name: l.runnerName, t: l.time, at: l.timestamp }));

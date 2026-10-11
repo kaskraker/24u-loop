@@ -872,7 +872,7 @@
             const personalAvg = n ? mine.reduce((sum, l) => sum + l.time, 0) / n : null;
             // verwachte rondetijd: eigen gemiddelde, licht bijgestuurd naar het groepsgemiddelde bij weinig rondes
             const prior = FIRST_LAP_MS[me && me.gender] || FIRST_LAP_MS.X;
-            const expected = personalAvg ? predictNext([...mine].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map(l => l.time), me && me.gender) : (FIRST_LAP_TYPICAL_MS[me && me.gender] || FIRST_LAP_TYPICAL_MS.X);
+            const expected = personalAvg ? predictNext([...mine].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map(l => l.time), me && me.gender, +startTime - Math.max(...mine.map(l => new Date(l.timestamp).getTime()))) : (FIRST_LAP_TYPICAL_MS[me && me.gender] || FIRST_LAP_TYPICAL_MS.X);
             // spreiding: hoe regelmatig loopt deze loper (of de groep bij weinig rondes)? Dat bepaalt de breedte van het bereik
             const groupRel = base.length >= 5 ? sdOf(base.map(l => l.time)) / overallAvg : 0.15;
             const rel = Math.max(0.06, Math.min(0.25, n >= 3 ? sdOf(mine.map(l => l.time)) / personalAvg : groupRel));
@@ -1011,7 +1011,17 @@ const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
 const EW_FIRST = 0.7, EW_NEXT = 0.6;
-function predictNext(times, gender) { let e = FIRST_LAP_MS[gender] || FIRST_LAP_MS.X; times.forEach((x, i) => { const w = i === 0 ? EW_FIRST : EW_NEXT; e = e * (1 - w) + x * w; }); return e; }
+// Na een lange rust (vanaf 1 u, volledig effect vanaf 4 u) loopt iemand weer 'fris': dan schuift de voorspelling voor de helft op naar het gemiddelde van de snelste helft van zijn rondes.
+// Op de data van vorig jaar: na >2 u rust gemiddelde fout 4,1 s i.p.v. 4,6 s (weinig meetpunten: 58). Uur van de nacht en korte rust gaven geen duidelijke winst.
+function predictNext(times, gender, restMs) {
+  let e = FIRST_LAP_MS[gender] || FIRST_LAP_MS.X;
+  times.forEach((x, i) => { const w = i === 0 ? EW_FIRST : EW_NEXT; e = e * (1 - w) + x * w; });
+  if (restMs > 3600e3 && times.length >= 2) {
+    const w = Math.min(1, (restMs - 3600e3) / (3 * 3600e3)) * 0.5, sorted = [...times].sort((a, b) => a - b), k = Math.max(1, Math.floor(sorted.length / 2));
+    e = e * (1 - w) + (sorted.slice(0, k).reduce((a, b) => a + b, 0) / k) * w;
+  }
+  return e;
+}
    // meest waarschijnlijke eerste ronde (mediaan): voor de piste; het gemiddelde hierboven is voor de wachttijden (sommen)
 
         // Weetjes over Humasol voor in de wisselende kaart. Pas gerust aan of vul aan met eigen feiten.
@@ -2309,14 +2319,14 @@ function predictNext(times, gender) { let e = FIRST_LAP_MS[gender] || FIRST_LAP_
             // Rondes per loper (eigen gemiddelde) en het groepsgemiddelde van het laatste uur, bijgehouden bij elke wijziging in de rondes
             const lapStats = React.useMemo(() => {
                 const per = {}; let sumAll = 0;
-                const seq = {};
-                [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach(l => { (seq[l.runnerId] = seq[l.runnerId] || []).push(l.time); });
+                const seq = {}, lastAt = {};
+                [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach(l => { (seq[l.runnerId] = seq[l.runnerId] || []).push(l.time); lastAt[l.runnerId] = new Date(l.timestamp).getTime(); });
                 laps.forEach(l => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; sumAll += l.time; });
                 const hourAgo = Date.now() - 3600e3;
                 const recent = laps.filter(l => new Date(l.timestamp).getTime() > hourAgo);
                 const group = recent.length >= 5 ? recent.reduce((x, l) => x + l.time, 0) / recent.length
                     : laps.length >= 5 ? sumAll / laps.length : 100000;
-                return { per, group, seq };
+                return { per, group, seq, lastAt };
             }, [laps]);
             const getAvgLapMs = () => lapStats.group;
             // Verwachte rondetijd van één loper: zijn eigen gemiddelde, bij weinig rondes bijgestuurd naar het groepsgemiddelde
@@ -2325,7 +2335,9 @@ function predictNext(times, gender) { let e = FIRST_LAP_MS[gender] || FIRST_LAP_
                 const rn = runners.find(r => r.id === runnerId);
                 const prior = FIRST_LAP_MS[rn && rn.gender] || FIRST_LAP_MS.X;   // startwaarde uit de data van vorig jaar, per geslacht
                 if (!e) return prior;
-                return predictNext(lapStats.seq[runnerId] || [], rn && rn.gender);   // recente rondes wegen zwaarder
+                const runningThis = activeRunner && isRunning && activeRunner.runnerId === runnerId && startTime;
+                const rest = (runningThis ? +startTime : tnow()) - (lapStats.lastAt[runnerId] || tnow());   // rust sinds de vorige ronde
+                return predictNext(lapStats.seq[runnerId] || [], rn && rn.gender, rest);   // recente rondes wegen zwaarder, na lange rust fris
             };
             // Wachttijd tot de loper op plaats idx (0 = eerste in de rij na de lopende loper) mag starten:
             // rest van de lopende loper (zijn eigen verwachte tijd min wat al gelopen is) + de verwachte tijd van elke loper ervoor + wissel
