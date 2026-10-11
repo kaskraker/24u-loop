@@ -19,6 +19,7 @@
   header .logo img { height: 28px; width: auto; display: block; }
   header h1 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
   header .sub { font-size: 12px; font-weight: 500; }
+  a.euro { color: var(--ink); text-decoration: none; }
   .euro { margin-top: 10px; display: inline-flex; align-items: center; gap: 10px; background: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 6px 12px; box-shadow: 3px 3px 0 var(--ink); }
   .euro b { font-size: 22px; font-weight: 800; } .euro span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
   nav { display: flex; gap: 8px; padding: 12px 20px 8px 14px; position: sticky; top: 0; background: var(--butter); z-index: 5; }
@@ -62,14 +63,14 @@
     <div><h1>24u Loop Leuven</h1><div class="sub">Humasol × Atlas Copco · Water for All</div></div>
     <a class="logo" href="https://www.instagram.com/humasol_vzw" target="_blank" rel="noopener"><img src="humasol_logo.png" alt="Humasol"></a>
   </div>
-  <div class="euro"><span>Opgehaald</span><b id="euro">€ 0</b></div>
+  <a class="euro" href="https://www.atlascopco.com/nl-be/about-atlas-copco/water-for-all" target="_blank" rel="noopener" title="Meer over Water for All"><span>Opgehaald</span><b id="euro">€ 0</b><span style="font-size:15px">ⓘ</span></a>
 </header>
 <nav id="nav"></nav>
 <main id="view"></main>
 <div class="foot" id="foot">Verbinden…</div>
 <footer>
   <img src="humasol_logo.png" alt="Humasol" height="26">
-  <div>© 2026 Humasol vzw · Alle rechten voorbehouden.<br>Een initiatief van Humasol, met steun van Atlas Copco voor Water for All.</div>
+  <div>© 2026 Humasol vzw · Alle rechten voorbehouden.<br>Een initiatief van Humasol, met steun van Atlas Copco voor <a href="https://www.atlascopco.com/nl-be/about-atlas-copco/water-for-all" target="_blank" rel="noopener" style="color:inherit">Water for All</a>.</div>
 </footer>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>

@@ -1,6 +1,385 @@
 <!doctype html>
-<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>24u Loop · doorverwijzing</title>
-<meta http-equiv="refresh" content="0;url=index.html">
-<script>location.replace("index.html");</script></head>
-<body style="font-family:system-ui;padding:24px">Even geduld… <a href="index.html">klik hier als het niet automatisch gaat</a></body></html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#f2a342">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>24u Loop · Chronometer</title>
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #17120d; --butter: #fff1cf; --orange: #f2a342; --deep: #e8590c; --brown: #863c14; --ok: #2fb344; --bad: #dc2626; --muted: #6a5a48; --cream: #fff6df; }
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { overflow-x: hidden; max-width: 100vw; }
+  body { font-family: 'Bricolage Grotesque', system-ui, sans-serif; background: var(--butter); color: var(--ink); font-variant-numeric: tabular-nums; padding-bottom: 90px; user-select: none; -webkit-user-select: none; }
+  header { background: var(--orange); border-bottom: 3px solid var(--ink); padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  header h1 { font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; background: #fff; border: 3px solid var(--ink); border-radius: 999px; padding: 3px 10px; }
+  .chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .chip.off i { background: var(--bad); animation: pulse 1s infinite; } .chip.sync i { background: #3b82f6; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .env { background: var(--deep); color: #fff; text-align: center; font-weight: 800; font-size: 13px; padding: 5px; border-bottom: 3px solid var(--ink); letter-spacing: .05em; }
+  .banner { margin: 10px 14px 0; border: 3px solid var(--ink); border-radius: 14px; padding: 10px 12px; font-weight: 700; font-size: 14px; background: #fde68a; box-shadow: 3px 3px 0 var(--ink); }
+  .banner.red { background: #fecaca; }
+  main { padding: 12px 20px 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; max-width: 560px; margin: 0 auto; }
+  .card { background: #fff; border: 3px solid var(--ink); border-radius: 16px; box-shadow: 5px 5px 0 var(--ink); padding: 14px; }
+  .card h2 { font-size: 18px; font-weight: 800; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  .card h2 small { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .now { background: #ffd58a; text-align: center; }
+  .now .k { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--deep); }
+  .now .nm { font-size: 30px; font-weight: 800; line-height: 1.1; margin-top: 2px; }
+  .now .clk { font-size: 76px; font-weight: 800; line-height: 1.05; letter-spacing: -.02em; margin: 4px 0; }
+  .now .sub { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .big { width: 100%; min-height: 104px; font: inherit; font-size: 28px; font-weight: 800; border: 4px solid var(--ink); border-radius: 22px; box-shadow: 6px 6px 0 var(--ink); background: var(--ok); color: var(--ink); padding: 14px; line-height: 1.1; transition: transform .08s, box-shadow .08s; }
+  .big small { display: block; font-size: 15px; font-weight: 700; margin-top: 4px; }
+  .big:active:not(:disabled) { transform: translate(5px, 5px); box-shadow: 1px 1px 0 var(--ink); }
+  .big.stop { background: #fecaca; } .big.wait { background: #e5e7eb; box-shadow: 3px 3px 0 var(--ink); }
+  .big:disabled { opacity: .7; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { font: inherit; font-weight: 800; font-size: 15px; border: 3px solid var(--ink); border-radius: 14px; background: #fff; color: var(--ink); padding: 12px 10px; box-shadow: 3px 3px 0 var(--ink); min-height: 50px; }
+  .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn:disabled { opacity: .4; box-shadow: none; }
+  .btn.primary { background: var(--orange); } .btn.danger { background: #fecaca; } .btn.ok { background: #d9f7d0; }
+  .btn.small { min-height: 38px; padding: 6px 10px; font-size: 14px; box-shadow: 2px 2px 0 var(--ink); border-width: 2px; }
+  .undo { background: #fff6df; border: 3px dashed var(--ink); border-radius: 14px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; }
+  .undo b { flex: 1; min-width: 0; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 12px; background: var(--cream); margin-bottom: 6px; }
+  .row.run { background: #ffd58a; border: 2px solid var(--ink); }
+  .row .no { width: 24px; font-weight: 800; color: var(--muted); text-align: center; }
+  .row .nm { flex: 1; min-width: 0; font-weight: 700; } .row .nm small { display: block; font-weight: 500; font-size: 11px; color: var(--muted); }
+  .row .w { text-align: right; font-weight: 800; font-size: 16px; white-space: nowrap; line-height: 1.1; } .row .w small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .empty { text-align: center; color: var(--muted); padding: 14px 0; font-weight: 500; }
+  nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; gap: 8px; padding: 8px 14px calc(8px + env(safe-area-inset-bottom)); background: var(--butter); border-top: 3px solid var(--ink); }
+  nav button { flex: 1; min-width: 0; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 2px; border: 3px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+  nav button.on { background: var(--orange); }
+  input.in { font: inherit; font-size: 20px; width: 100%; border: 3px solid var(--ink); border-radius: 12px; padding: 12px; background: #fff; margin: 10px 0; user-select: text; -webkit-user-select: text; }
+  .modal { position: fixed; inset: 0; z-index: 100; background: rgba(23,18,13,.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal .box { background: #fff; border: 4px solid var(--ink); border-radius: 18px; box-shadow: 6px 6px 0 var(--ink); padding: 18px; width: 100%; max-width: 420px; }
+  .modal h3 { font-size: 22px; font-weight: 800; margin-bottom: 6px; } .modal p { white-space: pre-line; font-weight: 500; }
+  .toast { position: fixed; left: 14px; right: 14px; bottom: 86px; z-index: 90; background: var(--ink); color: #fff; border-radius: 14px; padding: 12px 14px; font-weight: 700; text-align: center; max-width: 520px; margin: 0 auto; animation: pop .25s ease-out; }
+  @keyframes pop { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .sec { margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+</style>
+</head>
+<body>
+<header><h1>⏱ Chronometer</h1><span class="chip" id="chip"><i></i><span id="chipTxt">Verbinden…</span></span></header>
+<div id="env"></div>
+<div id="banner"></div>
+<main id="view"></main>
+<nav id="nav"></nav>
+<div id="overlay"></div>
+<div id="toastBox"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDVULWNjHaR41EaptoQYnWnTdnU-suMuuA", authDomain: "u-loop-leuven-2026.firebaseapp.com", projectId: "u-loop-leuven-2026",
+  storageBucket: "u-loop-leuven-2026.firebasestorage.app", messagingSenderId: "1032849674125", appId: "1:1032849674125:web:110054a3b61ba10eedb7c4"
+};
+const params = new URLSearchParams(location.search);
+const NS = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, '');
+const col = (n) => NS ? `${NS}_${n}` : n;
+const $ = (id) => document.getElementById(id);
+
+// ===== Gedeelde tijd (zie loper.html): klok corrigeren met de servertijd =====
+let TIME_OFFSET = 0;
+const tnow = () => Date.now() + TIME_OFFSET;
+async function syncClock() {
+  try {
+    let lo = -Infinity, hi = Infinity;
+    for (let i = 0; i < 6; i++) {
+      const t0 = Date.now();
+      const res = await fetch(location.pathname + '?_t=' + t0 + '_' + i, { method: 'HEAD', cache: 'no-store' });
+      const t1 = Date.now(), d = res.headers.get('Date');
+      if (!d) continue;
+      const mid = (t0 + t1) / 2, srv = new Date(d).getTime();
+      lo = Math.max(lo, srv - mid); hi = Math.min(hi, srv + 1000 - mid);
+      await new Promise((r) => setTimeout(r, 170));
+    }
+    if (isFinite(lo) && isFinite(hi)) { const est = (lo + hi) / 2; if (Math.abs(est) < 10 * 60e3) TIME_OFFSET = est; }
+  } catch (e) {}
+}
+syncClock(); setInterval(syncClock, 10 * 60e3);
+
+// ===== Firebase met offline-opslag =====
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+let persistence = 'unknown';
+db.enablePersistence({ synchronizeTabs: false }).then(() => { persistence = 'on'; }).catch((e) => { persistence = 'off:' + e.code; });
+const FV = firebase.firestore.FieldValue;
+const ref = (name, id) => id ? db.collection(col(name)).doc(id) : db.collection(col(name));
+
+let runners = [], laps = [], queue = [], activeDocs = [], loaded = { runners: false, laps: false, queue: false, active: false };
+let tab = 'chrono', lastAction = null, busyUntil = 0, pending = 0, lastCacheFalse = 0, offlineSince = 0, lastOK = 0;
+try { lastAction = JSON.parse(localStorage.getItem('lastAction_' + NS) || 'null'); } catch (e) {}
+
+// ===== helpers =====
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
+const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+const sortedQueue = () => [...queue].sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt));
+const activeData = () => { const d = activeDocs.find((x) => x.id === 'current') || activeDocs[0]; return d ? d.data : null; };
+const isRunning = () => { const a = activeData(); return !!(a && a.isRunning && a.runner); };
+const startMs = () => { const a = activeData(); return a && a.startTime ? new Date(a.startTime).getTime() : null; };
+const runItem = () => { if (!isRunning()) return null; const q = sortedQueue(); const rid = activeData().runner.runnerId; return q.find((x) => x.runnerId === rid) || null; };
+const waiting = () => { const q = sortedQueue(), r = runItem(); return r ? q.filter((x) => x.id !== r.id) : q; };
+
+// wachttijd-schatting (zelfde als het grote scherm)
+let sc = null;
+const stats = () => { if (sc && sc.n === laps.length && Date.now() - sc.at < 15000) return sc; const per = {}; laps.forEach((l) => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; });
+  const hourAgo = tnow() - 3600e3, rec = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo);
+  const group = rec.length >= 5 ? rec.reduce((a, l) => a + l.time, 0) / rec.length : laps.length >= 5 ? laps.reduce((a, l) => a + l.time, 0) / laps.length : 100000;
+  sc = { n: laps.length, at: Date.now(), per, group }; return sc; };
+const expected = (rid) => { const s = stats(), e = s.per[rid]; return e ? (e.sum + s.group * 2) / (e.n + 2) : s.group; };
+const waitMs = (idx) => { let t = 0; if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(activeData().runner.runnerId) - (st ? tnow() - st : 0)); } const w = waiting(); for (let j = 0; j < idx && j < w.length; j++) t += 2000 + expected(w[j].runnerId); return t; };
+const waitText = (ms, i) => i === 0 && ms <= 5000 ? 'elk moment' : i === 0 && ms < 90000 ? `± ${Math.max(10, Math.round(ms / 10000) * 10)} s` : `± ${Math.max(1, Math.round(ms / 60000))} min`;
+
+function toast(text, ms = 4000) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = text; $('toastBox').innerHTML = ''; $('toastBox').appendChild(el); setTimeout(() => { if (el.parentNode) el.remove(); }, ms); }
+function buzz(p = 40) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
+
+// bevestigingsvenster in de stijl van de app (geen browser-popup)
+function ask(title, text, { ok = 'Ja, doorgaan', danger = false, input = null, cancel = 'Annuleren' } = {}) {
+  return new Promise((resolve) => {
+    $('overlay').innerHTML = `<div class="modal"><div class="box"><h3>${esc(title)}</h3><p>${esc(text)}</p>${input !== null ? `<input class="in" id="mIn" placeholder="${esc(input)}" autocomplete="off" autocapitalize="characters">` : ''}
+      <div class="row2" style="margin-top:12px"><button class="btn" id="mNo">${esc(cancel)}</button><button class="btn ${danger ? 'danger' : 'primary'}" id="mYes">${esc(ok)}</button></div></div></div>`;
+    const close = (v) => { $('overlay').innerHTML = ''; resolve(v); };
+    $('mNo').onclick = () => close(input !== null ? null : false);
+    $('mYes').onclick = () => close(input !== null ? ($('mIn').value || '') : true);
+    if (input !== null) setTimeout(() => $('mIn') && $('mIn').focus(), 50);
+  });
+}
+
+// ===== schrijfacties (één atomaire batch; wacht niet op de server: werkt ook offline) =====
+function commit(batch) {
+  pending++; render();
+  return batch.commit().then(() => { pending = Math.max(0, pending - 1); render(); }, (err) => { pending = Math.max(0, pending - 1); toast('⚠️ Opslaan mislukt: ' + (err.message || err.code), 8000); render(); });
+}
+function activeClear(batch) { (activeDocs.length ? activeDocs.map((d) => d.id) : ['current']).forEach((id) => batch.delete(ref('activeRunner', id))); }
+function setActive(batch, item, startISO) {
+  activeDocs.filter((d) => d.id !== 'current').forEach((d) => batch.delete(ref('activeRunner', d.id)));
+  batch.set(ref('activeRunner', 'current'), { runner: item, isRunning: true, startTime: startISO });
+}
+const lockButtons = (ms = 1500) => { busyUntil = Date.now() + ms; render(); setTimeout(render, ms + 30); };
+const locked = () => Date.now() < busyUntil;
+
+async function pressMain() {
+  if (locked()) return;
+  const w = waiting();
+  if (!isRunning()) {   // eerste loper starten
+    if (!w.length) return;
+    lockButtons(1200); buzz(60);
+    const b = db.batch(); setActive(b, w[0], new Date(tnow()).toISOString()); commit(b);
+    toast(`▶ ${w[0].runnerName} is vertrokken`, 2500);
+    return;
+  }
+  const st = startMs(), time = st ? tnow() - st : 0;
+  if (time < 15000 && !(await ask('Al klaar?', `${activeData().runner.runnerName} is pas ${(time / 1000).toFixed(1)} s onderweg.\nZeker dat de ronde klaar is?`, { ok: 'Ja, ronde klaar' }))) return;
+  finishLap(time, true);
+}
+function finishLap(time, startNext, atISO) {
+  const a = activeData(); if (!a) return;
+  const run = a.runner, now = atISO || new Date(tnow()).toISOString();
+  const rn = runners.find((r) => r.id === run.runnerId), qi = runItem();
+  const mine = laps.filter((l) => l.runnerId === run.runnerId), prevBest = mine.length ? Math.min(...mine.map((l) => l.time)) : Infinity;
+  const lapRef = ref('laps').doc();
+  const lapData = { runnerId: run.runnerId, runnerName: run.runnerName, time, distance: 515, timestamp: now, startTime: new Date(new Date(now).getTime() - time).toISOString(), isPersonalRecord: time < prevBest, lapNumber: (rn ? (rn.totalLaps || 0) : 0) + 1 };
+  const b = db.batch();
+  b.set(lapRef, lapData);
+  if (rn) b.update(ref('runners', rn.id), { totalLaps: FV.increment(1), totalTime: FV.increment(time) });
+  if (qi) b.delete(ref('queue', qi.id));
+  const nxt = waiting()[0];
+  if (startNext && nxt) setActive(b, nxt, now); else activeClear(b);
+  lastAction = { lapId: lapRef.id, lapData, runnerDocId: rn ? rn.id : null, time, queueItem: qi ? { id: qi.id, data: { runnerId: qi.runnerId, runnerName: qi.runnerName, addedAt: qi.addedAt, order: qi.order || 0 } } : null, prevActive: a, at: Date.now(), nextName: nxt ? nxt.runnerName : null };
+  try { localStorage.setItem('lastAction_' + NS, JSON.stringify(lastAction)); } catch (e) {}
+  commit(b); lockButtons(1500); buzz([40, 40, 40]);
+  toast(`✓ ${run.runnerName}: ${mmssc(time)}${startNext && nxt ? `  →  ${nxt.runnerName} loopt` : ''}`, 5000);
+}
+async function undo() {
+  if (!lastAction) return;
+  const la = lastAction;
+  if (Date.now() - la.at > 120000 && !(await ask('Ongedaan maken?', `De laatste actie was meer dan 2 minuten geleden.\nDe ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd en de timer loopt weer verder voor die loper.`, { ok: 'Ja, ongedaan maken', danger: true }))) return;
+  if (!la.at || Date.now() - la.at <= 120000) { if (!(await ask('Ongedaan maken?', `De ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd.\nDe timer loopt weer verder voor ${la.lapData.runnerName}.`, { ok: 'Ja, ongedaan maken', danger: true }))) return; }
+  const b = db.batch();
+  b.delete(ref('laps', la.lapId));
+  if (la.runnerDocId) b.update(ref('runners', la.runnerDocId), { totalLaps: FV.increment(-1), totalTime: FV.increment(-la.time) });
+  if (la.queueItem) b.set(ref('queue', la.queueItem.id), la.queueItem.data);
+  activeDocs.filter((d) => d.id !== 'current').forEach((d) => b.delete(ref('activeRunner', d.id)));
+  b.set(ref('activeRunner', 'current'), la.prevActive);
+  lastAction = null; try { localStorage.removeItem('lastAction_' + NS); } catch (e) {}
+  commit(b); lockButtons(800); toast('↩ Ongedaan gemaakt: de timer loopt weer', 3500);
+}
+async function manualTime() {
+  const a = activeData(); if (!a || !isRunning()) return;
+  const v = await ask('Tijd intikken', `Rondetijd van ${a.runner.runnerName}, bijvoorbeeld 1:35 of 1:35.4`, { input: 'm:ss', ok: 'Opslaan en volgende' });
+  if (v === null) return;
+  const m = /^\s*(\d+):(\d{1,2})(?:[.,](\d{1,2}))?\s*$/.exec(v);
+  if (!m) { toast('Ongeldige tijd. Gebruik m:ss', 3500); return; }
+  const ms = (+m[1] * 60 + +m[2]) * 1000 + (m[3] ? Math.round(parseFloat('0.' + m[3]) * 1000) : 0);
+  finishLap(ms, true);
+}
+async function stopAfterThis() {
+  if (!isRunning()) return;
+  const st = startMs(), time = st ? tnow() - st : 0;
+  if (!(await ask('Ronde afsluiten en stoppen?', `${activeData().runner.runnerName}: ${mmssc(time)}\nDe ronde wordt opgeslagen en daarna start er niemand meer.`, { ok: 'Opslaan en stoppen' }))) return;
+  finishLap(time, false);
+}
+async function cancelRun() {
+  if (!isRunning()) return;
+  if (!(await ask('Loop annuleren?', `De huidige loop van ${activeData().runner.runnerName} wordt NIET opgeslagen. ${activeData().runner.runnerName} blijft vooraan in de wachtrij staan.`, { ok: 'Ja, annuleren', danger: true }))) return;
+  const b = db.batch(); activeClear(b); commit(b); toast('Loop geannuleerd', 3000);
+}
+async function removeQueued(id) {
+  const q = queue.find((x) => x.id === id); if (!q) return;
+  if (!(await ask('Uit de wachtrij halen?', `${q.runnerName} niet laten lopen (bv. niet komen opdagen)?`, { ok: 'Ja, verwijderen', danger: true }))) return;
+  const b = db.batch(); b.delete(ref('queue', id)); commit(b);
+}
+function moveQueued(id, dir) {
+  const w = waiting(), i = w.findIndex((x) => x.id === id), j = i + dir;
+  if (i < 0 || j < 0 || j >= w.length) return;
+  const A = w[i], B = w[j], b = db.batch();
+  b.update(ref('queue', A.id), { addedAt: B.addedAt, order: B.order || 0 }); b.update(ref('queue', B.id), { addedAt: A.addedAt, order: A.order || 0 }); commit(b);
+}
+async function deleteLap(id) {
+  const l = laps.find((x) => x.id === id); if (!l) return;
+  if (!(await ask('Ronde verwijderen?', `${l.runnerName}: ${mmssc(l.time)} (${clock(l.timestamp)})`, { ok: 'Ja, verwijderen', danger: true }))) return;
+  const rn = runners.find((r) => r.id === l.runnerId), b = db.batch();
+  b.delete(ref('laps', id)); if (rn) b.update(ref('runners', rn.id), { totalLaps: FV.increment(-1), totalTime: FV.increment(-l.time) }); commit(b);
+}
+async function editLap(id) {
+  const l = laps.find((x) => x.id === id); if (!l) return;
+  const v = await ask('Tijd aanpassen', `${l.runnerName}, nu ${mmssc(l.time)}. Nieuwe tijd (m:ss of m:ss.cc):`, { input: mmss(l.time), ok: 'Opslaan' });
+  if (v === null) return;
+  const m = /^\s*(\d+):(\d{1,2})(?:[.,](\d{1,2}))?\s*$/.exec(v); if (!m) { toast('Ongeldige tijd', 3000); return; }
+  const ms = (+m[1] * 60 + +m[2]) * 1000 + (m[3] ? Math.round(parseFloat('0.' + m[3]) * 1000) : 0);
+  const rn = runners.find((r) => r.id === l.runnerId), b = db.batch();
+  b.update(ref('laps', id), { time: ms }); if (rn) b.update(ref('runners', rn.id), { totalTime: FV.increment(ms - l.time) }); commit(b);
+}
+function exportCsv(kind) {
+  const q = (s) => `"${String(s).replace(/"/g, '""')}"`, dt = (ts) => { const d = new Date(ts), p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}, ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+  let rows;
+  if (kind === 'laps') {
+    const best = {}; const all = [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); const overall = laps.length ? Math.min(...laps.map((l) => l.time)) : 0;
+    rows = [['Naam', 'Ronde Nummer', 'Tijd (MM:SS)', 'Tijd (seconden)', 'Start Tijd', 'Finish Tijd', 'Afstand (m)', 'Persoonlijk Record', 'Algemeen Record'].join(',')].concat(all.map((l, i) => { const pr = best[l.runnerId] === undefined || l.time < best[l.runnerId]; if (pr) best[l.runnerId] = l.time; return [q(l.runnerName), i + 1, mmss(l.time), (l.time / 1000).toFixed(2), q(dt(l.startTime || new Date(new Date(l.timestamp) - l.time))), q(dt(l.timestamp)), 515, l.isPersonalRecord ? 'Ja' : 'Nee', l.time === overall ? 'Ja' : 'Nee'].join(','); }));
+  } else {
+    rows = [['Naam', 'Gender', 'Rondes', 'Totale tijd (seconden)', 'Gemiddeld (seconden)'].join(',')].concat(runners.map((r) => [q(r.name), r.gender || '', r.totalLaps || 0, ((r.totalTime || 0) / 1000).toFixed(1), r.totalLaps ? ((r.totalTime || 0) / r.totalLaps / 1000).toFixed(2) : ''].join(',')));
+  }
+  const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' }), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `24u_loop_${kind === 'laps' ? 'rondes' : 'lopers'}_${new Date().toISOString().slice(0, 10)}${NS ? '_' + NS : ''}.csv`; a.click();
+}
+async function resetAll() {
+  if (!(await ask('Alles wissen?', `Dit verwijdert ALLE rondes, lopers en de wachtrij${NS ? ` van de oefenomgeving "${NS}"` : ' van het ECHTE event'}. Dit kan niet ongedaan gemaakt worden.`, { ok: 'Verder', danger: true }))) return;
+  const w = await ask('Laatste controle', 'Typ WISSEN om te bevestigen:', { input: 'WISSEN', ok: 'Alles wissen', danger: true });
+  if (w === null || w.trim().toUpperCase() !== 'WISSEN') { toast('Niet gewist', 2500); return; }
+  const names = ['laps', 'runners', 'queue', 'activeRunner'].concat(NS ? ['replay'] : []);
+  let n = 0;
+  for (const name of names) {
+    const snap = await db.collection(col(name)).get({ source: 'server' }).catch(() => null); if (!snap) continue;
+    for (let i = 0; i < snap.docs.length; i += 400) { const b = db.batch(); snap.docs.slice(i, i + 400).forEach((d) => b.delete(d.ref)); await b.commit(); n += Math.min(400, snap.docs.length - i); }
+  }
+  lastAction = null; try { localStorage.removeItem('lastAction_' + NS); } catch (e) {}
+  toast(`🧹 ${n} documenten gewist`, 5000);
+}
+
+// ===== wakker houden =====
+let wl = null, wlOK = null;
+async function keepAwake() { try { if (navigator.wakeLock) { wl = await navigator.wakeLock.request('screen'); wlOK = true; wl.addEventListener('release', () => { wlOK = false; }); } else wlOK = false; } catch (e) { wlOK = false; } }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+document.addEventListener('click', () => { if (!wl || wl.released) keepAwake(); }, { once: false });
+keepAwake();
+
+// ===== weergave =====
+function connState() {
+  const off = navigator.onLine === false || (lastCacheFalse && Date.now() - lastCacheFalse > 15000 && loaded.queue && offlineSince && Date.now() - offlineSince > 10000);
+  if (off) return 'off'; if (pending > 0) return 'sync'; return 'ok';
+}
+function renderChrome() {
+  const st = connState(), chip = $('chip');
+  chip.className = 'chip ' + (st === 'off' ? 'off' : st === 'sync' ? 'sync' : '');
+  $('chipTxt').textContent = !loaded.queue ? 'Verbinden…' : st === 'off' ? (pending ? `Offline · ${pending} wacht` : 'Offline') : st === 'sync' ? `Verzenden (${pending})` : 'Verbonden';
+  $('env').innerHTML = NS ? `<div class="env">🧪 OEFENMODUS · ${esc(NS)} — de echte data blijft ongemoeid</div>` : '';
+  let ban = '';
+  if (st === 'off') ban = `<div class="banner red">📴 Geen verbinding. Je kan gewoon doorgaan: alles wordt bewaard op dit toestel en automatisch verstuurd zodra het internet terug is. Sluit of herlaad deze pagina niet.</div>`;
+  else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">⚠️ Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
+  else if (loaded.queue && isRunning() && waiting().length === 0) ban = `<div class="banner">⚠️ Er staat niemand meer na deze loper.</div>`;
+  $('banner').innerHTML = ban;
+  $('nav').innerHTML = [['chrono', '⏱ Chrono'], ['queue', '👥 Rij'], ['laps', '🏁 Rondes'], ['more', '⚙️ Meer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
+}
+function viewChrono() {
+  const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
+  let top = '', button = '';
+  if (running) {
+    const run = a.runner, ex = expected(run.runnerId);
+    top = `<div class="card now"><div class="k">🏃 Nu aan het lopen</div><div class="nm">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="sub">Verwacht ≈ ${mmss(ex)}</div></div>`;
+    button = w.length ? `<button class="big" data-act="main" ${busy ? 'disabled' : ''}>⏭ RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small></button>` : `<button class="big stop" data-act="main" ${busy ? 'disabled' : ''}>🏁 RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small></button>`;
+  } else {
+    top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm">${w.length ? esc(w[0].runnerName) : '—'}</div><div class="sub">${w.length ? 'is de eerste in de rij' : 'Wachtrij is leeg'}</div></div>`;
+    button = `<button class="big ${w.length ? '' : 'wait'}" data-act="main" ${(!w.length || busy) ? 'disabled' : ''}>▶ START<small>${w.length ? esc(w[0].runnerName) : 'wacht op een loper'}</small></button>`;
+  }
+  const undoCard = lastAction ? `<div class="undo"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">↩ Ongedaan</button></div>` : '';
+  const next = w.slice(running ? 0 : 1, (running ? 0 : 1) + 5).map((q, i) => { const idx = i + (running ? 0 : 1); return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
+  return `${top}${button}${undoCard}
+    ${running ? `<div class="row2"><button class="btn" data-act="manual">⌨ Tijd intikken</button><button class="btn" data-act="stop">⏹ Stoppen na deze</button></div><button class="btn danger" data-act="cancel">✕ Deze loop annuleren (niet opslaan)</button>` : ''}
+    <div class="card"><h2>${running ? 'Hierna' : 'Daarna'} <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>`;
+}
+function viewQueue() {
+  const w = waiting(), r = runItem(), a = activeData();
+  return `<div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
+    ${isRunning() ? `<div class="row run"><div class="no">🏃</div><div class="nm">${esc(a.runner.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${startMs() || ''}">${mmssc(startMs() ? tnow() - startMs() : 0)}</div></div>` : ''}
+    ${w.length === 0 ? '<div class="empty">Geen lopers in de wachtrij</div>' : w.map((q, i) => `<div class="row"><div class="no">${i + 1}</div><div class="nm">${esc(q.runnerName)}<small>${waitText(waitMs(i), i)} · rond ${clock(tnow() + waitMs(i))}</small></div>
+      <button class="btn small" data-act="up" data-id="${esc(q.id)}" ${i === 0 ? 'disabled' : ''}>↑</button><button class="btn small" data-act="down" data-id="${esc(q.id)}" ${i === w.length - 1 ? 'disabled' : ''}>↓</button><button class="btn small danger" data-act="rm" data-id="${esc(q.id)}">✕</button></div>`).join('')}</div>`;
+}
+function viewLaps() {
+  const list = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 40);
+  return `<div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>
+    ${list.length === 0 ? '<div class="empty">Nog geen rondes</div>' : list.map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}<small>ronde ${l.lapNumber || '?'}</small></div><div class="w">${mmssc(l.time)}</div>
+      <button class="btn small" data-act="edit" data-id="${esc(l.id)}">✎</button><button class="btn small danger" data-act="del" data-id="${esc(l.id)}">🗑</button></div>`).join('')}</div>`;
+}
+function viewMore() {
+  return `<div class="card"><h2>Dit toestel</h2>
+    <div class="row"><div class="nm">Scherm wakker houden<small>${wlOK ? 'actief: het scherm gaat niet uit' : 'niet actief: tik hieronder'}</small></div><button class="btn small ${wlOK ? 'ok' : 'primary'}" data-act="awake">${wlOK ? '✓' : 'Aan'}</button></div>
+    <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
+    <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
+    <div class="card"><h2>Gegevens</h2><div class="row2"><button class="btn" data-act="csvLaps">⬇ Rondes (CSV)</button><button class="btn" data-act="csvRunners">⬇ Lopers (CSV)</button></div></div>
+    <div class="card"><h2>Gevaarlijke zone</h2><div class="sec" style="margin-bottom:8px">${NS ? `Wist enkel de oefenomgeving "${esc(NS)}"` : 'Wist het ECHTE event'}</div><button class="btn danger" style="width:100%" data-act="reset">🧹 Alle data wissen…</button></div>
+    <div class="empty" style="font-size:12px">Chronometer · Humasol vzw</div>`;
+}
+let lastSig = '';
+function render() {
+  renderChrome();
+  const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
+  if (typing) return;
+  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'laps' ? viewLaps() : tab === 'more' ? viewMore() : viewChrono();
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
+  if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
+  const a = t.dataset.act, id = t.dataset.id;
+  ({ main: pressMain, undo, manual: manualTime, stop: stopAfterThis, cancel: cancelRun, awake: () => { keepAwake().then(render); }, csvLaps: () => exportCsv('laps'), csvRunners: () => exportCsv('runners'), reset: resetAll,
+     up: () => moveQueued(id, -1), down: () => moveQueued(id, 1), rm: () => removeQueued(id), del: () => deleteLap(id), edit: () => editLap(id) })[a]?.();
+});
+
+// ===== data =====
+const listen = (name, fn) => db.collection(col(name)).onSnapshot({ includeMetadataChanges: true }, (s) => {
+  if (s.metadata.fromCache) { if (!offlineSince) offlineSince = Date.now(); lastCacheFalse = Date.now(); } else { offlineSince = 0; lastOK = Date.now(); }
+  if (s.docChanges().length || !loaded[name === 'activeRunner' ? 'active' : name]) { fn(s); loaded[name === 'activeRunner' ? 'active' : name] = true; sc = null; render(); }
+}, (err) => { $('chipTxt').textContent = 'Fout: ' + err.code; });
+listen('runners', (s) => { runners = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
+listen('laps', (s) => { laps = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
+listen('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
+listen('activeRunner', (s) => { activeDocs = s.docs.map((d) => ({ id: d.id, data: d.data() })); });
+
+setInterval(() => {
+  document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
+}, 50);
+setInterval(render, 5000);
+window.addEventListener('online', render); window.addEventListener('offline', render);
+render();
+</script>
+</body>
+</html>

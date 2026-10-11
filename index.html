@@ -3382,8 +3382,8 @@
                                         h('span', { className: 'text-sm' }, darkMode ? '🌙' : '☀️'),
                                         h('span', null, darkMode ? 'Donker' : 'Licht')
                                     ),
-                                    // PWA Install button
-                                    showInstallPrompt && h('button', {
+                                    // (de knop "Installeer" is bewust verwijderd: niet nuttig op een pc)
+                                    false && h('button', {
                                         onClick: handleInstallClick,
                                         className: `flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
                                             darkMode 
