@@ -97,6 +97,11 @@ const NS = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, '');
 const col = (n) => NS ? `${NS}_${n}` : n;
 const EUR_PER_LAP = 5;
 
+// Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
+// Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
+const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
+
+
 // ===== Gedeelde tijd: elk toestel corrigeert zijn eigen klok met de tijd van de server (HTTP Date-header) =====
 // Zo lopen de klok op het grote scherm, de chronometer en de gsm's van de lopers gelijk, ook als een klok enkele seconden afwijkt.
 let TIME_OFFSET = 0;
@@ -157,7 +162,7 @@ function stats() {
   statCache = { n: laps.length, at: Date.now(), per, group: groupAvg() };
   return statCache;
 }
-function expected(rid) { const s = stats(), e = s.per[rid]; return e ? (e.sum + s.group * 2) / (e.n + 2) : s.group; }
+function expected(rid) { const s = stats(), e = s.per[rid], rn = runners.find((x) => x.id === rid), prior = FIRST_LAP_MS[rn && rn.gender] || FIRST_LAP_MS.X; return e ? (e.sum + prior * 2) / (e.n + 2) : prior; }
 function waitMs(idx) {
   let t = 0;
   if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(active.runner.runnerId) - (st ? tnow() - st : 0)); }
@@ -266,7 +271,7 @@ function nowCard() {
     <div style="display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${esc(active.runner.runnerName)}</div>
         <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">0:00.00</div>
-        <div style="font-size:12px;color:var(--muted);font-weight:500">Verwacht ≈ ${mmss(ex)}</div></div>
+        ${mine.length ? `<div style="font-size:12px;color:var(--muted);font-weight:500">Verwacht ≈ ${mmss(ex)}</div>` : ''}</div>
       <svg viewBox="0 0 260 140" style="width:46%;flex:none;overflow:visible" data-track data-start="${st}" data-fast="${fast}" data-slow="${slow}">
         <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
         <path class="tlo" d="${TRACK_D}" fill="none" stroke="#f2a342" stroke-width="17" pathLength="1" stroke-dasharray=".001 2" opacity=".55"/>

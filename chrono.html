@@ -155,6 +155,9 @@ try { lastAction = JSON.parse(localStorage.getItem('lastAction_' + NS) || 'null'
 const ICO = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const I_TRASH = ICO('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/>'), I_EDIT = ICO('<path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 7l3 3"/>'), I_UP = ICO('<path d="M6 15l6-6 6 6"/>'), I_DOWN = ICO('<path d="M6 9l6 6 6-6"/>');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
+// Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
+const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
 const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
 const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
@@ -171,7 +174,7 @@ const stats = () => { if (sc && sc.n === laps.length && Date.now() - sc.at < 150
   const hourAgo = tnow() - 3600e3, rec = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo);
   const group = rec.length >= 5 ? rec.reduce((a, l) => a + l.time, 0) / rec.length : laps.length >= 5 ? laps.reduce((a, l) => a + l.time, 0) / laps.length : 100000;
   sc = { n: laps.length, at: Date.now(), per, group }; return sc; };
-const expected = (rid) => { const s = stats(), e = s.per[rid]; return e ? (e.sum + s.group * 2) / (e.n + 2) : s.group; };
+const expected = (rid) => { const s = stats(), e = s.per[rid], rn = runners.find((x) => x.id === rid), prior = FIRST_LAP_MS[rn && rn.gender] || FIRST_LAP_MS.X; return e ? (e.sum + prior * 2) / (e.n + 2) : prior; };
 const waitMs = (idx) => { let t = 0; if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(activeData().runner.runnerId) - (st ? tnow() - st : 0)); } const w = waiting(); for (let j = 0; j < idx && j < w.length; j++) t += 2000 + expected(w[j].runnerId); return t; };
 const waitText = (ms, i) => i === 0 && ms <= 5000 ? 'elk moment' : i === 0 && ms < 90000 ? `± ${Math.max(10, Math.round(ms / 10000) * 10)} s` : `± ${Math.max(1, Math.round(ms / 60000))} min`;
 
@@ -350,7 +353,7 @@ function viewChrono() {
   let top = '', button = '';
   if (running) {
     const run = a.runner, ex = expected(run.runnerId);
-    top = `<div class="card now"><div class="k">Nu aan het lopen</div><div class="nm">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="sub">Verwacht ≈ ${mmss(ex)}</div></div>`;
+    top = `<div class="card now"><div class="k">Nu aan het lopen</div><div class="nm">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="sub">${laps.some((l) => l.runnerId === run.runnerId) ? `Verwacht ≈ ${mmss(ex)}` : 'Eerste ronde'}</div></div>`;
     button = w.length ? `<button class="big" data-act="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small></button>` : `<button class="big stop" data-act="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small></button>`;
   } else {
     top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm">${w.length ? esc(w[0].runnerName) : '—'}</div><div class="sub">${w.length ? 'is de eerste in de rij' : 'Wachtrij is leeg'}</div></div>`;
