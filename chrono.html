@@ -52,6 +52,14 @@
   .row .no { width: 24px; font-weight: 800; color: var(--muted); text-align: center; }
   .row .nm { flex: 1; min-width: 0; font-weight: 700; } .row .nm small { display: block; font-weight: 500; font-size: 11px; color: var(--muted); }
   .row .w { text-align: right; font-weight: 800; font-size: 16px; white-space: nowrap; line-height: 1.1; } .row .w small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .ib { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border: 3px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); box-shadow: 2px 2px 0 var(--ink); padding: 0; }
+  .ib:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+  .ib:disabled { opacity: .3; box-shadow: none; }
+  .ib.red { background: #fecaca; }
+  .ib svg { width: 20px; height: 20px; display: block; }
+  .lrow { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 12px; background: var(--cream); margin-bottom: 8px; }
+  .lrow .main { flex: 1; min-width: 0; } .lrow .main b { display: block; font-size: 17px; line-height: 1.15; overflow-wrap: anywhere; } .lrow .main small { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 4px; }
+  .lrow .t { font-size: 19px; font-weight: 800; white-space: nowrap; }
   .empty { text-align: center; color: var(--muted); padding: 14px 0; font-weight: 500; }
   nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; gap: 8px; padding: 8px 14px calc(8px + env(safe-area-inset-bottom)); background: var(--butter); border-top: 3px solid var(--ink); }
   nav button { flex: 1; min-width: 0; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 2px; border: 3px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
@@ -140,10 +148,12 @@ const FV = firebase.firestore.FieldValue;
 const ref = (name, id) => id ? db.collection(col(name)).doc(id) : db.collection(col(name));
 
 let runners = [], laps = [], queue = [], activeDocs = [], loaded = { runners: false, laps: false, queue: false, active: false };
-let tab = 'chrono', lastAction = null, busyUntil = 0, pending = 0, lastCacheFalse = 0, offlineSince = 0, lastOK = 0;
+let tab = params.get('tab') || 'chrono', lastAction = null, busyUntil = 0, pending = 0, lastCacheFalse = 0, offlineSince = 0, lastOK = 0;
 try { lastAction = JSON.parse(localStorage.getItem('lastAction_' + NS) || 'null'); } catch (e) {}
 
 // ===== helpers =====
+const ICO = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I_TRASH = ICO('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/>'), I_EDIT = ICO('<path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 7l3 3"/>'), I_UP = ICO('<path d="M6 15l6-6 6 6"/>'), I_DOWN = ICO('<path d="M6 9l6 6 6-6"/>');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
@@ -359,13 +369,13 @@ function viewQueue() {
   return `<div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
     ${isRunning() ? `<div class="row run"><div class="no">&gt;</div><div class="nm">${esc(a.runner.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${startMs() || ''}">${mmssc(startMs() ? tnow() - startMs() : 0)}</div></div>` : ''}
     ${w.length === 0 ? '<div class="empty">Geen lopers in de wachtrij</div>' : w.map((q, i) => `<div class="row"><div class="no">${i + 1}</div><div class="nm">${esc(q.runnerName)}<small>${waitText(waitMs(i), i)} · rond ${clock(tnow() + waitMs(i))}</small></div>
-      <button class="btn small" data-act="up" data-id="${esc(q.id)}" ${i === 0 ? 'disabled' : ''}>↑</button><button class="btn small" data-act="down" data-id="${esc(q.id)}" ${i === w.length - 1 ? 'disabled' : ''}>↓</button><button class="btn small danger" data-act="rm" data-id="${esc(q.id)}">Weg</button></div>`).join('')}</div>`;
+      <button class="ib" aria-label="Omhoog" data-act="up" data-id="${esc(q.id)}" ${i === 0 ? 'disabled' : ''}>${I_UP}</button><button class="ib" aria-label="Omlaag" data-act="down" data-id="${esc(q.id)}" ${i === w.length - 1 ? 'disabled' : ''}>${I_DOWN}</button><button class="ib red" aria-label="Verwijderen" data-act="rm" data-id="${esc(q.id)}">${I_TRASH}</button></div>`).join('')}</div>`;
 }
 function viewLaps() {
   const list = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 40);
   return `<div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>
-    ${list.length === 0 ? '<div class="empty">Nog geen rondes</div>' : list.map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}<small>ronde ${l.lapNumber || '?'}</small></div><div class="w">${mmssc(l.time)}</div>
-      <button class="btn small" data-act="edit" data-id="${esc(l.id)}">Pas aan</button><button class="btn small danger" data-act="del" data-id="${esc(l.id)}">Wis</button></div>`).join('')}</div>`;
+    ${list.length === 0 ? '<div class="empty">Nog geen rondes</div>' : list.map((l) => `<div class="lrow"><div class="main"><b>${esc(l.runnerName)}</b><span class="t">${mmssc(l.time)}</span> <small>${clock(l.timestamp)} · ronde ${l.lapNumber || '?'}</small></div>
+      <button class="ib" aria-label="Tijd aanpassen" data-act="edit" data-id="${esc(l.id)}">${I_EDIT}</button><button class="ib red" aria-label="Verwijderen" data-act="del" data-id="${esc(l.id)}">${I_TRASH}</button></div>`).join('')}</div>`;
 }
 function viewMore() {
   return `<div class="card"><h2>Dit toestel</h2>
