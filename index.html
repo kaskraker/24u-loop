@@ -3558,8 +3558,8 @@ function predictNext(times, gender, restMs) {
                     )
                 ),
 
-                // Header (verberg in display fullscreen mode)
-                showChrome && h('div', { 
+                // Header (verberg in display fullscreen mode en op de inschrijflaptop, die heeft een eigen balk)
+                showChrome && !IS_SIGNUP && h('div', { 
                     className: `shadow-md border-b-4 border-humasol-orange transition-colors ${
                         darkMode ? 'bg-slate-800' : 'bg-white'
                     }` 
@@ -3635,7 +3635,7 @@ function predictNext(times, gender, restMs) {
                 ),
 
                 // Navigation (verberg in display fullscreen mode)
-                showChrome && h('div', { 
+                showChrome && !IS_SIGNUP && h('div', { 
                     className: `border-b sticky top-0 z-10 shadow-sm transition-colors ${
                         darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'
                     }` 
@@ -3674,7 +3674,7 @@ function predictNext(times, gender, restMs) {
 
                 // Content
                 // Wachtrij op volledig scherm: compacte oranje balk met grote klok, in dezelfde stijl als het grote scherm
-                IS_SIGNUP && isDisplayFullscreen && h('div', { className: 'display-hdr bg-gradient-to-r from-humasol-orange to-humasol-brown text-white px-8 py-3 flex items-center justify-between gap-6' },
+                IS_SIGNUP && h('div', { className: 'display-hdr bg-gradient-to-r from-humasol-orange to-humasol-brown text-white px-8 py-3 flex items-center justify-between gap-6' },
                     h('div', { className: 'flex items-center gap-5' },
                         h('div', { className: 'leading-tight' },
                             h('div', { className: 'text-2xl font-bold' }, '24u Loop Leuven'),
@@ -3683,17 +3683,22 @@ function predictNext(times, gender, restMs) {
                         h('div', { className: 'flex items-baseline rounded-xl px-4 py-1 bg-black/20 border border-white/25', style: { fontVariantNumeric: 'tabular-nums' } },
                             h(ClockHMS, { mainClass: 'text-5xl font-semibold tracking-tight leading-none', secClass: 'text-2xl font-medium opacity-70 ml-1 leading-none' }))
                     ),
-                    h('div', { className: 'text-right leading-tight pr-14' },
-                        h('div', { className: 'text-sm uppercase tracking-wider font-semibold' }, 'Inschrijven & wachtrij'),
-                        h('div', { className: 'text-4xl font-extrabold' }, `${activeRunner && isRunning ? Math.max(0, queue.length - 1) : queue.length} wachtend`)
+                    h('div', { className: 'flex items-center gap-5' + (isDisplayFullscreen ? ' pr-14' : '') },
+                        h(SyncChip, null),
+                        h('div', { className: 'text-right leading-tight' },
+                            h('div', { className: 'text-sm uppercase tracking-wider font-semibold' }, 'Inschrijven & wachtrij'),
+                            h('div', { className: 'text-4xl font-extrabold' }, `${activeRunner && isRunning ? Math.max(0, queue.length - 1) : queue.length} wachtend`)
+                        ),
+                        !isDisplayFullscreen && h('button', { onClick: toggleDisplayFullscreen, className: 'flex items-center gap-2 px-4 py-2 rounded-full bg-white font-bold text-sm', style: { border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' } }, h(Icon, { name: 'expand', className: 'w-5 h-5' }), h('span', null, 'Volledig scherm')),
+                        h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-10 w-auto bg-white rounded-xl px-2 py-1', style: { border: '3px solid #17120d' } })
                     ),
-                    h('button', {
+                    isDisplayFullscreen && h('button', {
                         onClick: toggleDisplayFullscreen, title: 'Volledig scherm verlaten (Esc)', 'aria-label': 'Volledig scherm verlaten',
                         className: `fixed top-2 right-2 z-50 flex items-center justify-center p-1.5 rounded-full bg-white/15 hover:bg-white/30 border border-white/30 text-white backdrop-blur-sm transition-opacity duration-500 ${!fsButtonVisible ? 'opacity-0 hover:opacity-100' : 'opacity-100'}`
                     }, h(Icon, { name: 'compress', className: 'w-4 h-4' }))
                 ),
 
-                h('div', { className: (IS_SIGNUP && isDisplayFullscreen) ? 'px-6 py-4' : (isDisplayFullscreen || IS_DISPLAY_ONLY) ? '' : view === 'display' ? 'px-2 py-3' : 'max-w-7xl mx-auto px-4 py-6' },
+                h('div', { className: IS_SIGNUP ? 'px-6 py-4' : (isDisplayFullscreen || IS_DISPLAY_ONLY) ? '' : view === 'display' ? 'px-2 py-3' : 'max-w-7xl mx-auto px-4 py-6' },
                     // Connection error warning
                     showChrome && connectionError && h('div', { 
                         className: 'mb-6 bg-red-100 border-4 border-red-500 rounded-lg p-4 shadow-lg sticky top-20 z-20'
@@ -3960,7 +3965,7 @@ function predictNext(times, gender, restMs) {
                     // Queue View
                     view === 'queue' && h('div', { className: 'grid gap-6 lg:grid-cols-5 items-start' },
                         // Links: nieuwe loper toevoegen (bovenaan, zonder scrollen)
-                        h('div', { className: 'lg:col-span-2 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto' + (isDisplayFullscreen ? ' lg:max-h-[calc(100vh-9rem)]' : '') },
+                        h('div', { className: 'lg:col-span-2 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto' + (isDisplayFullscreen || IS_SIGNUP ? ' lg:max-h-[calc(100vh-9rem)]' : '') },
                         h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
                             h('h2', { className: 'text-lg font-semibold mb-4 text-gray-900' }, 'Nieuwe Loper Toevoegen'),
                             renderQueueNotice(),
@@ -4129,7 +4134,7 @@ function predictNext(times, gender, restMs) {
                                         waiting.length > 1 && h('span', { className: 'text-xs text-gray-500' }, 'Sleep via ☰ of gebruik de pijltjes')
                                     ),
                                     waiting.length === 0 ? h('div', { className: 'text-center text-gray-400 py-8' }, 'Geen lopers') :
-                                    h('div', { ref: queueListRef, className: 'relative space-y-2 mt-3 lg:overflow-y-auto pr-1 ' + (isDisplayFullscreen ? 'lg:max-h-[calc(100vh-14rem)]' : 'lg:max-h-[calc(100vh-21rem)]'), onDragOver: (e) => e.preventDefault(), onDrop: finishDrop },
+                                    h('div', { ref: queueListRef, className: 'relative space-y-2 mt-3 lg:overflow-y-auto pr-1 ' + (isDisplayFullscreen || IS_SIGNUP ? 'lg:max-h-[calc(100vh-14rem)]' : 'lg:max-h-[calc(100vh-21rem)]'), onDragOver: (e) => e.preventDefault(), onDrop: finishDrop },
                                         waiting.map((runner, idx) => h('div', {
                                             key: runner.id || idx,
                                             'data-qrow': idx,
