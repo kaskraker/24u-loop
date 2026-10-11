@@ -76,6 +76,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyDVULWNjHaR41EaptoQYnWnTdnU-suMuuA", authDomain: "u-loop-leuven-2026.firebaseapp.com", projectId: "u-loop-leuven-2026",
@@ -109,6 +110,30 @@ syncClock(); setInterval(syncClock, 10 * 60e3);
 // ===== Firebase met offline-opslag =====
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// ===== Medewerkers-pincode (eenmalig per toestel) =====
+// Het toestel meldt zich aan bij Firebase met een gedeeld medewerkersaccount; het wachtwoord is de pincode + een vast achtervoegsel.
+// Zet STAFF_LOGIN_REQUIRED op true zodra het account bestaat in Firebase (Authentication) en de beveiligingsregels zijn aangepast.
+const STAFF_LOGIN_REQUIRED = false;
+const STAFF_EMAIL = 'staff@24u-loop.humasol.app';
+const STAFF_PW_SUFFIX = '-humasol-24u';
+function staffGate(onReady) {
+  if (!STAFF_LOGIN_REQUIRED || !firebase.auth) { onReady(); return; }
+  const auth = firebase.auth(); let started = false;
+  const go = () => { if (!started) { started = true; onReady(); } };
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff1cf;display:none;align-items:center;justify-content:center;padding:20px;font-family:"Bricolage Grotesque",system-ui,sans-serif';
+  box.innerHTML = '<div style="background:#fff;border:4px solid #17120d;border-radius:20px;box-shadow:6px 6px 0 #17120d;padding:22px;width:100%;max-width:380px;text-align:center"><div style="font-size:24px;font-weight:800;margin-bottom:6px">Medewerkers</div><div style="font-weight:500;margin-bottom:14px">Voer de pincode in. Dit hoef je maar één keer te doen op dit toestel.</div><input id="pinIn" type="password" inputmode="numeric" autocomplete="off" placeholder="Pincode" style="font:inherit;font-size:28px;text-align:center;width:100%;border:3px solid #17120d;border-radius:12px;padding:12px;margin-bottom:10px;letter-spacing:.3em"><div id="pinErr" style="color:#dc2626;font-weight:700;min-height:22px;margin-bottom:6px"></div><button id="pinGo" style="font:inherit;font-weight:800;font-size:18px;width:100%;border:3px solid #17120d;border-radius:14px;background:#f2a342;padding:14px;box-shadow:3px 3px 0 #17120d">Ontgrendelen</button></div>';
+  document.body.appendChild(box);
+  const submit = async () => {
+    const pin = box.querySelector('#pinIn').value.trim(); if (!pin) return;
+    box.querySelector('#pinErr').textContent = '';
+    try { await auth.signInWithEmailAndPassword(STAFF_EMAIL, pin + STAFF_PW_SUFFIX); }
+    catch (e) { box.querySelector('#pinErr').textContent = (e.code === 'auth/too-many-requests') ? 'Te veel pogingen. Wacht even.' : (e.code === 'auth/network-request-failed') ? 'Geen internet. Probeer opnieuw.' : 'Onjuiste pincode.'; box.querySelector('#pinIn').value = ''; }
+  };
+  box.querySelector('#pinGo').onclick = submit; box.querySelector('#pinIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  auth.onAuthStateChanged((u) => { if (u) { box.style.display = 'none'; go(); } else { box.style.display = 'flex'; setTimeout(() => box.querySelector('#pinIn').focus(), 100); } });
+}
+
 let persistence = 'unknown';
 db.enablePersistence({ synchronizeTabs: false }).then(() => { persistence = 'on'; }).catch((e) => { persistence = 'off:' + e.code; });
 const FV = firebase.firestore.FieldValue;
@@ -348,6 +373,7 @@ function viewMore() {
     <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
     <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
     <div class="card"><h2>Gegevens</h2><div class="row2"><button class="btn" data-act="csvLaps">Rondes (CSV)</button><button class="btn" data-act="csvRunners">Lopers (CSV)</button></div></div>
+    <div class="card"><h2>Medewerkers</h2><div class="row"><div class="nm">Pincode<small>${STAFF_LOGIN_REQUIRED ? (firebase.auth().currentUser ? 'ontgrendeld op dit toestel' : 'niet ontgrendeld') : 'staat uit (alles is open)'}</small></div>${STAFF_LOGIN_REQUIRED && firebase.auth().currentUser ? '<button class="btn small" data-act="logout">Vergrendel</button>' : ''}</div></div>
     <div class="card"><h2>Gevaarlijke zone</h2><div class="sec" style="margin-bottom:8px">${NS ? `Wist enkel de oefenomgeving "${esc(NS)}"` : 'Wist het ECHTE event'}</div><button class="btn danger" style="width:100%" data-act="reset">Alle data wissen…</button></div>
     <div class="empty" style="font-size:12px">Chronometer · Humasol vzw</div>`;
 }
@@ -362,11 +388,12 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
   if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
   const a = t.dataset.act, id = t.dataset.id;
-  ({ main: pressMain, undo, manual: manualTime, stop: stopAfterThis, cancel: cancelRun, awake: () => { keepAwake().then(render); }, csvLaps: () => exportCsv('laps'), csvRunners: () => exportCsv('runners'), reset: resetAll,
+  ({ main: pressMain, undo, manual: manualTime, stop: stopAfterThis, cancel: cancelRun, awake: () => { keepAwake().then(render); }, csvLaps: () => exportCsv('laps'), csvRunners: () => exportCsv('runners'), reset: resetAll, logout: () => { firebase.auth().signOut().then(() => location.reload()); },
      up: () => moveQueued(id, -1), down: () => moveQueued(id, 1), rm: () => removeQueued(id), del: () => deleteLap(id), edit: () => editLap(id) })[a]?.();
 });
 
 // ===== data =====
+function startData() {
 const listen = (name, fn) => db.collection(col(name)).onSnapshot({ includeMetadataChanges: true }, (s) => {
   if (s.metadata.fromCache) { if (!offlineSince) offlineSince = Date.now(); lastCacheFalse = Date.now(); } else { offlineSince = 0; lastOK = Date.now(); }
   if (s.docChanges().length || !loaded[name === 'activeRunner' ? 'active' : name]) { fn(s); loaded[name === 'activeRunner' ? 'active' : name] = true; sc = null; render(); }
@@ -375,6 +402,8 @@ listen('runners', (s) => { runners = s.docs.map((d) => ({ id: d.id, ...d.data() 
 listen('laps', (s) => { laps = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
 listen('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
 listen('activeRunner', (s) => { activeDocs = s.docs.map((d) => ({ id: d.id, data: d.data() })); });
+}
+staffGate(startData);
 
 setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
