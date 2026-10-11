@@ -91,7 +91,7 @@ let runners = [], laps = [], queue = [], active = null, lastServer = 0;
 let me = ''; try { me = localStorage.getItem('myRunnerId') || ''; } catch (e) {}
 if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
 let tab = params.get('tab') || (me ? 'mine' : 'queue');
-let query = '';
+let query = '', squery = '', viewId = '';
 const $ = (id) => document.getElementById(id);
 
 // ---------- helpers ----------
@@ -133,16 +133,17 @@ function waitText(ms, idx) {
 }
 
 // ---------- weergave ----------
-function statusCard(r) {
+function statusCard(r, self = true) {
+  const fn = esc((r.name || '').split(' ')[0]);
   if (isRunning() && active.runner.runnerId === r.id) {
     const st = startMs();
-    return `<div class="status run"><div class="k">🏃 Jij loopt nu!</div><div class="big" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div><div class="s">Succes! Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
+    return `<div class="status run"><div class="k">🏃 ${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
   }
   const w = waiting(), idx = w.findIndex((q) => q.runnerId === r.id);
-  if (idx === -1) return `<div class="status none"><div class="k">Je staat niet in de wachtrij</div><div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div></div>`;
+  if (idx === -1) return `<div class="status none"><div class="k">${self ? 'Je staat niet in de wachtrij' : fn + ' staat niet in de wachtrij'}</div>${self ? '<div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div>' : ''}</div>`;
   const ms = waitMs(idx);
-  const head = idx === 0 ? 'Jij bent de volgende — sta klaar!' : `Je staat ${idx + 1}e in de rij`;
-  const sub = idx === 0 ? `Start ${ms <= 5000 ? 'elk moment' : 'rond ' + clock(Date.now() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor jou · start rond ${clock(Date.now() + ms)}`;
+  const head = self ? (idx === 0 ? 'Jij bent de volgende — sta klaar!' : `Je staat ${idx + 1}e in de rij`) : (idx === 0 ? `${fn} is de volgende` : `${fn} staat ${idx + 1}e in de rij`);
+  const sub = idx === 0 ? `Start ${ms <= 5000 ? 'elk moment' : 'rond ' + clock(Date.now() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · start rond ${clock(Date.now() + ms)}`;
   return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${waitText(ms, idx)}</div><div class="s">${sub}</div><div class="s" style="font-size:11px;margin-top:4px;color:var(--muted)">Dit is een schatting.</div></div>`;
 }
 
@@ -161,13 +162,16 @@ function tempoSvg(times) {
 
 function viewMine() {
   const r = runners.find((x) => x.id === me);
-  if (!r) {
+  if (r) return profile(r, true);
+  {
     const q = query.trim().toLowerCase();
     const res = q ? runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 12) : [];
     return `<div class="card"><h2>Wie ben jij?</h2><div class="s" style="margin-bottom:10px;font-weight:500">Zoek je naam om je wachtplaats en je tijden te zien.</div>
       <input id="q" placeholder="Typ je naam…" value="${esc(query)}" autocomplete="off">
       <div id="res">${resultsHtml(res, q)}</div></div>`;
   }
+}
+function profile(r, self) {
   const my = laps.filter((l) => l.runnerId === r.id).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const times = my.map((l) => l.time);
   const best = times.length ? Math.min(...times) : 0, avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
@@ -176,8 +180,9 @@ function viewMine() {
   const lapRank = Object.values(byRunner).filter((n) => n > my.length).length + 1;
   const bests = {}; laps.forEach((l) => { if (bests[l.runnerId] === undefined || l.time < bests[l.runnerId]) bests[l.runnerId] = l.time; });
   const bestRank = best ? Object.values(bests).filter((t) => t < best).length + 1 : 0;
-  return `<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:26px;font-weight:800">${esc(r.name)}</b><button class="link" data-act="other">Andere loper</button></div>
-    ${statusCard(r)}
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:26px;font-weight:800">${esc(r.name)}</b>${self ? '<button class="link" data-act="other">Andere loper</button>' : '<button class="link" data-act="back">← Terug</button>'}</div>
+    ${self ? '' : `<button class="btn full" data-act="pickme" data-id="${esc(r.id)}">Dit ben ik</button>`}
+    ${statusCard(r, self)}
     <div class="card"><div class="grid">
       <div class="tile"><div class="k">Rondes</div><div class="v">${my.length}</div></div>
       <div class="tile"><div class="k">Afstand</div><div class="v">${(my.length * 0.515).toFixed(2).replace('.', ',')} km</div></div>
@@ -185,17 +190,27 @@ function viewMine() {
       <div class="tile"><div class="k">Gemiddeld</div><div class="v">${avg ? mmss(avg) : '–'}</div></div>
       <div class="tile"><div class="k">Plaats (meeste rondes)</div><div class="v">${my.length ? '#' + lapRank : '–'}</div></div>
       <div class="tile"><div class="k">Plaats (snelste ronde)</div><div class="v">${best ? '#' + bestRank : '–'}</div></div>
-      <div class="tile wide"><div class="k">Jij liep bij voor Water for All</div><div class="v">€ ${my.length * EUR_PER_LAP}</div></div></div>
-      ${my.length ? `<button class="btn full" style="margin-top:12px" data-act="share">📤 Deel mijn resultaat</button>` : ''}</div>
-    ${times.length >= 2 ? `<div class="card"><h2>Jouw tempo</h2>${tempoSvg(times)}</div>` : ''}
-    <div class="card"><h2>Jouw rondes</h2>${my.length === 0 ? '<div class="empty">Nog geen rondes gelopen</div>' :
+      <div class="tile wide"><div class="k">${self ? 'Jij liep' : 'Liep'} bij voor Water for All</div><div class="v">€ ${my.length * EUR_PER_LAP}</div></div></div>
+      ${self && my.length ? `<button class="btn full" style="margin-top:12px" data-act="share">📤 Deel mijn resultaat</button>` : ''}</div>
+    ${times.length >= 2 ? `<div class="card"><h2>${self ? 'Jouw' : 'Het'} tempo</h2>${tempoSvg(times)}</div>` : ''}
+    <div class="card"><h2>${self ? 'Jouw rondes' : 'Rondes'}</h2>${my.length === 0 ? '<div class="empty">Nog geen rondes gelopen</div>' :
       my.map((l, i) => ({ l, nr: i + 1 })).reverse().map(({ l, nr }) => `<div class="lap"><div class="t">${clock(l.timestamp)}</div><div class="n">ronde ${nr}${l.time === overall ? '<span class="badge">🏆 record</span>' : l.time === best && my.length > 1 ? '<span class="badge">PR</span>' : ''}</div><div class="r">${mmss(l.time)}</div></div>`).join('')}</div>`;
 }
-function resultsHtml(res, q) {
+function resultsHtml(res, q, act = 'pick') {
   if (!q) return '';
   if (!res.length) return '<div class="empty">Geen loper gevonden</div>';
   const inQ = new Set(queue.map((x) => x.runnerId));
-  return res.map((x) => `<div class="row" data-act="pick" data-id="${esc(x.id)}" style="cursor:pointer"><div class="nm">${esc(x.name)}<small>${x.totalLaps || 0} ${(x.totalLaps || 0) === 1 ? 'ronde' : 'rondes'}${inQ.has(x.id) ? ' · staat in de wachtrij' : ''}</small></div><div class="w">Dit ben ik ›</div></div>`).join('');
+  return res.map((x) => `<div class="row" data-act="${act}" data-id="${esc(x.id)}" style="cursor:pointer"><div class="nm">${esc(x.name)}<small>${x.totalLaps || 0} ${(x.totalLaps || 0) === 1 ? 'ronde' : 'rondes'}${inQ.has(x.id) ? ' · staat in de wachtrij' : ''}</small></div><div class="w">${act === 'view' ? 'Bekijk ›' : 'Dit ben ik ›'}</div></div>`).join('');
+}
+
+function viewSearch() {
+  const r = runners.find((x) => x.id === viewId);
+  if (r) return profile(r, false);
+  const q = squery.trim().toLowerCase();
+  const res = q ? runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 15) : [];
+  return `<div class="card"><h2>Zoek een loper</h2><div style="margin-bottom:10px;font-weight:500">Bekijk de rondetijden van vrienden of andere lopers.</div>
+    <input id="sq" placeholder="Typ een naam…" value="${esc(squery)}" autocomplete="off">
+    <div id="sres">${resultsHtml(res, q, 'view')}</div></div>`;
 }
 
 function viewQueue() {
@@ -207,7 +222,7 @@ function viewQueue() {
       ${run ? `<div class="row" style="background:#ffd58a;border-color:#17120d"><div class="no">🏃</div><div class="nm">${esc(run.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${st || ''}">${mmssc(st ? Date.now() - st : 0)}</div></div>` : ''}
       ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, 40).map((q, i) => {
         const ms = waitMs(i), mine = q.runnerId === me;
-        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(Date.now() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
+        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(Date.now() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
       }).join('')}
       ${w.length > 40 ? `<div class="empty">… en nog ${w.length - 40}</div>` : ''}</div>`;
 }
@@ -215,9 +230,9 @@ function viewQueue() {
 function viewRank() {
   const g = {}; runners.forEach((r) => { g[r.id] = r.gender; });
   const fast = (f) => [...laps].filter(f).sort((a, b) => a.time - b.time).slice(0, 10);
-  const list = (arr, val) => arr.length ? arr.map((x, i) => `<div class="rank"><b>${i + 1}</b><div class="nm">${esc(x.name)}</div><div class="v">${val(x)}</div></div>`).join('') : '<div class="empty">Nog geen data</div>';
-  const mapLap = (l) => ({ name: l.runnerName, t: l.time });
-  const most = Object.entries(laps.reduce((a, l) => { a[l.runnerId] = (a[l.runnerId] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n]) => ({ name: (runners.find((r) => r.id === id) || {}).name || '?', n }));
+  const list = (arr, val) => arr.length ? arr.map((x, i) => `<div class="rank" data-act="view" data-id="${esc(x.id)}" style="cursor:pointer"><b>${i + 1}</b><div class="nm">${esc(x.name)}</div><div class="v">${val(x)}</div></div>`).join('') : '<div class="empty">Nog geen data</div>';
+  const mapLap = (l) => ({ id: l.runnerId, name: l.runnerName, t: l.time });
+  const most = Object.entries(laps.reduce((a, l) => { a[l.runnerId] = (a[l.runnerId] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n]) => ({ id, name: (runners.find((r) => r.id === id) || {}).name || '?', n }));
   return `<div class="card"><h2>Snelste rondes <small>algemeen</small></h2>${list(fast(() => true).map(mapLap), (x) => mmss(x.t))}</div>
     <div class="card"><h2>Snelste rondes <small>vrouwen</small></h2>${list(fast((l) => g[l.runnerId] === 'V').map(mapLap), (x) => mmss(x.t))}</div>
     <div class="card"><h2>Snelste rondes <small>mannen</small></h2>${list(fast((l) => g[l.runnerId] === 'M').map(mapLap), (x) => mmss(x.t))}</div>
@@ -226,10 +241,15 @@ function viewRank() {
 
 function render(force) {
   $('euro').textContent = '€ ' + (laps.length * EUR_PER_LAP).toLocaleString('nl-BE');
-  $('nav').innerHTML = [['queue', 'Wachtrij'], ['mine', 'Mijn tijden'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
-  const typing = document.activeElement && document.activeElement.id === 'q';
-  if (typing && !force) { const q = query.trim().toLowerCase(); $('res').innerHTML = resultsHtml(runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 12), q); return; }
-  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'rank' ? viewRank() : viewMine();
+  $('nav').innerHTML = [['queue', 'Wachtrij'], ['mine', 'Mijn tijden'], ['search', 'Zoeken'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
+  const ae = document.activeElement && document.activeElement.id;
+  const typing = ae === 'q' || ae === 'sq';
+  if (typing && !force) {
+    if (ae === 'q') { const q = query.trim().toLowerCase(); $('res').innerHTML = resultsHtml(runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 12), q); }
+    else { const q = squery.trim().toLowerCase(); $('sres').innerHTML = resultsHtml(runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 15), q, 'view'); }
+    return;
+  }
+  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'rank' ? viewRank() : tab === 'search' ? viewSearch() : viewMine();
   const f = $('foot'); f.textContent = lastServer ? `Laatst bijgewerkt ${clock(lastServer)}` : 'Verbinden…';
 }
 let rt = null; const later = (force) => { clearTimeout(rt); rt = setTimeout(() => render(force), 120); };
@@ -264,13 +284,16 @@ async function share() {
 // ---------- events ----------
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
-  if (t.dataset.tab) { tab = t.dataset.tab; render(true); return; }
+  if (t.dataset.tab) { tab = t.dataset.tab; if (tab !== 'search') viewId = ''; render(true); return; }
   const a = t.dataset.act;
   if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem('myRunnerId', me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
+  if (a === 'view') { viewId = t.dataset.id; squery = ''; tab = 'search'; render(true); window.scrollTo(0, 0); }
+  if (a === 'back') { viewId = ''; render(true); }
+  if (a === 'pickme') { me = t.dataset.id; viewId = ''; try { localStorage.setItem('myRunnerId', me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem('myRunnerId'); } catch (e) {} render(true); }
   if (a === 'share') share();
 });
-document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } });
+document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } if (e.target.id === 'sq') { squery = e.target.value; render(false); } });
 
 // ---------- data ----------
 const snap = (name, fn) => db.collection(col(name)).onSnapshot((s) => { lastServer = Date.now(); fn(s); later(); }, (err) => { $('foot').textContent = 'Geen verbinding met de server… (' + err.code + ')'; });
@@ -283,7 +306,7 @@ snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') |
 setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(Date.now() - st); });
 }, 100);
-setInterval(() => { if (!(document.activeElement && document.activeElement.id === 'q')) render(true); }, 10000);
+setInterval(() => { const ae = document.activeElement && document.activeElement.id; if (ae !== 'q' && ae !== 'sq') render(true); }, 10000);
 render(true);
 </script>
 </body>
