@@ -736,7 +736,7 @@
         const TRACK_PATH = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 13 70';
         const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '0 0 260 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#17120d', strokeWidth: 26, strokeLinejoin: 'round' }),
-            h('path', { d: TRACK_PATH, fill: 'none', stroke: '#fff6df', strokeWidth: 17 }),
+            h('path', { d: TRACK_PATH, fill: 'none', stroke: '#fbd9a0', strokeWidth: 17 }),
             h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 17, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.55 }),
             h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#e8590c', strokeWidth: 17, strokeLinecap: 'butt', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
             h('line', { x1: 0, y1: 70, x2: 26, y2: 70, stroke: '#17120d', strokeWidth: 5 }),
