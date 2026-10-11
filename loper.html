@@ -63,6 +63,11 @@
   .modal .acts { display: grid; gap: 10px; margin-top: 14px; }
   .modal a.btn, .modal button.btn { display: block; text-align: center; text-decoration: none; }
   .btn.ghost { background: #fff; }
+  .celeb .box { text-align: center; overflow: hidden; position: relative; background: #ffd58a; }
+  .celeb .big { font-size: 34px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; margin: 4px 0 8px; }
+  .celeb .time { display: inline-block; font-size: 52px; font-weight: 800; background: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 0 16px; box-shadow: 4px 4px 0 var(--ink); margin: 4px 0 10px; }
+  .celeb .conf { position: absolute; top: -14px; width: 10px; height: 16px; border: 2px solid var(--ink); border-radius: 2px; animation: confFall 2.6s ease-in infinite; }
+  @keyframes confFall { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(420px) rotate(540deg); opacity: .9; } }
   @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
   @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
   .foot { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 14px; }
@@ -168,6 +173,7 @@ function buildMeta(runnersArr, lapsArr) {
 
 // Gegevens in de lopers-app (zuinig): wachtrij + actieve loper + samenvatting + lopersindex; rondes enkel van de gekozen lopers.
 let runners = [], queue = [], active = null, lastServer = 0, SUM = null, rMap = new Map(), MODE = 'lean';
+let recent = [];   // de laatste gelopen rondes (live, maximaal 12)
 let rawRunners = [], rawLaps = [];            // enkel in 'volledige' modus (als er nog geen samenvatting bestaat, bv. in de oefenmodus zonder chronometer)
 const LAPS = {};                              // rondes per loper (enkel van wie we bekijken)
 const lapsOf = (id) => LAPS[id] || [];
@@ -180,7 +186,7 @@ const totalLaps = () => SUM ? SUM.total : 0;
 const ME_KEY = 'myRunnerId' + (NS ? '_' + NS : '');   // per omgeving onthouden (oefen en echt apart)
 let me = ''; try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) {}
 if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
-let tab = params.get('tab') || (me ? 'mine' : 'queue');
+let tab = params.get('tab') || 'queue';   // opent altijd bij de wachtrij en de huidige loper
 let query = '', squery = '', viewId = '';
 const $ = (id) => document.getElementById(id);
 
@@ -321,7 +327,12 @@ function viewQueue() {
         const ms = waitMs(i), mine = q.runnerId === me;
         return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
       }).join('')}
-      ${w.length > 40 ? `<div class="empty">… en nog ${w.length - 40}</div>` : ''}</div>`;
+      ${w.length > 40 ? `<div class="empty">… en nog ${w.length - 40}</div>` : ''}</div>
+    <div class="card"><h2>Net gelopen <small>laatste ${recent.length || ''} rondes</small></h2>
+      ${recent.length === 0 ? '<div class="empty">Nog geen rondes</div>' : recent.map((l) => {
+        const ago = Math.max(0, Math.round((tnow() - new Date(l.timestamp).getTime()) / 60000)), rec = SUM && SUM.record && l.time <= SUM.record.t;
+        return `<div class="row ${l.runnerId === me ? 'me' : ''}"><div class="no" style="width:44px;font-size:13px">${clock(l.timestamp)}</div><div class="nm" data-act="view" data-id="${esc(l.runnerId)}" style="cursor:pointer">${esc(l.runnerName)}${l.runnerId === me ? '<span class="badge">jij</span>' : ''}${rec ? '<span class="badge">record</span>' : ''}<small>${ago < 1 ? 'net binnengekomen' : ago + ' min geleden'}</small></div><div class="w">${mmss(l.time)}</div></div>`;
+      }).join('')}</div>`;
 }
 
 function viewRank() {
@@ -341,8 +352,34 @@ function patchView(html) {
   else nk.forEach((n, i) => { if (parts[i] !== lastParts[i]) ok[i].replaceWith(n); });
   lastParts = parts; lastTab = key; liveTick();
 }
+// ---------- viering bij een nieuw persoonlijk record, een mijlpaal of de eerste ronde ----------
+const celeb = { me: '', ids: null };
+function checkCelebrate() {
+  if (!me) { celeb.me = ''; celeb.ids = null; return; }
+  const ready = LAPS[me] !== undefined || (MODE === 'heavy' && SUM);
+  if (!ready) return;
+  const my = [...lapsOf(me)].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  if (celeb.me !== me || !celeb.ids) { celeb.me = me; celeb.ids = new Set(my.map((l) => l.id)); return; }   // eerste keer: alles wat er al staat telt niet mee
+  const fresh = my.filter((l) => !celeb.ids.has(l.id)); if (!fresh.length) return;
+  fresh.forEach((l) => celeb.ids.add(l.id));
+  const last = my[my.length - 1], before = my.filter((l) => l !== last && !fresh.includes(l)).map((l) => l.time), prevBest = before.length ? Math.min(...before) : 0, n = my.length;
+  const overall = SUM && SUM.record ? SUM.record.t : 0, km = (n * 0.515).toFixed(1).replace('.', ',');
+  let c = null;
+  if (overall && last.time <= overall && n > 0) c = { title: 'Snelste ronde van het event!', time: mmss(last.time), sub: 'Niemand liep tot nu toe sneller. Wat een ronde!' };
+  else if (prevBest && last.time < prevBest) c = { title: 'Nieuw persoonlijk record!', time: mmss(last.time), sub: `${Math.max(1, Math.round((prevBest - last.time) / 1000))} s sneller dan je vorige beste (${mmss(prevBest)}).` };
+  else if (n % 5 === 0) c = { title: `${n} rondes!`, time: '', sub: `${km} km gelopen en € ${n * EUR_PER_LAP} voor Water for All.` };
+  else if (n === 1) c = { title: 'Eerste ronde klaar!', time: mmss(last.time), sub: `Die telt: € ${EUR_PER_LAP} voor Water for All. Tot de volgende!` };
+  if (c) showCelebration(c);
+}
+function showCelebration(c) {
+  const cols = ['#f2a342', '#e8590c', '#fff', '#2fb344', '#ffe27a'];
+  const conf = Array.from({ length: 28 }, (_, i) => `<span class="conf" style="left:${Math.round(Math.random() * 96)}%;background:${cols[i % cols.length]};animation-delay:${(Math.random() * 1.8).toFixed(2)}s;animation-duration:${(2 + Math.random() * 1.6).toFixed(2)}s"></span>`).join('');
+  $('overlay').innerHTML = `<div class="modal celeb" data-act="closewfa"><div class="box">${conf}<h3 class="big">${esc(c.title)}</h3>${c.time ? `<div class="time">${esc(c.time)}</div>` : ''}<p style="font-weight:700">${esc(c.sub)}</p><div class="acts"><button class="btn" data-act="closewfa">Top!</button></div></div></div>`;
+  try { navigator.vibrate && navigator.vibrate([90, 50, 90, 50, 160]); } catch (e) {}
+  clearTimeout(showCelebration.t); showCelebration.t = setTimeout(() => { if ($('overlay').querySelector('.celeb')) $('overlay').innerHTML = ''; }, 14000);
+}
 function render(force) {
-  syncWatches();
+  syncWatches(); checkCelebrate();
   $('euro').textContent = '€ ' + (totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE');
   $('nav').innerHTML = [['queue', 'Wachtrij'], ['mine', 'Mijn tijden'], ['search', 'Zoeken'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
   const ae = document.activeElement && document.activeElement.id;
@@ -419,6 +456,7 @@ function syncWatches() {   // rondes ophalen van enkel de gekozen lopers (jezelf
 }
 function startCommon() {
   snap('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)); });
+  db.collection(col('laps')).orderBy('timestamp', 'desc').limit(12).onSnapshot((s) => { recent = s.docs.map((d) => ({ id: d.id, ...d.data() })); lastServer = Date.now(); later(); }, onErr);
   snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; });
 }
 function startLean() {
