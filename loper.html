@@ -88,7 +88,8 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 let runners = [], laps = [], queue = [], active = null, lastServer = 0;
-let me = ''; try { me = localStorage.getItem('myRunnerId') || ''; } catch (e) {}
+const ME_KEY = 'myRunnerId' + (NS ? '_' + NS : '');   // per omgeving onthouden (oefen en echt apart)
+let me = ''; try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) {}
 if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
 let tab = params.get('tab') || (me ? 'mine' : 'queue');
 let query = '', squery = '', viewId = '';
@@ -286,11 +287,11 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
   if (t.dataset.tab) { tab = t.dataset.tab; if (tab !== 'search') viewId = ''; render(true); return; }
   const a = t.dataset.act;
-  if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem('myRunnerId', me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
+  if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'view') { viewId = t.dataset.id; squery = ''; tab = 'search'; render(true); window.scrollTo(0, 0); }
   if (a === 'back') { viewId = ''; render(true); }
-  if (a === 'pickme') { me = t.dataset.id; viewId = ''; try { localStorage.setItem('myRunnerId', me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
-  if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem('myRunnerId'); } catch (e) {} render(true); }
+  if (a === 'pickme') { me = t.dataset.id; viewId = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
+  if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem(ME_KEY); } catch (e) {} render(true); }
   if (a === 'share') share();
 });
 document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } if (e.target.id === 'sq') { squery = e.target.value; render(false); } });
