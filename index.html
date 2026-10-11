@@ -124,6 +124,7 @@
         .dark-mode .chart-card text:not([fill='#ea580c']):not([fill='#b45309']):not([fill='#111827']) { fill: #d1d5db; }
         .dark-mode .chart-card text[fill='#111827'] { fill: #f3f4f6; }
         .dark-mode .chart-card text[fill='#b45309'] { fill: #fbbf24; }
+        @keyframes weetBar { from { width: 0%; } to { width: 100%; } }
         .dark-mode .qr-promo { background: linear-gradient(135deg, #fff7ed, #ffedd5) !important; }
         .dark-mode .qr-promo .text-humasol-brown { color: #863c14; }
         .dark-mode .from-orange-50 { --tw-gradient-from: #3d2a14 var(--tw-gradient-from-position); --tw-gradient-to: #3d2a1400 var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
@@ -1002,6 +1003,9 @@
         };
 
         // Referenties voor afstanden (benaderend): studentenleven in Leuven en bekende steden
+        // Weetjes over Humasol voor in de wisselende kaart. Pas gerust aan of vul aan met eigen feiten.
+        const HUMASOL_FACTS = ['Opgericht in 2008', 'Renewable technology for all'];
+
         const CITY_ROUTES = [
             { km: 25, label: 'Leuven → Brussel' }, { km: 60, label: 'Leuven → Antwerpen' }, { km: 85, label: 'Leuven → Gent' },
             { km: 200, label: 'Leuven → Amsterdam' }, { km: 300, label: 'Leuven → Parijs' }, { km: 390, label: 'Leuven → Londen' },
@@ -1082,23 +1086,39 @@
                 laps.forEach(l => { (by[l.runnerId] = by[l.runnerId] || { name: l.runnerName, laps: [] }).laps.push(l); });
                 Object.values(by).forEach(r => r.laps.sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)));
                 const now = Date.now();
-                let hot = null, streak = null, metro = null, improve = null;
+                const hotL = [], streakL = [], metroL = [], improveL = [];
                 Object.values(by).forEach(r => {
                     const t = r.laps.map(l => l.time);
                     const recent = r.laps.filter(l => now - new Date(l.timestamp).getTime() < 3600e3);
-                    if (recent.length >= 3 && (!hot || recent.length > hot.n)) hot = { name: r.name, n: recent.length, times: recent.map(l => l.time) };
+                    if (recent.length >= 3) hotL.push({ name: r.name, n: recent.length, times: recent.map(l => l.time) });
                     let cur = 0, best = 0, end = 0;
                     t.forEach((x, i) => { if (x < 90000) { cur++; if (cur > best) { best = cur; end = i; } } else cur = 0; });
-                    if (best >= 3 && (!streak || best > streak.n)) streak = { name: r.name, n: best, times: t, from: end - best + 1, to: end };
+                    if (best >= 3) streakL.push({ name: r.name, n: best, times: t, from: end - best + 1, to: end });
                     if (t.length >= 5) {
                         const m = t.reduce((x, y) => x + y, 0) / t.length, sd = Math.sqrt(t.reduce((x, y) => x + (y - m) * (y - m), 0) / t.length);
-                        if (!metro || sd < metro.sd) metro = { name: r.name, sd, avg: m, n: t.length, times: t };
+                        metroL.push({ name: r.name, sd, avg: m, n: t.length, times: t });
                     }
                     if (t.length >= 3) {
                         const gain = t[0] - Math.min(...t);
-                        if (gain >= 5000 && (!improve || gain > improve.gain)) improve = { name: r.name, gain, first: t[0], best: Math.min(...t), times: t };
+                        if (gain >= 5000) improveL.push({ name: r.name, gain, first: t[0], best: Math.min(...t), times: t });
                     }
                 });
+                hotL.sort((x, y) => y.n - x.n); streakL.sort((x, y) => y.n - x.n); metroL.sort((x, y) => x.sd - y.sd); improveL.sort((x, y) => y.gain - x.gain);
+
+                // drukte: laatste kwartier, drukste kwartier (schuivend venster) en 8 kwartieren terug
+                const stamps = laps.map(l => new Date(l.timestamp).getTime()).sort((x, y) => x - y);
+                let peak = { n: 0, at: 0 };
+                for (let i = 0, j = 0; i < stamps.length; i++) { while (stamps[i] - stamps[j] > 15 * 60e3) j++; if (i - j + 1 > peak.n) peak = { n: i - j + 1, at: stamps[i] }; }
+                const quarters = Array.from({ length: 8 }, (_, k) => stamps.filter(t => t >= now - (k + 1) * 15 * 60e3 && t < now - k * 15 * 60e3).length).reverse();
+                const last15 = quarters[7];
+                const hourNow = stamps.filter(t => t >= now - 3600e3).length, hourPrev = stamps.filter(t => t >= now - 7200e3 && t < now - 3600e3).length;
+                const firstSeen = Object.values(by).map(r => new Date(r.laps[0].timestamp).getTime());
+                const newcomers = firstSeen.filter(t => t >= now - 3600e3).length;
+                // gemiddelde rondetijd per uur (laatste 10 uur)
+                const tempoHours = hours.map((hh, i) => { const t0 = nowH.getTime() - (9 - i) * 3600e3; const arr = laps.filter(l => { const t = new Date(l.timestamp).getTime(); return t >= t0 && t < t0 + 3600e3; }).map(l => l.time); return { h: hh.h, avg: arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length / 1000 : null }; });
+                // einde van het event (eerstvolgende 20:00)
+                const endAt = new Date(); endAt.setHours(20, 0, 0, 0); if (endAt.getTime() <= now) endAt.setDate(endAt.getDate() + 1);
+                const remaining = endAt.getTime() - now, elapsedFrac = Math.min(1, Math.max(0, 1 - remaining / (24 * 3600e3)));
 
                 // man / vrouw
                 const gOf = {}; runners.forEach(r => { gOf[r.id] = r.gender; });
@@ -1112,7 +1132,7 @@
                 // 24u-klok (20:00 bovenaan)
                 const slots = new Array(24).fill(0);
                 laps.forEach(l => { slots[(new Date(l.timestamp).getHours() - 20 + 24) % 24]++; });
-                return { bins, avg, LO, STEP, N, hours, hot, streak, metro, improve, agg, buckets, nRunners, repeat, slots, nowSlot: (new Date().getHours() - 20 + 24) % 24 };
+                return { bins, avg, LO, STEP, N, hours, hotL, streakL, metroL, improveL, agg, buckets, nRunners, repeat, slots, nowSlot: (new Date().getHours() - 20 + 24) % 24, peak, quarters, last15, hourNow, hourPrev, newcomers, tempoHours, remaining, elapsedFrac };
             }, [laps, runners]);
 
             const label = (t) => h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, t);
@@ -1225,25 +1245,110 @@
                 );
             };
 
-            // ---- welke slides hebben genoeg data? ----
-            const slides = [];
-            if (laps.length >= 5) slides.push(['speed', speed()]);
-            if (d.hot) slides.push(['hot', spot('op dreef', d.hot.name, `${d.hot.n} rondes in het laatste uur`, `gemiddeld ${mmss(d.hot.times.reduce((x, y) => x + y, 0) / d.hot.times.length / 1000)} per ronde`, d.hot.times)]);
-            if (d.agg.M.n >= 3 && d.agg.V.n >= 3) slides.push(['duel', duel()]);
-            if (d.streak) slides.push(['streak', spot('reeks onder 1:30', d.streak.name, `${d.streak.n}× na elkaar onder 1:30`, 'Elke groene stip was sneller dan 1:30', d.streak.times, [d.streak.from, d.streak.to])]);
-            if (d.nRunners >= 5) slides.push(['dist', dist()]);
-            if (d.metro) slides.push(['metro', spot('de metronoom', d.metro.name, `±${(d.metro.sd / 1000).toFixed(1).replace('.', ',')} s spreiding`, `${d.metro.n} rondes, gemiddeld ${mmss(d.metro.avg / 1000)}: bijna elke ronde even snel`, d.metro.times)]);
-            if (laps.length >= 20) slides.push(['clock', clock()]);
-            if (d.improve) slides.push(['improve', spot('steeds sneller', d.improve.name, `${mmss(d.improve.first / 1000)} → ${mmss(d.improve.best / 1000)}`, `${Math.round(d.improve.gain / 1000)} s sneller dan de eerste ronde`, d.improve.times)]);
-            if (slides.length === 0) slides.push(['empty', h('div', { className: 'text-gray-400 text-center py-10' }, 'Zodra er rondes zijn, verschijnen hier de leukste grafieken…')]);
-            const cur = slides[idx % slides.length];
+            const big = (txt, color = '#e8590c', size = 'text-5xl') => h('div', { className: `${size} font-extrabold leading-tight`, style: { color } }, txt);
+            const hhmm = (t) => new Date(t).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+
+            // ---- slide: drukte op de piste ----
+            const busy = () => {
+                const q = d.quarters, mx = Math.max(1, ...q, d.peak.n);
+                return h('div', { className: 'text-center' },
+                    label('Drukte op de piste'), big(String(d.last15)),
+                    h('div', { className: 'text-sm text-gray-700 mb-2' }, d.last15 === 1 ? 'ronde in de laatste 15 minuten' : 'rondes in de laatste 15 minuten'),
+                    h('svg', { viewBox: '0 0 300 100', width: '100%', style: { display: 'block' } },
+                        q.map((n, i) => h('g', { key: i }, h('rect', { x: i * 37.5 + 4, width: 29, y: 80 - (n / mx) * 62, height: Math.max(2, (n / mx) * 62), rx: 3, fill: i === 7 ? '#e8590c' : '#f2a342', stroke: '#17120d', strokeWidth: 1.5 }),
+                            h('text', { x: i * 37.5 + 18.5, y: 76 - (n / mx) * 62, fontSize: 10, fontWeight: 800, textAnchor: 'middle', fill: '#374151' }, n),
+                            h('text', { x: i * 37.5 + 18.5, y: 94, fontSize: 9, fontWeight: 600, textAnchor: 'middle', fill: '#6b7280' }, i === 7 ? 'nu' : `-${(7 - i) * 15}m`)))),
+                    h('div', { className: 'text-xs text-gray-700 mt-1' }, d.peak.n ? `Drukste kwartier tot nu: ${d.peak.n} rondes (rond ${hhmm(d.peak.at)})` : ''));
+            };
+            // ---- slide: dit uur tegenover vorig uur ----
+            const vsPrev = () => {
+                const a1 = d.hourNow, a0 = d.hourPrev, mx = Math.max(1, a1, a0), diff = a1 - a0;
+                const col = (n, lbl, color) => h('div', { className: 'flex flex-col items-center justify-end', style: { height: 150, width: 110 } },
+                    h('div', { className: 'text-3xl font-extrabold' }, n),
+                    h('div', { style: { width: '100%', height: Math.max(8, (n / mx) * 100), background: color, border: '3px solid #17120d', borderRadius: '10px 10px 0 0', transition: 'height .8s ease' } }),
+                    h('div', { className: 'text-xs font-bold text-gray-800 mt-1' }, lbl));
+                return h('div', { className: 'text-center' }, label('Dit uur tegenover het vorige'),
+                    h('div', { className: 'flex justify-center items-end gap-6 mt-2' }, col(a0, 'vorig uur', '#f2a342'), col(a1, 'laatste uur', '#e8590c')),
+                    h('div', { className: 'text-xl font-extrabold mt-3', style: { color: diff >= 0 ? '#2fb344' : '#dc2626' } }, diff === 0 ? 'Evenveel rondes' : `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)} ${Math.abs(diff) === 1 ? 'ronde' : 'rondes'} ${diff > 0 ? 'meer' : 'minder'}`));
+            };
+            // ---- slide: nieuwe gezichten ----
+            const newbies = () => h('div', { className: 'text-center' }, label('Nieuwe gezichten'),
+                h('div', { className: 'mt-2' }, big(String(d.newcomers), '#e8590c', 'text-6xl')),
+                h('div', { className: 'text-base font-bold text-gray-900' }, d.newcomers === 1 ? 'loper liep voor het eerst' : 'lopers liepen voor het eerst'),
+                h('div', { className: 'text-sm text-gray-700 mb-3' }, 'in het laatste uur'),
+                h('div', { style: { height: 18, border: '3px solid #17120d', borderRadius: 999, background: '#fff6df', overflow: 'hidden', margin: '0 18px' } }, h('div', { style: { width: `${Math.min(100, d.nRunners ? d.newcomers / d.nRunners * 100 : 0)}%`, minWidth: d.newcomers ? 10 : 0, height: '100%', background: '#f2a342', borderRight: '3px solid #17120d' } })),
+                h('div', { className: 'text-xs text-gray-700 mt-1' }, `${d.nRunners} verschillende lopers sinds de start`));
+            // ---- slide: tempo per uur ----
+            const tempoHour = () => {
+                const vals = d.tempoHours.map(x => x.avg).filter(Boolean), mn = Math.min(...vals), mx = Math.max(...vals), rg = (mx - mn) || 1, W = 300, bw = W / d.tempoHours.length;
+                return h('div', { className: 'text-center' }, label('Gemiddelde rondetijd per uur'),
+                    h('svg', { viewBox: '0 0 300 150', width: '100%', style: { display: 'block' } },
+                        d.tempoHours.map((x, i) => { const last = i === d.tempoHours.length - 1, hh = x.avg ? 24 + (1 - (x.avg - mn) / rg) * 70 : 0;
+                            return h('g', { key: i }, x.avg ? h('rect', { x: i * bw + 3, width: bw - 6, y: 112 - hh, height: hh, rx: 3, fill: last ? '#e8590c' : '#f2a342', stroke: '#17120d', strokeWidth: 1.5 }) : null,
+                                x.avg && h('text', { x: i * bw + bw / 2, y: 108 - hh, fontSize: 9, fontWeight: 800, textAnchor: 'middle', fill: '#374151' }, mmss(x.avg)),
+                                h('text', { x: i * bw + bw / 2, y: 128, fontSize: 9, fontWeight: 600, textAnchor: 'middle', fill: '#6b7280' }, `${String(x.h).padStart(2, '0')}u`)); })),
+                    h('div', { className: 'text-xs text-gray-700' }, 'hoger = sneller'));
+            };
+            // ---- slide: onze reis ----
+            const route = () => {
+                const km = laps.length * 0.515, reached = CITY_ROUTES.filter(c => km >= c.km), prev = reached[reached.length - 1] || { km: 0, label: 'Leuven → Leuven' }, next = CITY_ROUTES.find(c => km < c.km) || CITY_ROUTES[CITY_ROUTES.length - 1];
+                const nm = (c) => c.label.replace('Leuven → ', ''), frac = Math.min(1, Math.max(0, (km - prev.km) / ((next.km - prev.km) || 1)));
+                return h('div', { className: 'text-center' }, label('Onze reis'), big(`${km.toFixed(1).replace('.', ',')} km`, '#17120d', 'text-5xl'),
+                    h('div', { className: 'text-sm text-gray-700 mb-3' }, 'samen gelopen'),
+                    h('svg', { viewBox: '0 0 300 70', width: '100%', style: { display: 'block' } },
+                        h('line', { x1: 24, x2: 276, y1: 32, y2: 32, stroke: '#17120d', strokeWidth: 10, strokeLinecap: 'round' }), h('line', { x1: 24, x2: 24 + 252 * frac, y1: 32, y2: 32, stroke: '#f2a342', strokeWidth: 6, strokeLinecap: 'round' }),
+                        h('circle', { cx: 24, cy: 32, r: 9, fill: '#fff', stroke: '#17120d', strokeWidth: 3 }), h('circle', { cx: 276, cy: 32, r: 9, fill: '#fff', stroke: '#17120d', strokeWidth: 3 }),
+                        h('circle', { cx: 24 + 252 * frac, cy: 32, r: 11, fill: '#e8590c', stroke: '#17120d', strokeWidth: 3 }),
+                        h('text', { x: 24, y: 62, fontSize: 11, fontWeight: 800, textAnchor: 'middle', fill: '#17120d' }, prev.km ? nm(prev) : 'Leuven'), h('text', { x: 276, y: 62, fontSize: 11, fontWeight: 800, textAnchor: 'middle', fill: '#17120d' }, nm(next))),
+                    h('div', { className: 'text-sm font-bold text-gray-900 mt-1' }, km >= next.km ? 'Wauw, we zijn ver weg!' : `nog ${Math.ceil(next.km - km)} km tot ${nm(next)}`));
+            };
+            // ---- slide: aftellen naar het einde ----
+            const countdown = () => {
+                const hrs = Math.floor(d.remaining / 3600e3), mins = Math.floor((d.remaining % 3600e3) / 60e3), done = Math.floor(d.elapsedFrac * 24);
+                return h('div', { className: 'text-center' }, label('Nog te gaan'), big(`${hrs}u ${String(mins).padStart(2, '0')}m`, '#17120d', 'text-6xl'),
+                    h('div', { className: 'text-sm text-gray-700 mb-3' }, 'tot het einde om 20:00'),
+                    h('div', { className: 'flex gap-[3px] px-2' }, Array.from({ length: 24 }, (_, i) => h('div', { key: i, style: { flex: 1, height: 34, borderRadius: 4, border: '2px solid #17120d', background: i < done ? '#f2a342' : i === done ? '#e8590c' : '#fff6df' } }))),
+                    h('div', { className: 'text-xs text-gray-700 mt-2' }, `${done} van de 24 uur voorbij`));
+            };
+            // ---- slide: Humasol ----
+            const humasol = () => h('div', { className: 'text-center' }, label('Dit is Humasol'),
+                h('img', { src: 'humasol_logo.png', alt: 'Humasol', style: { height: 64, margin: '10px auto 6px', display: 'block' } }),
+                h('div', { className: 'text-xl font-extrabold italic text-gray-900' }, '"Renewable technology for all"'),
+                h('div', { className: 'mt-3 flex flex-col items-center gap-1.5' }, HUMASOL_FACTS.map((f, i) => h('div', { key: i, className: 'text-base font-bold px-4 py-1 rounded-full', style: { border: '3px solid #17120d', background: i % 2 ? '#fff6df' : '#ffd58a' } }, f))),
+                h('div', { className: 'text-sm text-gray-700 mt-3' }, 'Volg ons op Instagram: @humasol_vzw'));
+
+            // ---- welke slides hebben genoeg data? Wisselende slides komen vaak, de trage grafieken af en toe ----
+            const rankOf = (arr, r) => arr[r % Math.min(3, arr.length)];
+            const dyn = [];   // elk onderdeel: (ronde) => [id, element]
+            if (d.hotL.length) dyn.push((r) => { const x = rankOf(d.hotL, r); return ['hot' + r % 3, spot('op dreef', x.name, `${x.n} rondes in het laatste uur`, `gemiddeld ${mmss(x.times.reduce((a, b) => a + b, 0) / x.times.length / 1000)} per ronde`, x.times)]; });
+            if (laps.length >= 10) dyn.push(() => ['busy', busy()]);
+            if (d.streakL.length) dyn.push((r) => { const x = rankOf(d.streakL, r); return ['streak' + r % 3, spot('reeks onder 1:30', x.name, `${x.n}× na elkaar onder 1:30`, 'Elke groene stip was sneller dan 1:30', x.times, [x.from, x.to])]; });
+            if (laps.length >= 20) dyn.push(() => ['vs', vsPrev()]);
+            if (d.metroL.length) dyn.push((r) => { const x = rankOf(d.metroL, r); return ['metro' + r % 3, spot('de metronoom', x.name, `±${(x.sd / 1000).toFixed(1).replace('.', ',')} s spreiding`, `${x.n} rondes, gemiddeld ${mmss(x.avg / 1000)}: bijna elke ronde even snel`, x.times)]; });
+            if (d.nRunners >= 5) dyn.push(() => ['new', newbies()]);
+            if (d.improveL.length) dyn.push((r) => { const x = rankOf(d.improveL, r); return ['imp' + r % 3, spot('steeds sneller', x.name, `${mmss(x.first / 1000)} → ${mmss(x.best / 1000)}`, `${Math.round(x.gain / 1000)} s sneller dan de eerste ronde`, x.times)]; });
+            dyn.push(() => ['route', route()]);
+            if (laps.length >= 30) dyn.push(() => ['tempo', tempoHour()]);
+            dyn.push(() => ['countdown', countdown()]);
+            dyn.push(() => ['humasol', humasol()]);
+            const stat = [];
+            if (laps.length >= 5) stat.push(['speed', speed]);
+            if (d.agg.M.n >= 3 && d.agg.V.n >= 3) stat.push(['duel', duel]);
+            if (d.nRunners >= 5) stat.push(['dist', dist]);
+            if (laps.length >= 20) stat.push(['clock', clock]);
+            // volgorde: 3 wisselende slides, dan 1 trage grafiek (steeds een andere), enzovoort
+            const k = idx, groupNo = Math.floor(k / 4), within = k % 4;
+            let cur;
+            if (within === 3 && stat.length) { const sl = stat[groupNo % stat.length]; cur = [sl[0], sl[1]()]; }
+            else { const dk = k - Math.floor((k + (stat.length ? 1 : 0)) / 4) * (stat.length ? 1 : 0); cur = dyn[dk % dyn.length](Math.floor(dk / dyn.length)); }
+            const SLIDE_MS = Number(new URLSearchParams(window.location.search).get('slidems')) || 11000;
 
             return h('div', { className: 'chart-card bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3 flex flex-col' },
-                h('div', { className: 'flex items-center justify-between border-b-2 pb-1 mb-2' },
-                    h('h3', { className: 'text-lg font-bold text-gray-800' }, 'Weetjes'),
-                    h('div', { className: 'flex gap-1' }, slides.map((sl, i) => h('span', { key: sl[0], style: { width: i === idx % slides.length ? 16 : 6, height: 6, borderRadius: 3, background: i === idx % slides.length ? '#f2a342' : '#d1d5db', transition: 'all .4s' } })))
+                h('div', { className: 'border-b-2 pb-1 mb-2' },
+                    h('div', { className: 'flex items-center justify-between' }, h('h3', { className: 'text-lg font-bold text-gray-800' }, 'Weetjes')),
+                    h('div', { key: 't' + idx, style: { height: 4, marginTop: 4, background: '#f2a342', borderRadius: 2, width: '0%', animation: `weetBar ${SLIDE_MS}ms linear forwards` } })
                 ),
-                h('div', { key: cur[0], className: 'flex flex-col justify-center overflow-hidden', style: { height: 330, animation: 'swapIn .6s cubic-bezier(.2,.8,.2,1) both' } }, cur[1])
+                h('div', { key: cur[0] + idx, className: 'flex flex-col justify-center overflow-hidden', style: { height: 330, animation: 'swapIn .6s cubic-bezier(.2,.8,.2,1) both' } }, cur[1])
             );
         };
 
