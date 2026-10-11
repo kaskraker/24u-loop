@@ -738,13 +738,14 @@
         // Het oranje stuk is waar de loper waarschijnlijk zit (bereik), het lichte stuk is al gelopen.
         const TRACK = { L: 150, r: 42, cxL: 55, cxR: 205, cy: 70 };
         const TRACK_PATH = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 13 70';
-        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '0 0 260 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
+        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '-80 0 340 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#17120d', strokeWidth: 26, strokeLinejoin: 'round' }),
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#ffffff', strokeWidth: 17 }),
             h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 17, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.55 }),
             h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#e8590c', strokeWidth: 17, strokeLinecap: 'butt', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
             h('line', { x1: 0, y1: 70, x2: 26, y2: 70, stroke: '#17120d', strokeWidth: 5 }),
-            h('text', { x: 36, y: 74, fontSize: 11, fontWeight: 800, fill: '#17120d' }, 'START'),
+            // het Humasol-icoon links van de piste: zo staat ook de stand opgesteld
+            h('svg', { x: -78, y: 41, width: 66, height: 57, viewBox: '0 0 490 425' }, h('image', { href: 'humasol_logo.png', width: 1537, height: 425 })),
             label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
@@ -898,7 +899,7 @@
                         h(LiveClock, { startTime, running, format: formatTime, className: 'text-5xl font-mono font-bold text-orange-600 mt-1' }),
                         n > 0 && h('div', { className: 'text-xs text-gray-500 mt-1' }, `Verwacht ≈ ${formatTimeSimple(expected)}`)
                     ),
-                    h('div', { style: { width: 230, flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
+                    h('div', { style: { width: 300, flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
                 )
             );
         };
@@ -1078,15 +1079,20 @@ function predictNext(times, gender, restMs) {
                     tile('Gemiddeld tempo', pace, `min/km · ${kmh ? kmh.toFixed(1) : '–'} km/u`, '#0891b2')
                 ),
                 h('div', { className: 'grid grid-cols-2 gap-2 mb-2' }, record('Snelste ronde', best), record('Snelste laatste uur', bestHour)),
-                h('div', { className: 'keep-light rounded-lg p-2', style: { background: '#d9f7d0', border: '2px solid #17120d' } },
-                    h('div', { className: 'flex items-baseline justify-between' },
-                        h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, 'Samen gelopen'),
-                        h('div', { className: 'text-2xl font-extrabold text-gray-900' }, `${km.toFixed(1)} km`)
-                    ),
-                    h('div', { className: 'text-sm font-semibold text-gray-800' }, `= ${(km / 42.195).toFixed(1).replace('.', ',')} marathons`),
-                    h('div', { className: 'text-xs text-gray-600' }, city ? `ongeveer ${city.label} (${city.km} km)` : (nextCity ? `nog ${Math.ceil(nextCity.km - km)} km tot Brussel` : '')),
-                    nextCity && city && h('div', { className: 'text-xs text-gray-500' }, `Volgende: ${nextCity.label.replace('Leuven → ', '')} over ${Math.ceil(nextCity.km - km)} km`)
-                )
+                (() => {
+                    const span = city && nextCity ? Math.max(1, nextCity.km - city.km) : 0, pct = span ? Math.min(100, Math.max(4, (km - city.km) / span * 100)) : 0;
+                    return h('div', { className: 'keep-light rounded-lg p-3', style: { background: '#fff6df', border: '3px solid #17120d' } },
+                        h('div', { className: 'flex items-center justify-between gap-3' },
+                            h('div', null,
+                                h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, 'Samen gelopen'),
+                                h('div', { className: 'text-4xl font-extrabold leading-none', style: { color: '#e8590c' } }, `${km.toFixed(1).replace('.', ',')} km`)),
+                            h('div', { className: 'text-right' },
+                                h('div', { className: 'text-lg font-extrabold leading-tight text-gray-900' }, `${(km / 42.195).toFixed(1).replace('.', ',')} marathons`),
+                                h('div', { className: 'text-sm font-semibold text-gray-700' }, city ? `ongeveer ${city.label.replace(' → ', ' tot ')}` : (nextCity ? `nog ${Math.ceil(nextCity.km - km)} km tot Brussel` : '')))),
+                        nextCity && city && h('div', { className: 'mt-2' },
+                            h('div', { style: { height: 12, border: '2px solid #17120d', borderRadius: 999, background: '#fff', overflow: 'hidden' } }, h('div', { style: { width: pct + '%', height: '100%', background: '#f2a342', borderRight: '2px solid #17120d' } })),
+                            h('div', { className: 'text-xs font-semibold text-gray-700 mt-1' }, `Volgende halte: ${nextCity.label.replace('Leuven → ', '')}, nog ${Math.ceil(nextCity.km - km)} km`)));
+                })()
             );
         };
 
@@ -3564,7 +3570,7 @@ function predictNext(times, gender, restMs) {
                                         className: `text-xs sm:text-sm transition-colors ${
                                             darkMode ? 'text-gray-400' : 'text-humasol-gray'
                                         }` 
-                                    }, '24 uur · 20:00 tot 20:00')
+                                    }, 'Dinsdag 20:00 - Woensdag 20:00')
                                 ),
                                 // Connection status indicator
                                 h('div', { className: 'flex items-center gap-2' },
