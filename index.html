@@ -827,7 +827,9 @@ function lapTileStyle(n) {
                 h('style', null, '@keyframes swapGlow { 0% { box-shadow: 0 0 0 0 rgba(234,88,12,.5); } 100% { box-shadow: 0 0 0 26px rgba(234,88,12,0); } }'),
                 // zachte lichtpuls rond de kaart bij elke nieuwe loper
                 h('div', { key: 'glow' + swapKey, style: { position: 'absolute', inset: -4, borderRadius: 8, pointerEvents: 'none', animation: 'swapGlow .9s ease-out 1' } }),
-                h('div', { className: 'relative text-sm font-bold tracking-wider uppercase text-orange-600' }, crown ? `Nu aan het lopen · ${crown}` : 'Nu aan het lopen'),
+                h('div', { className: 'relative inline-flex items-center gap-2 rounded-full px-3 py-0.5 text-xs font-extrabold tracking-wider uppercase', style: { background: '#fff', border: '3px solid #17120d', color: '#17120d' } },
+                    h('span', { className: 'relative flex h-2.5 w-2.5' }, h('span', { className: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75' }), h('span', { className: 'relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500' })),
+                    crown ? `Nu aan het lopen · ${crown}` : 'Nu aan het lopen'),
                 h('div', { className: 'relative flex items-center gap-3 mt-1' },
                     h('div', { key: swapKey, className: 'flex-1 min-w-0', style: { animation: 'swapIn .5s cubic-bezier(.2,.8,.2,1) 1' } },
                         h('div', { className: 'flex items-center gap-2 min-w-0' },

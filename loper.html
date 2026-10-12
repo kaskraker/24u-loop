@@ -70,6 +70,7 @@
   .celeb .conf { position: absolute; top: -14px; width: 10px; height: 16px; border: 2px solid var(--ink); border-radius: 2px; animation: confFall 2.6s ease-in infinite; }
   @keyframes confFall { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(420px) rotate(540deg); opacity: .9; } }
   @keyframes tierGlow { 0%, 100% { box-shadow: 5px 5px 0 var(--ink); } 50% { box-shadow: 0 0 0 8px rgba(232,89,12,.3), 5px 5px 0 var(--ink); } }
+  @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
   @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
   .foot { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 14px; }
@@ -320,7 +321,7 @@ function nowCard() {
   const topMost = SUM && SUM.top && SUM.top.most && SUM.top.most[0];
   const crown = SUM && SUM.record && SUM.record.name && SUM.record.name === active.runner.runnerName ? 'Recordhouder' : (topMost && topMost.id === rid && topMost.n >= 4 ? 'Koploper' : '');
   const svgI = (d, s) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="flex:none"><path d="${d}" fill="#ffd23f" stroke="#17120d" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
-  return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">Nu aan het lopen${crown ? ' · ' + crown : ''}</div>
+  return `<div class="card" style="background:#ffd58a"><div class="k" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:999px;padding:1px 11px"><span style="width:9px;height:9px;border-radius:50%;background:#e24b4a;animation:livePulse 1.4s ease-in-out infinite"></span>Nu aan het lopen${crown ? ' · ' + crown : ''}</div>
     <div style="display:flex;align-items:center;gap:10px">
       <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${crown ? svgI(CROWN_D, 26) + ' ' : ''}${esc(active.runner.runnerName)}</div>
         <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">0:00.00</div></div>
@@ -351,28 +352,33 @@ function viewQueue() {
       }).join('')}</div>`;
 }
 
+function openAndScroll(list) {
+  const go = () => { const c = document.getElementById('lb-' + list); if (!c) return; const own = c.querySelector('[data-own]'); (own || c).scrollIntoView({ block: own ? 'center' : 'start' }); };
+  setTimeout(go, 80); setTimeout(go, 500);
+}
 let rankFocus = null;   // { list, id }: komt van een aangeklikte plaats of kroontje
+const lbOpen = {};      // welke klassementen zijn uitgeklapt (alle lopers i.p.v. de top 10)
+function fullList(key) {
+  const ok = (r) => r.best > 0 && r.totalLaps > 0;
+  if (key === 'fast') return runners.filter(ok).sort((x, y) => x.best - y.best).map((r) => ({ id: r.id, name: r.name, t: r.best }));
+  if (key === 'fastV') return runners.filter((r) => ok(r) && r.gender === 'V').sort((x, y) => x.best - y.best).map((r) => ({ id: r.id, name: r.name, t: r.best }));
+  if (key === 'fastM') return runners.filter((r) => ok(r) && r.gender === 'M').sort((x, y) => x.best - y.best).map((r) => ({ id: r.id, name: r.name, t: r.best }));
+  return runners.filter((r) => r.totalLaps > 0).sort((x, y) => y.totalLaps - x.totalLaps || x.totalTime - y.totalTime).map((r) => ({ id: r.id, name: r.name, n: r.totalLaps }));
+}
 function viewRank() {
   const T = (SUM && SUM.top) || { fast: [], fastM: [], fastV: [], most: [] };
   const bgs = ['background:#ffd23f;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)', 'background:#f2a342;border:3px solid var(--ink)', 'background:#ffd58a;border:3px solid var(--ink)'];
   const crownSvg = '<svg viewBox="0 0 24 24" width="22" height="22" style="flex:none"><path d="M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z" fill="#fff" stroke="#17120d" stroke-width="1.8" stroke-linejoin="round"/></svg>';
-  const row = (x, i, val, hit, rankLabel) => `<div class="rank" data-act="view" data-id="${esc(x.id)}" style="cursor:pointer;align-items:center;border-radius:12px;padding:7px 8px;margin-bottom:6px;${bgs[i] || 'background:#fff6df;border:3px solid transparent'}${hit ? ';outline:4px solid var(--deep);outline-offset:2px' : ''}"><b style="display:flex;justify-content:center;color:${i < 3 ? 'var(--ink)' : 'var(--muted)'}">${rankLabel || (i === 0 ? crownSvg : i + 1)}</b><div class="nm" style="font-weight:${i < 3 ? 800 : 700}">${esc(x.name)}${hit ? '<span class="badge">jij</span>' : ''}</div><div class="v" style="font-size:${i < 3 ? 19 : 17}px">${val(x)}</div></div>`;
-  const card = (key, title, sub, arr, val, own) => {
-    const f = rankFocus && rankFocus.list === key ? rankFocus.id : '';
-    const inTop = f && arr.some((x) => x.id === f);
-    return `<div class="card" id="lb-${key}"><h2>${title} ${sub ? `<small>${sub}</small>` : ''}</h2>${arr.length ? arr.map((x, i) => row(x, i, val, f && x.id === f)).join('') : '<div class="empty">Nog geen data</div>'}${f && !inTop && own ? `<div style="text-align:center;color:var(--muted);font-weight:700;margin:2px 0 6px">···</div>${own}` : ''}</div>`;
+  const row = (x, i, val, hit, rank) => `<div class="rank" ${hit ? 'data-own="1" ' : ''}data-act="view" data-id="${esc(x.id)}" style="cursor:pointer;align-items:center;border-radius:12px;padding:7px 8px;margin-bottom:6px;${rank <= 3 ? bgs[rank - 1] : 'background:#fff6df;border:3px solid transparent'}${hit ? ';outline:4px solid var(--deep);outline-offset:2px' : ''}"><b style="display:flex;justify-content:center;min-width:26px;color:${rank <= 3 ? 'var(--ink)' : 'var(--muted)'}">${rank === 1 ? crownSvg : rank}</b><div class="nm" style="font-weight:${rank <= 3 ? 800 : 700}">${esc(x.name)}${hit ? '<span class="badge">jij</span>' : ''}</div><div class="v" style="font-size:${rank <= 3 ? 19 : 17}px">${val(x)}</div></div>`;
+  const card = (key, title, sub, top, val) => {
+    const open = !!lbOpen[key], arr = open ? fullList(key) : top, f = rankFocus && rankFocus.list === key ? rankFocus.id : '';
+    const total = open ? arr.length : fullList(key).length;
+    // gelijke tijden of rondes krijgen dezelfde plaats
+    const rows = arr.length ? (() => { let rk = 0, prev; return arr.map((x, i) => { const kv = x.t !== undefined ? x.t : x.n; if (i === 0 || kv !== prev) rk = i + 1; prev = kv; return row(x, i, val, (me && x.id === me) || (f && x.id === f), rk); }).join(''); })() : '<div class="empty">Nog geen data</div>';
+    const toggle = total > 10 ? `<button class="link" data-act="lbtoggle" data-list="${key}" style="display:block;margin:2px auto 0;font-size:13px;color:var(--muted)">${open ? 'Toon minder ▴' : `Toon alle ${total} ▾`}</button>` : '';
+    return `<div class="card" id="lb-${key}"><h2>${title} ${sub ? `<small>${sub}</small>` : ''}</h2>${rows}${toggle}</div>`;
   };
-  // eigen rij onderaan als de loper niet in de top 10 staat
-  let ownMost = '', ownFast = '';
-  if (rankFocus) {
-    const r = runners.find((x) => x.id === rankFocus.id);
-    if (r) {
-      const mine = lapsOf(r.id), n = mine.length || r.totalLaps || 0, best = mine.length ? Math.min(...mine.map((l) => l.time)) : (r.best || 0);
-      if (n) ownMost = row({ id: r.id, name: r.name }, 9, () => n, true, '#' + (runners.filter((x) => x.totalLaps > n).length + 1));
-      if (best) ownFast = row({ id: r.id, name: r.name }, 9, () => mmss(best), true, '#' + (runners.filter((x) => x.best > 0 && x.best < best).length + 1));
-    }
-  }
-  return card('fast', 'Snelste rondes', 'algemeen', T.fast, (x) => mmss(x.t), ownFast) + card('fastV', 'Snelste rondes', 'vrouwen', T.fastV, (x) => mmss(x.t), '') + card('fastM', 'Snelste rondes', 'mannen', T.fastM, (x) => mmss(x.t), '') + card('most', 'Meeste rondes', '', T.most, (x) => x.n, ownMost);
+  return card('fast', 'Snelste rondes', 'algemeen', T.fast, (x) => mmss(x.t)) + card('fastV', 'Snelste rondes', 'vrouwen', T.fastV, (x) => mmss(x.t)) + card('fastM', 'Snelste rondes', 'mannen', T.fastM, (x) => mmss(x.t)) + card('most', 'Meeste rondes', '', T.most, (x) => x.n);
 }
 
 let lastParts = [], lastTab = '';
@@ -471,7 +477,8 @@ document.addEventListener('click', (e) => {
   if (a === 'pickme') { me = t.dataset.id; viewId = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem(ME_KEY); } catch (e) {} render(true); }
   if (a === 'share') share();
-  if (a === 'rankgo') { rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; render(true); const el = document.getElementById('lb-' + t.dataset.list); if (el) { const go = () => { const e2 = document.getElementById('lb-' + (rankFocus && rankFocus.list)); if (e2) e2.scrollIntoView({ block: 'start' }); }; setTimeout(go, 80); setTimeout(go, 500); } return; }
+  if (a === 'lbtoggle') { const k = t.dataset.list; lbOpen[k] = !lbOpen[k]; if (lbOpen[k] && typeof refreshIndex === 'function') refreshIndex(); render(true); if (!lbOpen[k]) { const c = document.getElementById('lb-' + k); if (c) c.scrollIntoView({ block: 'start' }); } return; }
+  if (a === 'rankgo') { rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; lbOpen[t.dataset.list] = true; if (typeof refreshIndex === 'function') refreshIndex(); render(true); openAndScroll(t.dataset.list); return; }
   if (a === 'crown') {
     e.stopPropagation(); const id = t.dataset.id, T = SUM && SUM.top, r = getR(id) || {}, name = esc(r.name || '');
     const rec = T && T.fast && T.fast[0] && T.fast[0].id === id, list = rec ? 'fast' : 'most';
@@ -479,7 +486,7 @@ document.addEventListener('click', (e) => {
     $('overlay').innerHTML = `<div class="modal" data-act="closewfa"><div class="box"><h3>${crownIcon(30)} ${rec ? 'Recordhouder' : 'Koploper'}</h3><p>${txt}</p><p>Het kroontje gaat naar wie de snelste ronde heeft of (vanaf 4 rondes) de meeste rondes loopt.</p><div class="acts"><button class="btn" data-act="rankgo-close" data-list="${list}" data-id="${esc(id)}">Bekijk het klassement</button><button class="btn ghost" data-act="closewfa">Sluiten</button></div></div></div>`;
     return;
   }
-  if (a === 'rankgo-close') { $('overlay').innerHTML = ''; rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; render(true); const el = document.getElementById('lb-' + t.dataset.list); if (el) { const go = () => { const e2 = document.getElementById('lb-' + (rankFocus && rankFocus.list)); if (e2) e2.scrollIntoView({ block: 'start' }); }; setTimeout(go, 80); setTimeout(go, 500); } return; }
+  if (a === 'rankgo-close') { $('overlay').innerHTML = ''; rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; lbOpen[t.dataset.list] = true; if (typeof refreshIndex === 'function') refreshIndex(); render(true); openAndScroll(t.dataset.list); return; }
   if (a === 'qall') { showAllQ = !showAllQ; render(true); }
 });
 document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } if (e.target.id === 'sq') { squery = e.target.value; render(false); } });
@@ -505,6 +512,7 @@ function startLean() {
   metaDoc('summary').onSnapshot((s) => { if (s.exists) { SUM = s.data(); lastServer = Date.now(); later(); } }, onErr);
   let idxAt = 0;
   const loadIndex = () => { idxAt = Date.now(); metaDoc('runnerIndex').get().then((s) => { if (s.exists) { applyIndex(s.data().list || []); later(); } }).catch(() => {}); };
+  window.refreshIndex = () => { if (Date.now() - idxAt > 60000) loadIndex(); };   // bij uitklappen van een klassement: verse gegevens
   loadIndex(); setInterval(loadIndex, 10 * 60e3);
   window.addEventListener('focus', () => { if (Date.now() - idxAt > 120000) loadIndex(); });
 }
