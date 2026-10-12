@@ -829,24 +829,24 @@ function lapTileStyle(n) {
                 h('style', null, '@keyframes swapGlow { 0% { box-shadow: 0 0 0 0 rgba(234,88,12,.5); } 100% { box-shadow: 0 0 0 26px rgba(234,88,12,0); } }'),
                 // zachte lichtpuls rond de kaart bij elke nieuwe loper
                 h('div', { key: 'glow' + swapKey, style: { position: 'absolute', inset: -4, borderRadius: 8, pointerEvents: 'none', animation: 'swapGlow .9s ease-out 1' } }),
-                h('div', { className: 'relative inline-flex items-center gap-2 rounded-full px-3 py-0.5 text-xs font-extrabold tracking-wider uppercase', style: { background: '#fff', border: '3px solid #17120d', color: '#17120d' } },
+                h('div', { className: 'relative inline-flex items-center gap-2 rounded-full px-3 py-0.5 font-extrabold tracking-wider uppercase', style: { background: '#fff', border: '3px solid #17120d', color: '#17120d', fontSize: 'clamp(12px, 1vw, 22px)' } },
                     h('span', { className: 'relative flex h-2.5 w-2.5' }, h('span', { className: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75' }), h('span', { className: 'relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500' })),
                     crown ? `Nu aan het lopen · ${crown}` : 'Nu aan het lopen'),
                 h('div', { className: 'relative flex items-center gap-3 mt-1' },
                     h('div', { key: swapKey, className: 'flex-1 min-w-0', style: { animation: 'swapIn .5s cubic-bezier(.2,.8,.2,1) 1' } },
                         h('div', { className: 'flex items-center gap-2 min-w-0' },
-                            crown && h('svg', { viewBox: '0 0 24 24', width: 38, height: 38, style: { flexShrink: 0, animation: 'crownBob 2.2s ease-in-out infinite' }, 'aria-label': crown }, h('path', { d: CROWN, fill: '#ffd23f', stroke: '#17120d', strokeWidth: 1.6, strokeLinejoin: 'round' })),
-                            h('div', { className: 'text-3xl font-extrabold text-gray-900 truncate' }, activeRunner.runnerName),
+                            crown && h('svg', { viewBox: '0 0 24 24', style: { width: 'clamp(34px, 2.8vw, 64px)', height: 'clamp(34px, 2.8vw, 64px)', flexShrink: 0, animation: 'crownBob 2.2s ease-in-out infinite' }, 'aria-label': crown }, h('path', { d: CROWN, fill: '#ffd23f', stroke: '#17120d', strokeWidth: 1.6, strokeLinejoin: 'round' })),
+                            h('div', { className: 'font-extrabold text-gray-900 truncate leading-tight', style: { fontSize: 'clamp(30px, 2.7vw, 64px)' } }, activeRunner.runnerName),
                         ),
-                        h(LiveClock, { startTime, running, format: formatTime, className: 'font-extrabold leading-none mt-1', style: { fontSize: 'clamp(48px, 4.2vw, 84px)', color: '#17120d' } }),
+                        h(LiveClock, { startTime, running, format: formatTime, className: 'font-extrabold leading-none mt-1', style: { fontSize: 'clamp(52px, 5vw, 120px)', color: '#17120d' } }),
                         h('div', { className: 'flex gap-2 mt-3' },
                             tiles.map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#4a3b2a', shadow: 'none' };
-                                return h('div', { key: k, className: 'rounded-lg px-3 py-1', style: { border: '3px solid #17120d', background: ts.bg, boxShadow: ts.shadow, transition: 'background .6s' } },
-                                    h('div', { className: 'text-[10px] font-extrabold uppercase tracking-wide', style: { color: ts.sub } }, k),
-                                    h('div', { className: 'text-2xl font-extrabold leading-tight', style: { color: ts.fg } }, v)); })
+                                return h('div', { key: k, className: 'rounded-lg', style: { border: '3px solid #17120d', background: ts.bg, boxShadow: ts.shadow, transition: 'background .6s', padding: 'clamp(4px, .4vw, 10px) clamp(12px, 1vw, 26px)' } },
+                                    h('div', { className: 'font-extrabold uppercase tracking-wide', style: { color: ts.sub, fontSize: 'clamp(10px, .8vw, 17px)' } }, k),
+                                    h('div', { className: 'font-extrabold leading-tight', style: { color: ts.fg, fontSize: 'clamp(24px, 2vw, 48px)' } }, v)); })
                         )
                     ),
-                    h('div', { style: { width: 320, flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
+                    h('div', { style: { width: 'clamp(320px, 24vw, 640px)', flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
                 )
             );
         };
@@ -1508,7 +1508,7 @@ function predictNext(times, gender, restMs) {
             if (field.length || row.length) { row.push(field); rows.push(row); }
             return rows;
         };
-        const FEMALE_FIRST_NAMES = new Set(('alina amarentia amelie ann anna annelien antonia astrid berbel camille cara caro clara dejana dina eef elena eline elisabeth elise ella emily emke emma erica ester evelien evi felien fien flore florine fran frances gerlinde giofka hannah hanne hazel heleen helena ine irene jade jasmin jing jinte jitte jorunn julia julie kaat katrijn kiara laura lena lene lisa livia loes lola lore lotte louise maayke magalie margaux margot marie marlies marthe merel michele mila milena mirte myriam nele noemie noor nore pauline roos saar sarah shannon sien silke sofie sophie sus tine trui valentine wies').split(' '));
+        const FEMALE_FIRST_NAMES = new Set(('alina amarentia amelie ann anna annelien antonia astrid berbel camille cara caro clara dejana dina eef elena eline elisabeth elise ella emily emke emma erica ester evelien evi felien fien flore florine fran frances gerlinde giofka hannah hanne hazel heleen helena ine irene jade jasmin jing jinte jitte jorunn julia julie kaat katrijn kiara laura lena lene lisa livia loes lola lore lotte louise maayke magalie margaux margot marie marlies marthe merel michele mila milena mirte myriam nele noemie noor nore pauline roos saar sarah shannon sien silke sofie sophie sus tine trui valentine').split(' '));
         // Gender afleiden uit de voornaam (enkel voor testdata; het CSV-bestand bevat geen gender)
         const guessGender = (firstName) => FEMALE_FIRST_NAMES.has(nameKey(firstName)) ? 'V' : 'M';
 
