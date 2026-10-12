@@ -266,8 +266,11 @@ function profile(r, self) {
   const best = times.length ? Math.min(...times) : (r.best || 0), avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : (r.totalLaps ? r.totalTime / r.totalLaps : 0);
   const n = my.length || r.totalLaps || 0;
   const overall = SUM && SUM.record ? SUM.record.t : 0;
-  const lapRank = runners.filter((x) => x.totalLaps > n).length + 1;
-  const bestRank = best ? runners.filter((x) => x.best > 0 && x.best < best).length + 1 : 0;
+  // plaats: iedereen vergelijken op dezelfde gegevens (de lijst van alle lopers), zodat gelijke aantallen rondes dezelfde plaats krijgen
+  if (typeof refreshIndex === 'function') refreshIndex();
+  const rn = r.totalLaps || n, rb = r.best || best;
+  const lapRank = runners.filter((x) => x.totalLaps > rn).length + 1;
+  const bestRank = rb ? runners.filter((x) => x.best > 0 && x.best < rb).length + 1 : 0;
   return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:26px;font-weight:800">${crownOf(r.id, 26)}${esc(r.name)}</b>${self ? '<button class="link" data-act="other">Andere loper</button>' : '<button class="link" data-act="back">← Terug</button>'}</div>
     ${self ? '' : `<button class="btn full" data-act="pickme" data-id="${esc(r.id)}">Dit ben ik</button>`}
     ${statusCard(r, self)}

@@ -697,7 +697,9 @@
             : idx === 1 ? { background: '#f2a342', border: '3px solid #17120d' }
             : idx === 2 ? { background: '#ffd58a', border: '3px solid #17120d' }
             : { background: '#fff6df', border: '3px solid transparent' };
-        const lbRow = ({ idx, id, val, name, sub, recent, value, badge }) => h('div', { key: id, 'data-flip': id, 'data-val': val, className: 'flex items-center justify-between gap-2 px-2.5 rounded-lg', style: { ...lbRowStyle(idx), paddingTop: 7, paddingBottom: 7, color: '#17120d' } },
+        // plaats met gelijke plaatsen bij gelijke waarde (bv. vier lopers met 8 rondes staan allemaal op dezelfde plek)
+        const tieRank = (arr, i, f) => { let j = i; while (j > 0 && f(arr[j - 1]) === f(arr[i])) j--; return j + 1; };
+        const lbRow = ({ idx, rank, id, val, name, sub, recent, value, badge }) => { idx = (rank || idx + 1) - 1; return h('div', { key: id, 'data-flip': id, 'data-val': val, className: 'flex items-center justify-between gap-2 px-2.5 rounded-lg', style: { ...lbRowStyle(idx), paddingTop: 7, paddingBottom: 7, color: '#17120d' } },
             h('div', { className: 'flex items-center gap-2 flex-1 min-w-0' },
                 idx === 0 ? h('svg', { viewBox: '0 0 24 24', width: 26, height: 26, style: { flexShrink: 0 }, 'aria-label': '#1' }, h('path', { d: LB_CROWN, fill: '#fff', stroke: '#17120d', strokeWidth: 1.8, strokeLinejoin: 'round' }))
                     : h('span', { className: 'font-extrabold flex-shrink-0 text-center', style: { width: 26, fontSize: idx < 3 ? 16 : 14, color: idx < 3 ? '#17120d' : '#8b7a63' } }, `#${idx + 1}`),
@@ -705,7 +707,7 @@
                 h('div', { className: 'min-w-0 flex-1' },
                     h('div', { className: 'truncate leading-tight ' + (idx < 3 ? 'font-extrabold' : 'font-bold'), style: { fontSize: idx < 3 ? 17 : 15 } }, name),
                     h('div', { className: 'leading-tight ' + (recent ? 'font-extrabold' : 'font-medium'), style: { fontSize: 12, color: recent ? '#9a2a00' : '#5b4a3a' } }, sub))),
-            h('span', { className: 'font-extrabold font-mono flex-shrink-0', style: { fontSize: idx < 3 ? 20 : 17 } }, value));
+            h('span', { className: 'font-extrabold font-mono flex-shrink-0', style: { fontSize: idx < 3 ? 20 : 17 } }, value)); };
         const FlipBox = ({ className, children, flash = false }) => {
             const ref = React.useRef(null), prev = React.useRef(null), vals = React.useRef({});
             const sig = React.Children.toArray(children).map(c => c && (c.key + ':' + (c.props && c.props['data-val'] !== undefined ? c.props['data-val'] : ''))).join('|');
@@ -4730,7 +4732,7 @@ function predictNext(times, gender, restMs) {
                                         fastestLapsWomen.length === 0 ? h('div', { className: 'text-center text-gray-400 py-4 text-xs' }, 'Nog geen data') :
                                         h(FlipBox, { className: 'space-y-1.5', flash: true },
                                             fastestLapsWomen.slice(0, DISPLAY_TOP_N).map((lap, idx) =>
-                                                lbRow({ idx, id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: formatTimeSimple(lap.time), badge: rankBadge('fastestWomen', lap.id) })
+                                                lbRow({ idx, rank: tieRank(fastestLapsWomen, idx, x => x.time), id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: formatTimeSimple(lap.time), badge: rankBadge('fastestWomen', lap.id) })
                                             )
                                         )
                                     ),
@@ -4741,7 +4743,7 @@ function predictNext(times, gender, restMs) {
                                         fastestLapsMen.length === 0 ? h('div', { className: 'text-center text-gray-400 py-4 text-xs' }, 'Nog geen data') :
                                         h(FlipBox, { className: 'space-y-1.5', flash: true },
                                             fastestLapsMen.slice(0, DISPLAY_TOP_N).map((lap, idx) =>
-                                                lbRow({ idx, id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: formatTimeSimple(lap.time), badge: rankBadge('fastestMen', lap.id) })
+                                                lbRow({ idx, rank: tieRank(fastestLapsMen, idx, x => x.time), id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: formatTimeSimple(lap.time), badge: rankBadge('fastestMen', lap.id) })
                                             )
                                         )
                                     ),
@@ -4758,7 +4760,7 @@ function predictNext(times, gender, restMs) {
                                                     ? runnerLaps.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]
                                                     : null;
                                                 
-                                                return lbRow({ idx, id: runner.id, val: runner.laps, name: runner.name, sub: lastLap ? `Laatste om ${clockOf(lastLap.timestamp)}` : '', recent: lastLap && isRecent(lastLap.timestamp), value: runner.laps, badge: rankBadge('mostLapsOverall', runner.id) });
+                                                return lbRow({ idx, rank: tieRank(lapsByRunner, idx, x => x.laps), id: runner.id, val: runner.laps, name: runner.name, sub: lastLap ? `Laatste om ${clockOf(lastLap.timestamp)}` : '', recent: lastLap && isRecent(lastLap.timestamp), value: runner.laps, badge: rankBadge('mostLapsOverall', runner.id) });
                                             })
                                         )
                                     ),
