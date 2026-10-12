@@ -489,7 +489,8 @@ function liveTick() {
     const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo);
   });
 }
-setInterval(liveTick, 100);
+(function frame() { liveTick(); requestAnimationFrame(frame); })();   // soepel: elk beeld bijwerken (zoals het grote scherm)
+setInterval(liveTick, 250);   // vangnet als het venster op de achtergrond staat
 setInterval(() => { const ae = document.activeElement && document.activeElement.id; if (ae !== 'q' && ae !== 'sq') render(true); }, 10000);
 render(true);
 </script>
