@@ -21,13 +21,14 @@
   header .sub { font-size: 12px; font-weight: 500; }
   button.euro { font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
   button.euro:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
-  .euro { margin-top: 10px; display: inline-flex; align-items: center; gap: 10px; background: #bfe8f6; border: 3px solid var(--ink); border-radius: 14px; padding: 6px 12px; box-shadow: 3px 3px 0 var(--ink); }
+  .euro { margin-top: 10px; display: inline-flex; align-items: center; gap: 10px; background: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 6px 12px; box-shadow: 3px 3px 0 var(--ink); }
   .euro b { font-size: 22px; font-weight: 800; } .euro span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
   nav { display: flex; gap: 8px; padding: 12px 20px 8px 14px; position: sticky; top: 0; background: var(--butter); z-index: 5; }
   nav button { flex: 1; min-width: 0; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 4px; border: 3px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
   nav button.on { background: var(--orange); }
   main { padding: 12px 20px 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; max-width: 560px; margin: 0 auto; }
   .card { background: #fff; border: 3px solid var(--ink); border-radius: 16px; box-shadow: 5px 5px 0 var(--ink); padding: 14px; }
+  .card[id^=lb-] { scroll-margin-top: 78px; }
   .card h2 { font-size: 18px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline; }
   .card h2 small { font-size: 12px; font-weight: 500; color: var(--muted); }
   .status { border-radius: 16px; border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); padding: 16px; text-align: center; background: #ffd58a; }
@@ -274,8 +275,8 @@ function profile(r, self) {
       <div class="tile"><div class="k">Afstand</div><div class="v">${(n * 0.515).toFixed(2).replace('.', ',')} km</div></div>
       <div class="tile"><div class="k">Snelste ronde</div><div class="v">${best ? mmss(best) : '–'}</div></div>
       <div class="tile"><div class="k">Gemiddeld</div><div class="v">${avg ? mmss(avg) : '–'}</div></div>
-      <div class="tile"><div class="k">Plaats (meeste rondes)</div><div class="v">${n ? '#' + lapRank : '–'}</div></div>
-      <div class="tile"><div class="k">Plaats (snelste ronde)</div><div class="v">${best ? '#' + bestRank : '–'}</div></div>
+      <div class="tile" ${n ? `data-act="rankgo" data-list="most" data-id="${esc(r.id)}" style="cursor:pointer"` : ''}><div class="k">Plaats (meeste rondes)${n ? ' ›' : ''}</div><div class="v">${n ? '#' + lapRank : '–'}</div></div>
+      <div class="tile" ${best ? `data-act="rankgo" data-list="fast" data-id="${esc(r.id)}" style="cursor:pointer"` : ''}><div class="k">Plaats (snelste ronde)${best ? ' ›' : ''}</div><div class="v">${best ? '#' + bestRank : '–'}</div></div>
       <div class="tile wide"><div class="k">${self ? 'Jij liep' : 'Liep'} bij voor Water for All</div><div class="v">€ ${n * EUR_PER_LAP}</div></div></div>
       ${self && n ? `<button class="btn full" style="margin-top:12px" data-act="share">Deel mijn resultaat</button>` : ''}</div>
     ${times.length >= 2 ? `<div class="card"><h2>${self ? 'Jouw' : 'Het'} tempo</h2>${tempoSvg(times)}</div>` : ''}
@@ -307,7 +308,7 @@ function lapTileStyle(n) {
 }
 const CROWN_D = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
 const crownIcon = (s) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="flex:none;vertical-align:-3px"><path d="M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z" fill="#ffd23f" stroke="#17120d" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
-const crownOf = (id, s = 16) => { const T = SUM && SUM.top; if (!T) return ''; const rec = T.fast && T.fast[0] && T.fast[0].id === id, lead = T.most && T.most[0] && T.most[0].id === id && T.most[0].n >= 4; return rec || lead ? crownIcon(s) + ' ' : ''; };
+const crownOf = (id, s = 16) => { const T = SUM && SUM.top; if (!T) return ''; const rec = T.fast && T.fast[0] && T.fast[0].id === id, lead = T.most && T.most[0] && T.most[0].id === id && T.most[0].n >= 4; return rec || lead ? `<span data-act="crown" data-id="${esc(id)}" style="cursor:pointer" role="button" aria-label="Wat is dit kroontje?">${crownIcon(s)}</span> ` : ''; };
 function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
@@ -350,15 +351,28 @@ function viewQueue() {
       }).join('')}</div>`;
 }
 
+let rankFocus = null;   // { list, id }: komt van een aangeklikte plaats of kroontje
 function viewRank() {
   const T = (SUM && SUM.top) || { fast: [], fastM: [], fastV: [], most: [] };
   const bgs = ['background:#ffd23f;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)', 'background:#f2a342;border:3px solid var(--ink)', 'background:#ffd58a;border:3px solid var(--ink)'];
   const crownSvg = '<svg viewBox="0 0 24 24" width="22" height="22" style="flex:none"><path d="M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z" fill="#fff" stroke="#17120d" stroke-width="1.8" stroke-linejoin="round"/></svg>';
-  const list = (arr, val) => arr.length ? arr.map((x, i) => `<div class="rank" data-act="view" data-id="${esc(x.id)}" style="cursor:pointer;align-items:center;border-radius:12px;padding:7px 8px;margin-bottom:6px;${bgs[i] || 'background:#fff6df;border:3px solid transparent'}"><b style="display:flex;justify-content:center;color:${i < 3 ? 'var(--ink)' : 'var(--muted)'}">${i === 0 ? crownSvg : i + 1}</b><div class="nm" style="font-weight:${i < 3 ? 800 : 700}">${esc(x.name)}</div><div class="v" style="font-size:${i < 3 ? 19 : 17}px">${val(x)}</div></div>`).join('') : '<div class="empty">Nog geen data</div>';
-  return `<div class="card"><h2>Snelste rondes <small>algemeen</small></h2>${list(T.fast, (x) => mmss(x.t))}</div>
-    <div class="card"><h2>Snelste rondes <small>vrouwen</small></h2>${list(T.fastV, (x) => mmss(x.t))}</div>
-    <div class="card"><h2>Snelste rondes <small>mannen</small></h2>${list(T.fastM, (x) => mmss(x.t))}</div>
-    <div class="card"><h2>Meeste rondes</h2>${list(T.most, (x) => x.n)}</div>`;
+  const row = (x, i, val, hit, rankLabel) => `<div class="rank" data-act="view" data-id="${esc(x.id)}" style="cursor:pointer;align-items:center;border-radius:12px;padding:7px 8px;margin-bottom:6px;${bgs[i] || 'background:#fff6df;border:3px solid transparent'}${hit ? ';outline:4px solid var(--deep);outline-offset:2px' : ''}"><b style="display:flex;justify-content:center;color:${i < 3 ? 'var(--ink)' : 'var(--muted)'}">${rankLabel || (i === 0 ? crownSvg : i + 1)}</b><div class="nm" style="font-weight:${i < 3 ? 800 : 700}">${esc(x.name)}${hit ? '<span class="badge">jij</span>' : ''}</div><div class="v" style="font-size:${i < 3 ? 19 : 17}px">${val(x)}</div></div>`;
+  const card = (key, title, sub, arr, val, own) => {
+    const f = rankFocus && rankFocus.list === key ? rankFocus.id : '';
+    const inTop = f && arr.some((x) => x.id === f);
+    return `<div class="card" id="lb-${key}"><h2>${title} ${sub ? `<small>${sub}</small>` : ''}</h2>${arr.length ? arr.map((x, i) => row(x, i, val, f && x.id === f)).join('') : '<div class="empty">Nog geen data</div>'}${f && !inTop && own ? `<div style="text-align:center;color:var(--muted);font-weight:700;margin:2px 0 6px">···</div>${own}` : ''}</div>`;
+  };
+  // eigen rij onderaan als de loper niet in de top 10 staat
+  let ownMost = '', ownFast = '';
+  if (rankFocus) {
+    const r = runners.find((x) => x.id === rankFocus.id);
+    if (r) {
+      const mine = lapsOf(r.id), n = mine.length || r.totalLaps || 0, best = mine.length ? Math.min(...mine.map((l) => l.time)) : (r.best || 0);
+      if (n) ownMost = row({ id: r.id, name: r.name }, 9, () => n, true, '#' + (runners.filter((x) => x.totalLaps > n).length + 1));
+      if (best) ownFast = row({ id: r.id, name: r.name }, 9, () => mmss(best), true, '#' + (runners.filter((x) => x.best > 0 && x.best < best).length + 1));
+    }
+  }
+  return card('fast', 'Snelste rondes', 'algemeen', T.fast, (x) => mmss(x.t), ownFast) + card('fastV', 'Snelste rondes', 'vrouwen', T.fastV, (x) => mmss(x.t), '') + card('fastM', 'Snelste rondes', 'mannen', T.fastM, (x) => mmss(x.t), '') + card('most', 'Meeste rondes', '', T.most, (x) => x.n, ownMost);
 }
 
 let lastParts = [], lastTab = '';
@@ -441,7 +455,7 @@ async function share() {
 // ---------- events ----------
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
-  if (t.dataset.tab) { tab = t.dataset.tab; if (tab !== 'search') viewId = ''; render(true); return; }
+  if (t.dataset.tab) { rankFocus = null; tab = t.dataset.tab; if (tab !== 'search') viewId = ''; render(true); return; }
   const a = t.dataset.act;
   if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'wfa') {
@@ -457,6 +471,15 @@ document.addEventListener('click', (e) => {
   if (a === 'pickme') { me = t.dataset.id; viewId = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem(ME_KEY); } catch (e) {} render(true); }
   if (a === 'share') share();
+  if (a === 'rankgo') { rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; render(true); const el = document.getElementById('lb-' + t.dataset.list); if (el) { const go = () => { const e2 = document.getElementById('lb-' + (rankFocus && rankFocus.list)); if (e2) e2.scrollIntoView({ block: 'start' }); }; setTimeout(go, 80); setTimeout(go, 500); } return; }
+  if (a === 'crown') {
+    e.stopPropagation(); const id = t.dataset.id, T = SUM && SUM.top, r = getR(id) || {}, name = esc(r.name || '');
+    const rec = T && T.fast && T.fast[0] && T.fast[0].id === id, list = rec ? 'fast' : 'most';
+    const txt = rec ? `${name} heeft de snelste ronde van het hele event: <b>${mmss(T.fast[0].t)}</b>.` : `${name} heeft tot nu toe de meeste rondes gelopen: <b>${T.most[0].n}</b>.`;
+    $('overlay').innerHTML = `<div class="modal" data-act="closewfa"><div class="box"><h3>${crownIcon(30)} ${rec ? 'Recordhouder' : 'Koploper'}</h3><p>${txt}</p><p>Het kroontje gaat naar wie de snelste ronde heeft of (vanaf 4 rondes) de meeste rondes loopt.</p><div class="acts"><button class="btn" data-act="rankgo-close" data-list="${list}" data-id="${esc(id)}">Bekijk het klassement</button><button class="btn ghost" data-act="closewfa">Sluiten</button></div></div></div>`;
+    return;
+  }
+  if (a === 'rankgo-close') { $('overlay').innerHTML = ''; rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; render(true); const el = document.getElementById('lb-' + t.dataset.list); if (el) { const go = () => { const e2 = document.getElementById('lb-' + (rankFocus && rankFocus.list)); if (e2) e2.scrollIntoView({ block: 'start' }); }; setTimeout(go, 80); setTimeout(go, 500); } return; }
   if (a === 'qall') { showAllQ = !showAllQ; render(true); }
 });
 document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } if (e.target.id === 'sq') { squery = e.target.value; render(false); } });
