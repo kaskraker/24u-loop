@@ -52,7 +52,7 @@
   .lap .t { width: 48px; font-weight: 700; } .lap .n { flex: 1; font-weight: 600; color: var(--muted); } .lap .r { font-weight: 800; font-size: 19px; }
   .badge { font-size: 10px; font-weight: 800; border: 2px solid var(--ink); border-radius: 6px; padding: 1px 6px; background: #ffe27a; margin-left: 6px; }
   .empty { text-align: center; color: var(--muted); padding: 18px 0; font-weight: 500; }
-  .rank { display: flex; gap: 10px; padding: 6px 4px; border-bottom: 2px dashed #e5d3a8; } .rank:last-child { border: 0; } .rank b { width: 26px; } .rank .nm { flex: 1; font-weight: 600; } .rank .v { font-weight: 800; }
+  .rank { display: flex; gap: 10px; padding: 6px 4px; } .rank b { width: 26px; } .rank .nm { flex: 1; font-weight: 600; } .rank .v { font-weight: 800; }
   footer { max-width: 560px; margin: 8px auto 0; padding: 14px 20px 28px 14px; display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--muted); line-height: 1.4; border-top: 2px dashed #e5d3a8; }
   footer img { flex: none; }
   .modal { position: fixed; inset: 0; z-index: 100; background: rgba(23,18,13,.6); display: flex; align-items: center; justify-content: center; padding: 18px; animation: fadein .15s ease-out; }
@@ -350,7 +350,9 @@ function viewQueue() {
 
 function viewRank() {
   const T = (SUM && SUM.top) || { fast: [], fastM: [], fastV: [], most: [] };
-  const list = (arr, val) => arr.length ? arr.map((x, i) => `<div class="rank" data-act="view" data-id="${esc(x.id)}" style="cursor:pointer"><b>${i + 1}</b><div class="nm">${esc(x.name)}</div><div class="v">${val(x)}</div></div>`).join('') : '<div class="empty">Nog geen data</div>';
+  const bgs = ['background:#ffd23f;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)', 'background:#f2a342;border:3px solid var(--ink)', 'background:#ffd58a;border:3px solid var(--ink)'];
+  const crownSvg = '<svg viewBox="0 0 24 24" width="22" height="22" style="flex:none"><path d="M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z" fill="#fff" stroke="#17120d" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  const list = (arr, val) => arr.length ? arr.map((x, i) => `<div class="rank" data-act="view" data-id="${esc(x.id)}" style="cursor:pointer;align-items:center;border-radius:12px;padding:7px 8px;margin-bottom:6px;${bgs[i] || 'background:#fff6df;border:3px solid transparent'}"><b style="display:flex;justify-content:center;color:${i < 3 ? 'var(--ink)' : 'var(--muted)'}">${i === 0 ? crownSvg : i + 1}</b><div class="nm" style="font-weight:${i < 3 ? 800 : 700}">${esc(x.name)}</div><div class="v" style="font-size:${i < 3 ? 19 : 17}px">${val(x)}</div></div>`).join('') : '<div class="empty">Nog geen data</div>';
   return `<div class="card"><h2>Snelste rondes <small>algemeen</small></h2>${list(T.fast, (x) => mmss(x.t))}</div>
     <div class="card"><h2>Snelste rondes <small>vrouwen</small></h2>${list(T.fastV, (x) => mmss(x.t))}</div>
     <div class="card"><h2>Snelste rondes <small>mannen</small></h2>${list(T.fastM, (x) => mmss(x.t))}</div>
