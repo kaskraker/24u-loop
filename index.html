@@ -752,6 +752,7 @@
 // Kleur van het rondes-vakje: loopt gradueel van crème (ronde 1) via geel en oranje naar diep oranje en uiteindelijk zwart met goud (ronde 14+)
 const TILE_STOPS = [[1, [255, 246, 223]], [4, [255, 226, 122]], [7, [242, 163, 66]], [10, [232, 89, 12]], [14, [23, 18, 13]]];
 function lapTileStyle(n) {
+  return { bg: '#fff6df', fg: '#17120d', sub: '#4a3b2a', shadow: 'none' };   // tijdelijk: geen kleurverloop (keuze volgt)
   const c = Math.max(1, Math.min(14, n)); let i = 0; while (i < TILE_STOPS.length - 2 && c > TILE_STOPS[i + 1][0]) i++;
   const [a, ca] = TILE_STOPS[i], [b, cb] = TILE_STOPS[i + 1], t = (c - a) / (b - a), rgb = ca.map((v, k) => Math.round(v + (cb[k] - v) * t));
   const dark = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) < 150, top = n >= 14;
@@ -795,7 +796,7 @@ function lapTileStyle(n) {
             const maxCnt = Math.max(0, ...Object.values(cnt));
             const crown = new URLSearchParams(window.location.search).get('testcrown') ? 'Recordhouder' : recBest.id === activeRunner.runnerId ? 'Recordhouder' : (maxCnt >= 4 && cnt[activeRunner.runnerId] === maxCnt ? 'Koploper' : null);
             const CROWN = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
-            const tiles = lapNo === 1 ? [['Eerste ronde', 'Succes!']] : [['Ronde', String(lapNo)], ['Verwacht', formatTimeSimple(expected)]];
+            const tiles = lapNo === 1 ? [['Ronde', '1']] : [['Ronde', String(lapNo)], ['Verwacht', formatTimeSimple(expected)]];
             return h('div', { className: 'relative bg-white rounded-lg shadow-lg border-4 border-orange-500 p-4' },
                 h('style', null, '@keyframes swapGlow { 0% { box-shadow: 0 0 0 0 rgba(234,88,12,.5); } 100% { box-shadow: 0 0 0 26px rgba(234,88,12,0); } }'),
                 // zachte lichtpuls rond de kaart bij elke nieuwe loper
