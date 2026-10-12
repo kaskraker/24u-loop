@@ -471,9 +471,9 @@ document.addEventListener('click', (e) => {
   if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'wfa') {
     e.preventDefault();
-    $('overlay').innerHTML = `<div class="modal" data-act="closewfa"><div class="box"><h3>Water for All</h3><div class="eur">€ ${(totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE')}</div>
+    $('overlay').innerHTML = `<div class="modal" data-act="closewfa"><div class="box"><div style="display:flex;align-items:center;justify-content:center;gap:14px;background:#fff;border:3px solid var(--ink);border-radius:14px;box-shadow:3px 3px 0 #0090c0;padding:8px 14px;margin-bottom:12px"><img src="atlas-copco-logo.png" alt="Atlas Copco" style="height:38px;width:auto"><span style="width:3px;align-self:stretch;background:#0090c0;border-radius:2px"></span><img src="water-for-all-logo.png" alt="Water for All" style="height:44px;width:auto"></div><h3>Water for All</h3><div class="eur" style="background:#fff;box-shadow:3px 3px 0 #0090c0">€ ${(totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE')}</div>
       <p>Alle rondes van dit event tellen mee voor Water for All (Atlas Copco). Voor elke gelopen ronde komt er € ${EUR_PER_LAP} bij.</p><p>Wil je er meer over lezen? Dan kan je naar de website van Water for All gaan.</p>
-      <div class="acts"><a class="btn" href="https://www.atlascopco.com/nl-be/about-atlas-copco/water-for-all" target="_blank" rel="noopener">Naar de website</a><button class="btn ghost" data-act="closewfa">Sluiten</button></div></div></div>`;
+      <div class="acts"><a class="btn" style="background:#0090c0" href="https://www.atlascopco.com/nl-be/about-atlas-copco/water-for-all" target="_blank" rel="noopener">Naar de website</a><button class="btn ghost" data-act="closewfa">Sluiten</button></div></div></div>`;
     return;
   }
   if (a === 'closewfa') { if (t.classList.contains('modal') && e.target !== t) return; $('overlay').innerHTML = ''; return; }
