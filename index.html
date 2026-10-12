@@ -4669,9 +4669,14 @@ function predictNext(times, gender, restMs) {
                                     // Titel en datum, met de grote klok rechts ervan
                                     (() => {
                                         return h('div', { className: 'flex items-center gap-5' },
-                                            h('div', { className: 'leading-tight' },
-                                                h('div', { className: 'text-2xl font-bold' }, '24u Loop Leuven'),
-                                                h('div', { className: 'text-base opacity-95' }, dateTime.date)
+                                            // het merk eerst: Humasol-logo met de titel in een wit blok, zoals de andere blokken in de balk
+                                            h('div', { className: 'flex items-center gap-4', style: { background: '#fff', border: '3px solid #17120d', borderRadius: 16, boxShadow: '4px 4px 0 #17120d', padding: '6px 18px 6px 12px' } },
+                                                h('img', { src: 'humasol_logo.png', alt: 'Humasol', style: { height: 44, width: 'auto', flexShrink: 0 } }),
+                                                h('div', { style: { width: 4, alignSelf: 'stretch', background: '#f2a342', borderRadius: 2 } }),
+                                                h('div', { className: 'leading-tight', style: { color: '#17120d' } },
+                                                    h('div', { style: { fontSize: 28, fontWeight: 800, letterSpacing: '-.01em', whiteSpace: 'nowrap' } }, '24u Loop Leuven'),
+                                                    h('div', { style: { fontSize: 14, fontWeight: 600, color: '#4a3b2a' } }, dateTime.date)
+                                                )
                                             ),
                                             h('div', { className: 'flex items-baseline rounded-xl px-4 py-1 bg-black/20 border border-white/25 shadow-inner', style: { fontVariantNumeric: 'tabular-nums' } },
                                                 h(ClockHMS, { mainClass: 'text-6xl font-semibold tracking-tight leading-none', secClass: 'text-3xl font-medium opacity-70 ml-1 leading-none' })
@@ -4679,12 +4684,9 @@ function predictNext(times, gender, restMs) {
                                         );
                                     })(),
                                     // Weather widget
-                                    weather && h('div', { className: 'flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/20' },
-                                        h('span', { className: 'text-3xl' }, getWeatherInfo(weather.code).icon),
-                                        h('div', null,
-                                            h('div', { className: 'text-2xl font-bold' }, `${weather.temp}°C`),
-                                            h('div', { className: 'text-xs opacity-90' }, getWeatherInfo(weather.code).desc)
-                                        )
+                                    weather && h('div', { className: 'flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/20', title: getWeatherInfo(weather.code).desc },
+                                        h('span', { className: 'text-2xl' }, getWeatherInfo(weather.code).icon),
+                                        h('div', { className: 'text-xl font-bold' }, `${weather.temp}°C`)
                                     )
                                 ),
                                 // Water for All: bedrag in het midden van de balk
@@ -4771,7 +4773,7 @@ function predictNext(times, gender, restMs) {
                                     // Humasol-blok met QR-codes (stijl "Gedurfd"): lopers-app en Instagram
                                     h('div', { className: 'qr-promo rounded-lg shadow-lg p-2', style: { background: '#ffd58a' } },
                                         h('div', { className: 'flex flex-col items-center text-center' },
-                                            h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-14 w-auto object-contain' }),
+                                            h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-10 w-auto object-contain' }),
                                             h('div', { className: 'text-sm font-bold italic mt-1', style: { color: '#17120d' } }, '"Renewable technology for all"'),
                                             h('div', { className: 'w-full my-2', style: { borderTop: '3px solid #17120d' } }),
                                             h('div', { className: 'flex justify-center gap-2 w-full' },
