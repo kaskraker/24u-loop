@@ -23,7 +23,12 @@
   button.euro:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   .euro { margin-top: 10px; display: inline-flex; align-items: center; gap: 10px; background: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 6px 12px; box-shadow: 3px 3px 0 var(--ink); }
   .euro b { font-size: 22px; font-weight: 800; } .euro span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-  nav { display: flex; gap: 8px; padding: 12px 20px 8px 14px; position: sticky; top: 0; background: var(--butter); z-index: 5; }
+  .bar { position: sticky; top: 0; background: var(--butter); z-index: 5; }
+  nav { display: flex; gap: 8px; padding: 12px 20px 8px 14px; }
+  #conn:empty { display: none; }
+  #conn { max-width: 560px; margin: 0 auto; padding: 2px 20px 6px 14px; }
+  #conn div { display: flex; gap: 10px; align-items: center; background: #ffd0c2; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 3px 3px 0 var(--ink); padding: 8px 12px; font-size: 14px; font-weight: 700; line-height: 1.3; }
+  #conn div::before { content: ''; flex: none; width: 10px; height: 10px; border-radius: 50%; background: #e24b4a; animation: livePulse 1.4s ease-in-out infinite; }
   nav button { flex: 1; min-width: 0; font: inherit; font-weight: 800; font-size: 14px; padding: 10px 4px; border: 3px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
   nav button.on { background: var(--orange); }
   main { padding: 12px 20px 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; max-width: 560px; margin: 0 auto; }
@@ -75,6 +80,11 @@
   @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
   @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
   @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
+  .alerts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .alerts .btn.small { font-size: 13px; padding: 6px 12px; }
+  .alerts .btn.on { background: #d9f7d0; }
+  .turn .box { text-align: center; background: #d9f7d0; animation: pop .2s ease-out, tierGlow 1.2s ease-in-out 3; }
+  .turn .big { font-size: 34px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; margin: 4px 0 8px; }
   .foot { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 14px; }
 </style>
 </head>
@@ -86,7 +96,7 @@
   </div>
   <button type="button" class="euro" data-act="wfa" aria-label="Meer over Water for All"><span>Opgehaald</span><b id="euro">€ 0</b><span style="font-size:18px;line-height:1">›</span></button>
 </header>
-<nav id="nav"></nav>
+<div class="bar"><nav id="nav"></nav><div id="conn" role="status" aria-live="polite"></div></div>
 <main id="view"></main>
 <div id="overlay"></div>
 <div class="foot" id="foot">Verbinden…</div>
@@ -106,11 +116,15 @@ const params = new URLSearchParams(location.search);
 const NS = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, '');
 const col = (n) => NS ? `${NS}_${n}` : n;
 const EUR_PER_LAP = 5;
+const LAP_KM = 0.515;   // lengte van één ronde
+// Het event: dinsdag 20 oktober 2026, 20:00 tot woensdag 20:00. In de oefenmodus (?ns=) halen we de start uit de eerste ronde.
+const EVENT_START_REAL = Date.parse('2026-10-20T20:00:00+02:00');
+let eventStart = NS ? 0 : EVENT_START_REAL;
 
 // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
 // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
 const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
-const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };
+const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waarschijnlijke eerste ronde (mediaan): voor de piste; FIRST_LAP_MS (gemiddelde) is voor de wachttijden (sommen)
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
 const EW_FIRST = 0.7, EW_NEXT = 0.6;
@@ -125,8 +139,6 @@ function predictNext(times, gender, restMs) {
   }
   return e;
 }
-   // meest waarschijnlijke eerste ronde (mediaan): voor de piste; het gemiddelde hierboven is voor de wachttijden (sommen)
-
 
 // ===== Gedeelde tijd: elk toestel corrigeert zijn eigen klok met de tijd van de server (HTTP Date-header) =====
 // Zo lopen de klok op het grote scherm, de chronometer en de gsm's van de lopers gelijk, ook als een klok enkele seconden afwijkt.
@@ -177,17 +189,32 @@ function buildMeta(runnersArr, lapsArr) {
 }
 
 // Gegevens in de lopers-app (zuinig): wachtrij + actieve loper + samenvatting + lopersindex; rondes enkel van de gekozen lopers.
-let runners = [], queue = [], active = null, lastServer = 0, SUM = null, rMap = new Map(), MODE = 'lean';
+let runners = [], queue = [], active = null, SUM = null, rMap = new Map(), MODE = 'lean';
 let recent = [];   // de laatste gelopen rondes (live, maximaal 12)
 let rawRunners = [], rawLaps = [];            // enkel in 'volledige' modus (als er nog geen samenvatting bestaat, bv. in de oefenmodus zonder chronometer)
 const LAPS = {};                              // rondes per loper (enkel van wie we bekijken)
 const lapsOf = (id) => LAPS[id] || [];
 const getR = (id) => rMap.get(id);
+let idxRunners = [];
 function applyIndex(list) {
-  runners = list.map((a) => ({ id: a.i, name: a.n, gender: a.g, totalLaps: a.l, totalTime: a.t, best: a.b, sd: a.s, exp: a.e }));
-  rMap = new Map(runners.map((r) => [r.id, r])); statCache = null;
+  idxRunners = list.map((a) => ({ id: a.i, name: a.n, gender: a.g, totalLaps: a.l, totalTime: a.t, best: a.b, sd: a.s, exp: a.e }));
+  mergeKnown();
 }
-const totalLaps = () => SUM ? SUM.total : 0;
+// Wie net ingeschreven is, staat nog niet in de lopersindex (de chronometer schrijft die hoogstens om de 2 min).
+// Zulke lopers nemen we voorlopig over uit de wachtrij, de lopende loper of de laatste rondes, zodat ze meteen hun wachttijd zien.
+function mergeKnown() {
+  const known = new Set(idxRunners.map((r) => r.id)), extra = [];
+  const add = (id, name) => { if (id && name && !known.has(id)) { known.add(id); extra.push({ id, name, gender: 'X', totalLaps: 0, totalTime: 0, best: 0, sd: 0, exp: 0, temp: true }); } };
+  queue.forEach((q) => add(q.runnerId, q.runnerName));
+  if (active && active.runner) add(active.runner.runnerId, active.runner.runnerName);
+  recent.forEach((l) => add(l.runnerId, l.runnerName));
+  if (me && LAPS[me] && LAPS[me][0]) add(me, LAPS[me][0].runnerName);
+  runners = extra.length ? idxRunners.concat(extra) : idxRunners;
+  rMap = new Map(runners.map((r) => [r.id, r]));
+  if (extra.length && typeof refreshIndexSoon === 'function') refreshIndexSoon();   // snel opnieuw kijken of de index al bijgewerkt is
+}
+// totaal: de samenvatting (hoogstens ~2 min oud) + de rondes die daarna al binnenkwamen, zodat de euro's meteen meetellen
+const totalLaps = () => SUM ? SUM.total + (MODE === 'lean' ? recent.filter((l) => Date.parse(l.timestamp) > SUM.updatedAt).length : 0) : 0;
 const ME_KEY = 'myRunnerId' + (NS ? '_' + NS : '');   // per omgeving onthouden (oefen en echt apart)
 let me = ''; try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) {}
 if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
@@ -196,6 +223,9 @@ let query = '', squery = '', viewId = '', showAllQ = false;
 const $ = (id) => document.getElementById(id);
 
 // ---------- helpers ----------
+// zoeken zonder accenten en in eender welke volgorde: "zoe", "Zoë" en "dumoulin kasper" vinden allemaal iemand
+const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function findRunners(q, n) { const words = norm(q).split(/\s+/).filter(Boolean); return words.length ? runners.filter((x) => { const nm = norm(x.name); return words.every((w) => nm.includes(w)); }).slice(0, n) : []; }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
@@ -205,7 +235,6 @@ const isRunning = () => !!(active && active.isRunning && active.runner);
 const startMs = () => active && active.startTime ? new Date(active.startTime).getTime() : null;
 const waiting = () => queue.filter((q) => !(isRunning() && q.runnerId === active.runner.runnerId));
 
-let statCache = null;
 function expected(rid) {
   const r = getR(rid), prior = FIRST_LAP_MS[r && r.gender] || FIRST_LAP_MS.X;
   return r && r.totalLaps > 0 ? (r.exp || (r.totalTime + prior * 2) / (r.totalLaps + 2)) : prior;   // voorspelling met recente rondes zwaarder (uit de samenvatting)
@@ -233,9 +262,10 @@ function statusCard(r, self = true) {
   const w = waiting(), idxs = w.map((q, i) => q.runnerId === r.id ? i : -1).filter((i) => i >= 0), idx = idxs.length ? idxs[0] : -1;
   if (idx === -1) return `<div class="status none"><div class="k">${self ? 'Je staat niet in de wachtrij' : fn + ' staat niet in de wachtrij'}</div>${self ? '<div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div>' : ''}</div>`;
   const ms = waitMs(idx);
-  const head = self ? (idx === 0 ? 'Jij bent de volgende — sta klaar!' : `Je staat ${idx + 1}e in de rij`) : (idx === 0 ? `${fn} is de volgende` : `${fn} staat ${idx + 1}e in de rij`);
-  const sub = idx === 0 ? `Start ${ms <= 5000 ? 'elk moment' : 'rond ' + clock(tnow() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · start rond ${clock(tnow() + ms)}`;
-  return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${waitText(ms, idx)}</div><div class="s">${sub}</div>${idxs.length > 1 ? `<div class="s" style="margin-top:6px;font-weight:700">${self ? 'Daarna sta je' : fn + ' staat daarna'} ook nog ${idxs.slice(1).map((i) => (i + 1) + 'e (' + waitText(waitMs(i), i) + ')').join(' en ')} in de rij.</div>` : ''}<div class="s" style="font-size:11px;margin-top:4px;color:var(--muted)">Dit is een schatting.</div></div>`;
+  const head = self ? (idx === 0 ? 'Jij bent de volgende' : `Je staat ${idx + 1}e in de rij`) : (idx === 0 ? `${fn} is de volgende` : `${fn} staat ${idx + 1}e in de rij`);
+  const now = idx === 0 && ms <= 5000;   // de lopende loper is (bijna) binnen
+  const sub = now ? '' : idx === 0 ? `Start rond ${clock(tnow() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · start rond ${clock(tnow() + ms)}`;
+  return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${now ? 'Sta klaar!' : waitText(ms, idx)}</div>${sub ? `<div class="s">${sub}</div>` : ''}${idxs.length > 1 ? `<div class="s" style="margin-top:6px;font-weight:700">${self ? 'Daarna sta je' : fn + ' staat daarna'} ook nog ${idxs.slice(1).map((i) => (i + 1) + 'e (' + waitText(waitMs(i), i) + ')').join(' en ')} in de rij.</div>` : ''}${isStale() ? `<div class="s" style="font-size:12px;margin-top:4px;font-weight:700">Geen verbinding: schatting van ${clock(lostAt)}</div>` : ''}${self && idx > 0 ? alertControls() : ''}</div>`;
 }
 
 function tempoSvg(times) {
@@ -256,7 +286,7 @@ function viewMine() {
   if (r) return profile(r, true);
   {
     const q = query.trim().toLowerCase();
-    const res = q ? runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 12) : [];
+    const res = findRunners(q, 12);
     return `<div class="card"><h2>Wie ben jij?</h2><div class="s" style="margin-bottom:10px;font-weight:500">Zoek je naam om je wachtplaats en je tijden te zien.</div>
       <input id="q" placeholder="Typ je naam…" value="${esc(query)}" autocomplete="off">
       <div id="res">${resultsHtml(res, q)}</div></div>`;
@@ -275,10 +305,10 @@ function profile(r, self) {
   const bestRank = rb ? runners.filter((x) => x.best > 0 && x.best < rb).length + 1 : 0;
   return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:26px;font-weight:800">${crownOf(r.id, 26)}${esc(r.name)}</b>${self ? '<button class="link" data-act="other">Andere loper</button>' : '<button class="link" data-act="back">← Terug</button>'}</div>
     ${self ? '' : `<button class="btn full" data-act="pickme" data-id="${esc(r.id)}">Dit ben ik</button>`}
-    ${statusCard(r, self)}
+    ${phase() === 'after' ? '' : statusCard(r, self)}
     <div class="card"><div class="grid">
       <div class="tile"><div class="k">Rondes</div><div class="v">${n}</div></div>
-      <div class="tile"><div class="k">Afstand</div><div class="v">${(n * 0.515).toFixed(2).replace('.', ',')} km</div></div>
+      <div class="tile"><div class="k">Afstand</div><div class="v">${(n * LAP_KM).toFixed(2).replace('.', ',')} km</div></div>
       <div class="tile"><div class="k">Snelste ronde</div><div class="v">${best ? mmss(best) : '–'}</div></div>
       <div class="tile"><div class="k">Gemiddeld</div><div class="v">${avg ? mmss(avg) : '–'}</div></div>
       <div class="tile" ${n ? `data-act="rankgo" data-list="most" data-id="${esc(r.id)}" style="cursor:pointer"` : ''}><div class="k">Plaats (meeste rondes)</div>${n ? '<span class="go">›</span>' : ''}<div class="v">${n ? '#' + lapRank : '–'}</div></div>
@@ -300,7 +330,7 @@ function viewSearch() {
   const r = runners.find((x) => x.id === viewId);
   if (r) return profile(r, false);
   const q = squery.trim().toLowerCase();
-  const res = q ? runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 15) : [];
+  const res = findRunners(q, 15);
   return `<div class="card"><h2>Zoek een loper</h2><div style="margin-bottom:10px;font-weight:500">Bekijk de rondetijden van vrienden of andere lopers.</div>
     <input id="sq" placeholder="Typ een naam…" value="${esc(squery)}" autocomplete="off">
     <div id="sres">${resultsHtml(res, q, 'view')}</div></div>`;
@@ -319,7 +349,6 @@ function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
   const rnn = getR(rid), nLaps = rnn ? rnn.totalLaps : 0, best = rnn && rnn.best ? rnn.best : 0, ex = nLaps ? expected(rid) : (FIRST_LAP_TYPICAL_MS[rnn && rnn.gender] || FIRST_LAP_TYPICAL_MS.X);
-  const mine = { length: nLaps };
   const rel = Math.max(0.06, Math.min(0.25, nLaps >= 3 && rnn.sd ? rnn.sd : 0.15));
   const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : ex * 1.12;
   const lapNo = nLaps + 1;
@@ -337,24 +366,52 @@ function nowCard() {
         <line x1="0" y1="70" x2="26" y2="70" stroke="#17120d" stroke-width="5"/></svg></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${(lapNo === 1 ? [['Ronde', 1]] : [['Ronde', lapNo], ['Verwacht', mmss(ex)]]).map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#6a5a48', shadow: 'none' }; return `<div style="background:${ts.bg};box-shadow:${ts.shadow};border:3px solid var(--ink);border-radius:12px;padding:4px 10px"><div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${ts.sub}">${k}</div><div style="font-size:22px;font-weight:800;line-height:1.15;color:${ts.fg}">${v}</div></div>`; }).join('')}</div></div>`;
 }
+// ---------- voor en na het event ----------
+function phase() { if (!eventStart) return 'live'; const t = tnow(); return t < eventStart ? 'before' : t >= eventStart + 24 * 3600e3 ? 'after' : 'live'; }
+function setStartFrom(ts) {   // oefenmodus: het event start om 20:00 op of vóór de eerste ronde
+  const d = new Date(ts); if (isNaN(d)) return; d.setHours(20, 0, 0, 0); if (d.getTime() > new Date(ts).getTime()) d.setDate(d.getDate() - 1);
+  if (!eventStart || d.getTime() < eventStart) { eventStart = d.getTime(); later(true); }
+}
+const DAGEN = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'], MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+const shortDay = (t) => { const d = new Date(t); return `${DAGEN[d.getDay()]} ${d.getDate()} ${MAANDEN[d.getMonth()]}`; };   // "di 20 okt"
+function cdText(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), p = (x) => String(x).padStart(2, '0');
+  return d ? `${d} d ${h} u` : `${p(h)}:${p(m)}:${p(s % 60)}`;
+}
+function eventCard() {
+  const ph = phase();
+  if (ph === 'before') {
+    return `<div class="status none"><div class="k">Start ${shortDay(eventStart)} · ${clock(eventStart)}</div><div class="big" data-cd="${eventStart}">${cdText(eventStart - tnow())}</div></div>`;
+  }
+  if (ph === 'after') {
+    const r = me && getR(me), n = r ? (lapsOf(me).length || r.totalLaps) : 0;
+    return `<div class="status go"><div class="k">Afgelopen · bedankt!</div><div class="big">€ ${(totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE')}</div><div class="s">${totalLaps()} rondes voor Water for All</div>${n ? `<div class="s" style="margin-top:8px;font-weight:700">Jij: ${n} ${n === 1 ? 'ronde' : 'rondes'} · € ${n * EUR_PER_LAP}</div>` : ''}<div class="alerts">${n ? '<button class="btn small" data-act="share">Deel mijn resultaat</button>' : ''}<button class="btn small" data-tab="rank">Eindstand</button></div></div>`;
+  }
+  return '';
+}
+setInterval(() => {   // aftellen: één keer per seconde is genoeg
+  if (document.hidden) return;
+  document.querySelectorAll('[data-cd]').forEach((el) => { const ms = Number(el.dataset.cd) - tnow(); el.textContent = cdText(ms); if (ms <= 0) later(true); });
+}, 1000);
 function viewQueue() {
+  const ph = phase();
+  if (ph === 'after') return eventCard();   // na afloop: enkel het eindresultaat, geen wachtrij meer
   const w = waiting();
   const meR = runners.find((x) => x.id === me);
-  const run = isRunning() ? active.runner : null, st = startMs();
   const prompt = '<div class="card" style="background:#ffd58a"><b>Tik hieronder op “Dit ben ik” bij je naam</b> om te zien hoe lang het nog duurt.</div>';
   const LIM = showAllQ ? 60 : 8;
-  return `${meR ? statusCard(meR) + nowCard() : nowCard() + prompt}
+  return `${eventCard()}${meR ? statusCard(meR) + nowCard() : nowCard() + (w.length ? prompt : '')}
     <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
       ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, LIM).map((q, i) => {
         const ms = waitMs(i), mine = q.runnerId === me;
-        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${crownOf(q.runnerId)}${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
+        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${crownOf(q.runnerId)}${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${meR ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
       }).join('')}
       ${w.length > LIM ? `<button class="btn small full" data-act="qall" style="margin-top:4px">Toon alle ${w.length} wachtenden</button>` : showAllQ && w.length > 8 ? '<button class="btn small full" data-act="qall" style="margin-top:4px">Toon minder</button>' : ''}</div>
-    <div class="card"><h2>Net gelopen <small>laatste ${recent.length || ''} rondes</small></h2>
+    ${ph === 'before' && !recent.length ? '' : `<div class="card"><h2>Net gelopen <small>laatste ${recent.length || ''} rondes</small></h2>
       ${recent.length === 0 ? '<div class="empty">Nog geen rondes</div>' : recent.map((l) => {
         const ago = Math.max(0, Math.round((tnow() - new Date(l.timestamp).getTime()) / 60000)), rec = SUM && SUM.record && l.time <= SUM.record.t;
         return `<div class="row ${l.runnerId === me ? 'me' : ''}"><div class="no" style="width:44px;font-size:13px">${clock(l.timestamp)}</div><div class="nm" data-act="view" data-id="${esc(l.runnerId)}" style="cursor:pointer">${crownOf(l.runnerId)}${esc(l.runnerName)}${l.runnerId === me ? '<span class="badge">jij</span>' : ''}${rec ? '<span class="badge">record</span>' : ''}<small>${ago < 1 ? 'net binnengekomen' : ago + ' min geleden'}</small></div><div class="w">${mmss(l.time)}</div></div>`;
-      }).join('')}</div>`;
+      }).join('')}</div>`}`;
 }
 
 function openAndScroll(list) {
@@ -389,10 +446,11 @@ function viewRank() {
 let lastParts = [], lastTab = '';
 function patchView(html) {
   const box = $('view'), tpl = document.createElement('template'); tpl.innerHTML = html;
+  tpl.content.querySelectorAll('[data-act]:not(button):not(a)').forEach((el) => { el.setAttribute('role', 'button'); el.tabIndex = 0; });   // klikbare namen en vakjes ook met toetsenbord en schermlezer
   const nk = [...tpl.content.children], parts = nk.map((n) => n.outerHTML), ok = [...box.children], key = tab + '|' + viewId + '|' + me;
   if (key !== lastTab || nk.length !== ok.length || ok.length !== lastParts.length) { box.replaceChildren(...nk); }
   else nk.forEach((n, i) => { if (parts[i] !== lastParts[i]) ok[i].replaceWith(n); });
-  lastParts = parts; lastTab = key; liveTick();
+  lastParts = parts; lastTab = key; collectLive();
 }
 // ---------- viering bij een nieuw persoonlijk record, een mijlpaal of de eerste ronde ----------
 const celeb = { me: '', ids: null };
@@ -405,7 +463,7 @@ function checkCelebrate() {
   const fresh = my.filter((l) => !celeb.ids.has(l.id)); if (!fresh.length) return;
   fresh.forEach((l) => celeb.ids.add(l.id));
   const last = my[my.length - 1], before = my.filter((l) => l !== last && !fresh.includes(l)).map((l) => l.time), prevBest = before.length ? Math.min(...before) : 0, n = my.length;
-  const overall = SUM && SUM.record ? SUM.record.t : 0, km = (n * 0.515).toFixed(1).replace('.', ',');
+  const overall = SUM && SUM.record ? SUM.record.t : 0, km = (n * LAP_KM).toFixed(1).replace('.', ',');
   let c = null;
   if (overall && last.time <= overall && n > 0) c = { title: 'Snelste ronde van het event!', time: mmss(last.time), sub: 'Niemand liep tot nu toe sneller. Wat een ronde!' };
   else if (prevBest && last.time < prevBest) c = { title: 'Nieuw persoonlijk record!', time: mmss(last.time), sub: `${Math.max(1, Math.round((prevBest - last.time) / 1000))} s sneller dan je vorige beste (${mmss(prevBest)}).` };
@@ -420,19 +478,93 @@ function showCelebration(c) {
   try { navigator.vibrate && navigator.vibrate([90, 50, 90, 50, 160]); } catch (e) {}
   clearTimeout(showCelebration.t); showCelebration.t = setTimeout(() => { if ($('overlay').querySelector('.celeb')) $('overlay').innerHTML = ''; }, 14000);
 }
+// ---------- verwittigen als je bijna aan de beurt bent (zonder server) ----------
+// Geluid (iPhone en Android, zolang de app open is), trillen (enkel Android) en een melding (Android, of iPhone als de app op het beginscherm staat).
+// Echte push als de gsm al lang vergrendeld is, kan enkel met een server; dat doen we bewust niet.
+const notifSupported = () => 'Notification' in window;
+let audioCtx = null, audioReady = false;
+function unlockAudio() {   // iOS laat pas geluid toe na een tik: dan meteen een stil geluidje afspelen
+  try {
+    if (!audioCtx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; audioCtx = new AC(); }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const b = audioCtx.createBuffer(1, 1, 22050), src = audioCtx.createBufferSource(); src.buffer = b; src.connect(audioCtx.destination); src.start(0);
+    if (!audioReady) { audioReady = true; later(true); }
+  } catch (e) {}
+}
+document.addEventListener('pointerdown', unlockAudio, { capture: true });
+function beep(n, hz) {
+  try {
+    if (!audioCtx) return; if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t0 = audioCtx.currentTime + 0.05;
+    for (let i = 0; i < n; i++) {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = t0 + i * 0.32;
+      o.type = 'square'; o.frequency.value = hz; o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      o.start(t); o.stop(t + 0.25);
+    }
+  } catch (e) {}
+}
+let swReg = null;
+function setupSW() {   // eigen kleine service worker met smalle scope, enkel voor meldingen (vervangt die van index.html niet)
+  if (swReg || !('serviceWorker' in navigator) || !/^https?:/.test(location.protocol)) return;
+  navigator.serviceWorker.register('loper-sw.js', { scope: './loper-melding/' }).then((r) => { swReg = r; }).catch(() => {});
+}
+if (notifSupported() && Notification.permission === 'granted') setupSW();
+async function notify(title, body, urgent) {
+  if (!notifSupported() || Notification.permission !== 'granted') return;
+  const opt = { body, tag: 'beurt', renotify: true, icon: 'icon-192.png', vibrate: [200, 100, 200, 100, 300], requireInteraction: urgent, data: { url: location.href } };
+  try { if (swReg && swReg.active) { await swReg.showNotification(title, opt); return; } } catch (e) {}
+  try { new Notification(title, opt); } catch (e) {}   // computer zonder service worker; op Android kan dit niet (daar dient de service worker voor)
+}
+let wakeOn = false, wakeLock = null;
+async function setWake(on) {
+  wakeOn = on;
+  try {
+    if (on && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+    if (!on && wakeLock) { const w = wakeLock; wakeLock = null; await w.release(); }
+  } catch (e) { wakeOn = false; }
+  later(true);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && wakeOn && !wakeLock) setWake(true); });   // het systeem laat het scherm-aan los als je de app even verlaat
+function alertControls() {   // enkel zolang je nog niet 1e staat: daarna valt er niets meer te verwittigen
+  const perm = notifSupported() ? Notification.permission : '', armed = audioReady && perm !== 'default';
+  const b = [armed ? '<span class="btn small on">Verwittigen aan ✓</span>' : '<button class="btn small" data-act="arm">Verwittig mij</button>'];
+  if ('wakeLock' in navigator) b.push(`<button class="btn small ${wakeOn ? 'on' : ''}" data-act="wake">${wakeOn ? 'Scherm blijft aan ✓' : 'Scherm aan houden'}</button>`);
+  return `<div class="alerts">${b.join('')}</div>`;
+}
+let queueLoaded = false, turn = { me: '', key: '', lvl: 0 };
+function checkTurn() {
+  if (!me || !queueLoaded) { turn.me = ''; return; }
+  const runningMe = isRunning() && active.runner.runnerId === me;
+  const w = waiting(), idx = w.findIndex((q) => q.runnerId === me), key = idx >= 0 ? w[idx].id : '', lvl = runningMe ? 0 : idx === 0 ? 2 : idx === 1 ? 1 : 0;
+  if (wakeOn && (runningMe || idx === -1)) setWake(false);   // je loopt of je staat niet meer in de rij: scherm mag weer uit
+  if (turn.me !== me) { turn = { me, key, lvl }; return; }   // net geopend of andere loper gekozen: niet meteen alarm slaan
+  const prev = key === turn.key ? turn.lvl : 0;
+  turn.key = key; turn.lvl = lvl;
+  if (lvl > prev && connOk !== false) turnAlert(lvl, waitMs(idx), idx);
+}
+function turnAlert(lvl, ms, idx) {
+  const title = lvl === 2 ? 'Jij bent de volgende!' : 'Bijna aan de beurt!';
+  const body = lvl === 2 ? 'Kom nu naar de start en sta klaar.' : `Nog 1 loper voor jou (${waitText(ms, idx)}). Kom al naar de start.`;
+  $('overlay').innerHTML = `<div class="modal turn"><div class="box"><h3 class="big">${title}</h3><p style="font-weight:700">${esc(body)}</p><div class="acts"><button class="btn" data-act="closewfa">Ik kom eraan</button></div></div></div>`;
+  beep(lvl === 2 ? 3 : 2, lvl === 2 ? 1175 : 880);
+  try { navigator.vibrate && navigator.vibrate(lvl === 2 ? [300, 120, 300, 120, 500] : [200, 100, 200]); } catch (e) {}
+  if (document.hidden) notify(title, body, lvl === 2);
+}
 function render(force) {
-  syncWatches(); checkCelebrate();
+  mergeKnown(); syncWatches(); checkCelebrate(); checkTurn();
   $('euro').textContent = '€ ' + (totalLaps() * EUR_PER_LAP).toLocaleString('nl-BE');
+  const cb = connBanner(); if ($('conn').textContent !== cb) $('conn').innerHTML = cb ? `<div>${esc(cb)}</div>` : '';
+  $('foot').textContent = connOk ? 'Live verbonden' : connOk === false ? 'Geen verbinding' + (errCode ? ' (' + errCode + ')' : '') : 'Verbinden…';
   $('nav').innerHTML = [['queue', 'Live'], ['mine', 'Mijn tijden'], ['search', 'Zoeken'], ['rank', 'Rankings']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
   const ae = document.activeElement && document.activeElement.id;
   const typing = ae === 'q' || ae === 'sq';
   if (typing && !force) {
-    if (ae === 'q') { const q = query.trim().toLowerCase(); $('res').innerHTML = resultsHtml(runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 12), q); }
-    else { const q = squery.trim().toLowerCase(); $('sres').innerHTML = resultsHtml(runners.filter((x) => (x.name || '').toLowerCase().includes(q)).slice(0, 15), q, 'view'); }
+    if (ae === 'q') { const q = query.trim().toLowerCase(); $('res').innerHTML = resultsHtml(findRunners(q, 12), q); }
+    else { const q = squery.trim().toLowerCase(); $('sres').innerHTML = resultsHtml(findRunners(q, 15), q, 'view'); }
     return;
   }
   patchView(tab === 'queue' ? viewQueue() : tab === 'rank' ? viewRank() : tab === 'search' ? viewSearch() : viewMine());
-  const f = $('foot'); f.textContent = lastServer ? `Laatst bijgewerkt ${clock(lastServer)}` : 'Verbinden…';
 }
 let rt = null; const later = (force) => { clearTimeout(rt); rt = setTimeout(() => render(force), 120); };
 
@@ -440,25 +572,36 @@ let rt = null; const later = (force) => { clearTimeout(rt); rt = setTimeout(() =
 async function share() {
   const r = runners.find((x) => x.id === me); if (!r) return;
   const my = lapsOf(me), times = my.map((l) => l.time); if (!my.length) return;
-  const best = Math.min(...times), avg = times.reduce((a, b) => a + b, 0) / times.length;
+  const best = Math.min(...times), avg = times.reduce((a, b) => a + b, 0) / times.length, n = my.length;
+  const F = '"Bricolage Grotesque", sans-serif';
+  try { await Promise.race([Promise.all(['800 70px', '600 36px', '500 34px'].map((f) => document.fonts.load(`${f} ${F}`))), new Promise((ok) => setTimeout(ok, 1500))]); } catch (e) {}   // anders tekent het canvas met een gewoon lettertype
   const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const x = c.getContext('2d');
   x.fillStyle = '#fff1cf'; x.fillRect(0, 0, 1080, 1350);
   x.fillStyle = '#f2a342'; x.fillRect(0, 0, 1080, 230); x.fillStyle = '#17120d'; x.fillRect(0, 230, 1080, 8);
-  x.fillStyle = '#17120d'; x.font = '800 70px "Bricolage Grotesque", sans-serif'; x.fillText('24u Loop Leuven', 60, 120);
-  x.font = '500 34px "Bricolage Grotesque", sans-serif'; x.fillText('Humasol × Atlas Copco · Water for All', 60, 180);
+  const st = new Date(eventStart || tnow()), en = new Date(st.getTime() + 24 * 3600e3);
+  const dates = st.getMonth() === en.getMonth() ? `${st.getDate()}–${en.getDate()} ${MAANDEN[st.getMonth()]} ${st.getFullYear()}` : `${st.getDate()} ${MAANDEN[st.getMonth()]} – ${en.getDate()} ${MAANDEN[en.getMonth()]} ${en.getFullYear()}`;
+  x.fillStyle = '#17120d'; x.font = `800 70px ${F}`; x.fillText('24u Loop Leuven', 60, 120);
+  x.font = `500 34px ${F}`; x.fillText(`Humasol × Atlas Copco · ${dates}`, 60, 180);
   const card = (xx, yy, w, hh, bg) => { x.fillStyle = '#17120d'; x.fillRect(xx + 10, yy + 10, w, hh); x.fillStyle = bg; x.fillRect(xx, yy, w, hh); x.strokeStyle = '#17120d'; x.lineWidth = 6; x.strokeRect(xx, yy, w, hh); };
+  const logo = await new Promise((ok) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => ok(null); im.src = 'humasol_logo.png'; setTimeout(() => ok(null), 1500); });
+  if (logo) { const lh = 70, lw = lh * logo.width / logo.height; card(1010 - lw - 40, 45, lw + 40, lh + 40, '#fff'); x.drawImage(logo, 1010 - lw - 20, 65, lw, lh); }   // logo rechtsboven, zoals in de app
   card(60, 300, 940, 330, '#ffd58a');
-  x.fillStyle = '#17120d'; x.font = '800 88px "Bricolage Grotesque", sans-serif'; x.fillText(r.name.length > 20 ? r.name.slice(0, 19) + '…' : r.name, 100, 420);
-  x.font = '800 190px "Bricolage Grotesque", sans-serif'; x.fillText(String(my.length), 100, 590);
-  x.font = '600 56px "Bricolage Grotesque", sans-serif'; x.fillText(my.length === 1 ? 'ronde' : 'rondes', 100 + x.measureText(String(my.length)).width * 0 + 330, 590);
-  const t = (l, v, xx, yy) => { card(xx, yy, 450, 200, '#fff'); x.fillStyle = '#6a5a48'; x.font = '600 36px "Bricolage Grotesque", sans-serif'; x.fillText(l, xx + 30, yy + 70); x.fillStyle = '#17120d'; x.font = '800 78px "Bricolage Grotesque", sans-serif'; x.fillText(v, xx + 30, yy + 160); };
-  t('Afstand', (my.length * 0.515).toFixed(2).replace('.', ',') + ' km', 60, 710); t('Snelste ronde', mmss(best), 550, 710);
-  t('Gemiddeld', mmss(avg), 60, 960); t('Voor Water for All', '€ ' + my.length * EUR_PER_LAP, 550, 960);
-  x.fillStyle = '#17120d'; x.font = '700 40px "Bricolage Grotesque", sans-serif'; x.fillText('Bedankt om mee te lopen!', 60, 1260);
+  x.fillStyle = '#17120d';
+  let fs = 88, name = r.name;   // lange namen: eerst kleiner, pas dan afkappen
+  for (; fs > 56; fs -= 4) { x.font = `800 ${fs}px ${F}`; if (x.measureText(name).width <= 860) break; }
+  while (x.measureText(name).width > 860 && name.length > 2) name = name.slice(0, -2) + '…';
+  x.fillText(name, 100, 420);
+  x.font = `800 190px ${F}`; x.fillText(String(n), 100, 590); const nw = x.measureText(String(n)).width;
+  x.font = `600 56px ${F}`; x.fillText(n === 1 ? 'ronde' : 'rondes', 100 + nw + 30, 590);
+  const t = (l, v, xx, yy) => { card(xx, yy, 450, 200, '#fff'); x.fillStyle = '#6a5a48'; x.font = `600 36px ${F}`; x.fillText(l, xx + 30, yy + 70); x.fillStyle = '#17120d'; x.font = `800 78px ${F}`; x.fillText(v, xx + 30, yy + 160); };
+  t('Afstand', (n * LAP_KM).toFixed(2).replace('.', ',') + ' km', 60, 710); t('Snelste ronde', mmss(best), 550, 710);
+  t('Gemiddeld', mmss(avg), 60, 960); t('Voor Water for All', '€ ' + n * EUR_PER_LAP, 550, 960);
+  const rec = SUM && SUM.record && best <= SUM.record.t, rank = runners.filter((y) => y.totalLaps > Math.max(n, r.totalLaps || 0)).length + 1;
+  x.fillStyle = '#17120d'; x.font = `700 40px ${F}`; x.fillText(rec ? 'Snelste ronde van het event!' : rank <= 10 ? `#${rank} in meeste rondes` : 'Bedankt om mee te lopen!', 60, 1260);
   const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
   const file = new File([blob], '24u-loop-resultaat.png', { type: 'image/png' });
   try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: '24u Loop Leuven', text: `Ik liep ${my.length} rondes voor Water for All!` }); return; }
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: '24u Loop Leuven', text: `Ik liep ${n} rondes voor Water for All!` }); return; }
   } catch (e) { if (e && e.name === 'AbortError') return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
 }
@@ -493,12 +636,38 @@ document.addEventListener('click', (e) => {
   }
   if (a === 'rankgo-close') { $('overlay').innerHTML = ''; rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; lbOpen[t.dataset.list] = true; if (typeof refreshIndex === 'function') refreshIndex(); render(true); openAndScroll(t.dataset.list); return; }
   if (a === 'qall') { showAllQ = !showAllQ; render(true); }
+  if (a === 'arm') { unlockAudio(); beep(1, 880); if (notifSupported() && Notification.permission === 'default') Notification.requestPermission().then((p) => { if (p === 'granted') setupSW(); render(true); }).catch(() => {}); render(true); }
+  if (a === 'wake') setWake(!wakeOn);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('overlay').innerHTML && !$('overlay').querySelector('.turn')) { $('overlay').innerHTML = ''; return; }
+  const t = e.target; if ((e.key === 'Enter' || e.key === ' ') && t.getAttribute && t.getAttribute('role') === 'button' && t.dataset.act) { e.preventDefault(); t.click(); }
 });
 document.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value; render(false); } if (e.target.id === 'sq') { squery = e.target.value; render(false); } });
 
 // ---------- data ----------
-const onErr = (err) => { $('foot').textContent = 'Geen verbinding met de server… (' + err.code + ')'; };
-const snap = (name, fn) => db.collection(col(name)).onSnapshot((s) => { lastServer = Date.now(); fn(s); later(); }, onErr);
+// ---------- verbinding ----------
+// Een stille wachtrij betekent niet dat de verbinding weg is: Firestore zegt via 'fromCache' of de gegevens nog door de server bevestigd zijn.
+// Pas na 10 s zonder verbinding tonen we een melding (zoals in de rest van de app), zodat een korte hapering niemand ongerust maakt.
+let connOk = null, lostAt = 0, everOk = false, errCode = '', connTimer = null;
+function setConn(ok) {
+  if (ok === connOk) return;
+  connOk = ok; clearTimeout(connTimer);
+  if (ok) { everOk = true; lostAt = 0; errCode = ''; }
+  else { lostAt = Date.now(); connTimer = setTimeout(() => later(), 10500); }
+  later();
+}
+const isStale = () => connOk === false && everOk && Date.now() - lostAt >= 10000;
+function connBanner() {
+  if (connOk !== false || Date.now() - lostAt < 10000) return '';
+  if (!everOk) return 'Geen verbinding met de server. We blijven proberen…';
+  const min = Math.floor((Date.now() - lostAt) / 60000);
+  return `Geen verbinding sinds ${clock(lostAt)}${min >= 1 ? ` (${min} min)` : ''}. De wachtrij en de tijden kunnen intussen veranderd zijn.`;
+}
+window.addEventListener('offline', () => setConn(false));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) later(); });
+const onErr = (err) => { errCode = err.code || ''; setConn(false); };
+const snap = (name, fn) => db.collection(col(name)).onSnapshot({ includeMetadataChanges: true }, (s) => { setConn(!s.metadata.fromCache); fn(s); later(); }, onErr);
 const metaDoc = (id) => db.collection(col('meta')).doc(id);
 const lapSubs = {};
 function syncWatches() {   // rondes ophalen van enkel de gekozen lopers (jezelf en wie je bekijkt)
@@ -508,16 +677,20 @@ function syncWatches() {   // rondes ophalen van enkel de gekozen lopers (jezelf
   want.forEach((id) => { if (!lapSubs[id]) lapSubs[id] = db.collection(col('laps')).where('runnerId', '==', id).onSnapshot((s) => { LAPS[id] = s.docs.map((d) => ({ id: d.id, ...d.data() })); later(); }, onErr); });
 }
 function startCommon() {
-  snap('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)); });
-  db.collection(col('laps')).orderBy('timestamp', 'desc').limit(12).onSnapshot((s) => { recent = s.docs.map((d) => ({ id: d.id, ...d.data() })); lastServer = Date.now(); later(); }, onErr);
+  if (NS) db.collection(col('laps')).orderBy('timestamp').limit(1).get().then((s) => { if (!s.empty) setStartFrom(s.docs[0].data().timestamp); }).catch(() => {});
+  snap('queue', (s) => { if (!s.metadata.fromCache) queueLoaded = true; queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)); });
+  db.collection(col('laps')).orderBy('timestamp', 'desc').limit(12).onSnapshot((s) => { recent = s.docs.map((d) => ({ id: d.id, ...d.data() })); if (NS && recent.length) setStartFrom(recent[recent.length - 1].timestamp); later(); }, onErr);
   snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; });
 }
 function startLean() {
   MODE = 'lean'; startCommon();
-  metaDoc('summary').onSnapshot((s) => { if (s.exists) { SUM = s.data(); lastServer = Date.now(); later(); } }, onErr);
-  let idxAt = 0;
-  const loadIndex = () => { idxAt = Date.now(); metaDoc('runnerIndex').get().then((s) => { if (s.exists) { applyIndex(s.data().list || []); later(); } }).catch(() => {}); };
+  metaDoc('summary').onSnapshot((s) => { if (s.exists) { SUM = s.data(); later(); } }, onErr);
+  let idxAt = 0, idxUpd = 0, soonWait = 20000;
+  const loadIndex = () => { idxAt = Date.now(); metaDoc('runnerIndex').get().then((s) => { if (s.exists) { const d = s.data();
+    soonWait = d.updatedAt && d.updatedAt === idxUpd ? Math.min(soonWait * 2, 300000) : 20000;   // index onveranderd (chronometer even weg)? dan minder vaak opnieuw proberen
+    idxUpd = d.updatedAt || 0; applyIndex(d.list || []); later(); } }).catch(() => {}); };
   window.refreshIndex = () => { if (Date.now() - idxAt > 60000) loadIndex(); };   // bij uitklappen van een klassement: verse gegevens
+  window.refreshIndexSoon = () => { if (Date.now() - idxAt > soonWait) loadIndex(); };   // er is een nieuwe loper die nog niet in de index staat
   loadIndex(); setInterval(loadIndex, 10 * 60e3);
   window.addEventListener('focus', () => { if (Date.now() - idxAt > 120000) loadIndex(); });
 }
@@ -531,18 +704,31 @@ function startHeavy() {   // geen samenvatting beschikbaar: alles lezen (enkel v
   metaDoc('summary').get().then((d) => { if (d.exists) startLean(); else startHeavy(); }).catch((e) => { if (tries < 4) setTimeout(() => boot(tries + 1), 2500); else startHeavy(); });
 })(0);
 
-// levende klok + wachttijd elke seconde bijwerken (zonder de pagina opnieuw op te bouwen)
+// levende klok + piste bijwerken (zonder de pagina opnieuw op te bouwen).
+// Zuinig voor de batterij: enkel als er iets live te zien is en de app zichtbaar is, en ~20 keer per seconde i.p.v. elk beeld (ziet er even vlot uit).
+let liveEls = [], trackEls = [], loopOn = false;
+function collectLive() {   // na elke wijziging van de pagina: de live-elementen één keer opzoeken i.p.v. bij elke tik
+  liveEls = [...document.querySelectorAll('[data-live]')].filter((el) => Number(el.dataset.live));
+  trackEls = [...document.querySelectorAll('svg[data-track]')];
+  liveTick(); wakeLoop();
+}
 function liveTick() {
-  document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
-  document.querySelectorAll('svg[data-track]').forEach((el) => {
-    const e = Math.max(0, tnow() - Number(el.dataset.start)), hi = Math.min(1, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
+  const now = tnow();
+  liveEls.forEach((el) => { el.textContent = mmssc(now - Number(el.dataset.live)); });
+  trackEls.forEach((el) => {
+    const e = Math.max(0, now - Number(el.dataset.start)), hi = Math.min(1, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
     el.querySelector('.tlo').setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`);
     const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo);
   });
 }
-(function frame() { liveTick(); requestAnimationFrame(frame); })();   // soepel: elk beeld bijwerken (zoals het grote scherm)
-setInterval(liveTick, 250);   // vangnet als het venster op de achtergrond staat
-setInterval(() => { const ae = document.activeElement && document.activeElement.id; if (ae !== 'q' && ae !== 'sq') render(true); }, 10000);
+const hasLive = () => liveEls.length > 0 || trackEls.length > 0;
+function wakeLoop() { if (loopOn || document.hidden || !hasLive()) return; loopOn = true; requestAnimationFrame(frame); }
+function frame() {
+  if (document.hidden || !hasLive()) { loopOn = false; return; }   // niets live of op de achtergrond: lus stopt (wakeLoop start hem weer)
+  liveTick(); setTimeout(() => requestAnimationFrame(frame), 40);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { liveTick(); wakeLoop(); } });
+setInterval(() => { if (document.hidden) return; const ae = document.activeElement && document.activeElement.id; if (ae !== 'q' && ae !== 'sq') render(true); }, 10000);   // op de achtergrond niet; bij terugkeren wordt meteen bijgewerkt
 render(true);
 </script>
 </body>
