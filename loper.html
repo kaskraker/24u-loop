@@ -266,7 +266,7 @@ function profile(r, self) {
   const overall = SUM && SUM.record ? SUM.record.t : 0;
   const lapRank = runners.filter((x) => x.totalLaps > n).length + 1;
   const bestRank = best ? runners.filter((x) => x.best > 0 && x.best < best).length + 1 : 0;
-  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:26px;font-weight:800">${esc(r.name)}</b>${self ? '<button class="link" data-act="other">Andere loper</button>' : '<button class="link" data-act="back">← Terug</button>'}</div>
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:26px;font-weight:800">${crownOf(r.id, 26)}${esc(r.name)}</b>${self ? '<button class="link" data-act="other">Andere loper</button>' : '<button class="link" data-act="back">← Terug</button>'}</div>
     ${self ? '' : `<button class="btn full" data-act="pickme" data-id="${esc(r.id)}">Dit ben ik</button>`}
     ${statusCard(r, self)}
     <div class="card"><div class="grid">
@@ -286,7 +286,7 @@ function resultsHtml(res, q, act = 'pick') {
   if (!q) return '';
   if (!res.length) return '<div class="empty">Geen loper gevonden</div>';
   const inQ = new Set(queue.map((x) => x.runnerId));
-  return res.map((x) => `<div class="row" data-act="${act}" data-id="${esc(x.id)}" style="cursor:pointer"><div class="nm">${esc(x.name)}<small>${x.totalLaps || 0} ${(x.totalLaps || 0) === 1 ? 'ronde' : 'rondes'}${inQ.has(x.id) ? ' · staat in de wachtrij' : ''}</small></div><div class="w">${act === 'view' ? 'Bekijk ›' : 'Dit ben ik ›'}</div></div>`).join('');
+  return res.map((x) => `<div class="row" data-act="${act}" data-id="${esc(x.id)}" style="cursor:pointer"><div class="nm">${crownOf(x.id)}${esc(x.name)}<small>${x.totalLaps || 0} ${(x.totalLaps || 0) === 1 ? 'ronde' : 'rondes'}${inQ.has(x.id) ? ' · staat in de wachtrij' : ''}</small></div><div class="w">${act === 'view' ? 'Bekijk ›' : 'Dit ben ik ›'}</div></div>`).join('');
 }
 
 function viewSearch() {
@@ -306,6 +306,8 @@ function lapTileStyle(n) {
   return { bg: '#fff6df', fg: '#17120d', sub: '#4a3b2a', shadow: 'none' };
 }
 const CROWN_D = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
+const crownIcon = (s) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="flex:none;vertical-align:-3px"><path d="M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z" fill="#ffd23f" stroke="#17120d" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+const crownOf = (id, s = 16) => { const T = SUM && SUM.top; if (!T) return ''; const rec = T.fast && T.fast[0] && T.fast[0].id === id, lead = T.most && T.most[0] && T.most[0].id === id && T.most[0].n >= 4; return rec || lead ? crownIcon(s) + ' ' : ''; };
 function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
@@ -338,13 +340,13 @@ function viewQueue() {
     <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
       ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, LIM).map((q, i) => {
         const ms = waitMs(i), mine = q.runnerId === me;
-        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
+        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${crownOf(q.runnerId)}${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${mine ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
       }).join('')}
       ${w.length > LIM ? `<button class="btn small full" data-act="qall" style="margin-top:4px">Toon alle ${w.length} wachtenden</button>` : showAllQ && w.length > 8 ? '<button class="btn small full" data-act="qall" style="margin-top:4px">Toon minder</button>' : ''}</div>
     <div class="card"><h2>Net gelopen <small>laatste ${recent.length || ''} rondes</small></h2>
       ${recent.length === 0 ? '<div class="empty">Nog geen rondes</div>' : recent.map((l) => {
         const ago = Math.max(0, Math.round((tnow() - new Date(l.timestamp).getTime()) / 60000)), rec = SUM && SUM.record && l.time <= SUM.record.t;
-        return `<div class="row ${l.runnerId === me ? 'me' : ''}"><div class="no" style="width:44px;font-size:13px">${clock(l.timestamp)}</div><div class="nm" data-act="view" data-id="${esc(l.runnerId)}" style="cursor:pointer">${esc(l.runnerName)}${l.runnerId === me ? '<span class="badge">jij</span>' : ''}${rec ? '<span class="badge">record</span>' : ''}<small>${ago < 1 ? 'net binnengekomen' : ago + ' min geleden'}</small></div><div class="w">${mmss(l.time)}</div></div>`;
+        return `<div class="row ${l.runnerId === me ? 'me' : ''}"><div class="no" style="width:44px;font-size:13px">${clock(l.timestamp)}</div><div class="nm" data-act="view" data-id="${esc(l.runnerId)}" style="cursor:pointer">${crownOf(l.runnerId)}${esc(l.runnerName)}${l.runnerId === me ? '<span class="badge">jij</span>' : ''}${rec ? '<span class="badge">record</span>' : ''}<small>${ago < 1 ? 'net binnengekomen' : ago + ' min geleden'}</small></div><div class="w">${mmss(l.time)}</div></div>`;
       }).join('')}</div>`;
 }
 

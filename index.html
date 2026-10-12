@@ -95,6 +95,8 @@
         body .display-hdr .bg-white\/10 { background: #fff !important; border: 3px solid #17120d !important; border-radius: 14px !important; box-shadow: 3px 3px 0 #17120d; }
         body .display-hdr .font-extrabold, body .display-hdr .font-semibold { font-weight: 800; }
         /* groot scherm: kaartranden kleur behouden maar zwart kader */
+        body input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), body select, body textarea { border: 3px solid #17120d !important; border-radius: 12px !important; background: #fff; }
+        body input:focus, body select:focus, body textarea:focus { outline: none; box-shadow: 3px 3px 0 #f2a342; }
         body .display-root .border-orange-500 { border-color: #17120d !important; background: #ffd58a !important; }
         body .display-root .text-orange-600 { color: #e8590c; }
         body .qr-promo { background: #ffd58a !important; }
@@ -678,6 +680,19 @@
         // ===== Lijst waarvan de rijen vloeiend naar hun nieuwe plek schuiven (FLIP) en nieuwe rijen zacht verschijnen =====
         // Klassementsrij in de stijl van de app: #1 goud met kroon, #2 en #3 oranje, de rest crème
         const LB_CROWN = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
+        // Kroontje voor wie het snelste ronde-record heeft of de meeste rondes loopt (vanaf 4): overal waar de naam staat
+        let _crownKey = null, _crownVal = {};
+        const computeCrowns = (laps) => {
+            const key = laps.length + ':' + (laps[laps.length - 1] && laps[laps.length - 1].id);
+            if (key === _crownKey) return _crownVal;
+            const out = {}; let best = Infinity, bestId = null; const cnt = {};
+            laps.forEach(l => { if (l.time < best) { best = l.time; bestId = l.runnerId; } cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
+            const mx = Math.max(0, ...Object.values(cnt));
+            if (mx >= 4) Object.keys(cnt).forEach(id => { if (cnt[id] === mx) out[id] = 'Koploper'; });
+            if (bestId) out[bestId] = 'Recordhouder';
+            _crownKey = key; _crownVal = out; return out;
+        };
+        const crownMark = (label, size = 18) => label ? h('svg', { viewBox: '0 0 24 24', width: size, height: size, style: { flexShrink: 0 }, role: 'img', 'aria-label': label }, h('title', null, label), h('path', { d: LB_CROWN, fill: '#ffd23f', stroke: '#17120d', strokeWidth: 1.8, strokeLinejoin: 'round' })) : null;
         const lbRowStyle = (idx) => idx === 0 ? { background: '#ffd23f', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d' }
             : idx === 1 ? { background: '#f2a342', border: '3px solid #17120d' }
             : idx === 2 ? { background: '#ffd58a', border: '3px solid #17120d' }
@@ -856,9 +871,9 @@ function lapTileStyle(n) {
             const FRESH_MS = 60000;
             const ago = (ts) => { const m = Math.floor((now - new Date(ts).getTime()) / 60000); return m < 1 ? 'zonet' : m < 60 ? `${m} min geleden` : `${Math.floor(m / 60)} u geleden`; };
             return h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3' },
-                h('div', { className: 'flex items-center justify-between border-b-2 pb-1 mb-1.5' },
-                    h('h2', { className: 'text-base font-bold text-gray-800' }, 'Laatste rondes'),
-                    h('span', { className: 'text-xs text-gray-500' }, 'net binnengekomen')
+                h('div', { className: 'flex items-center justify-between pb-1 mb-1.5', style: { borderBottom: '3px solid #17120d' } },
+                    h('h2', { className: 'text-lg font-extrabold', style: { color: '#17120d' } }, 'Laatste rondes'),
+                    h('span', { className: 'text-xs font-semibold text-gray-600' }, 'net binnengekomen')
                 ),
                 recent.length === 0 ? h('div', { className: 'text-center text-gray-400 py-6' }, 'Nog geen rondes…') : h(FlipBox, { className: 'divide-y divide-gray-100' },
                     recent.map((lap, idx) => {
@@ -868,22 +883,22 @@ function lapTileStyle(n) {
                         const isHour = !isOverall && lap.time === stats.hour[hk];
                         const nLaps = stats.count[lap.runnerId] || 1;
                         const isPR = !isOverall && !isHour && nLaps >= 2 && (lap.isPersonalRecord || lap.time === stats.runner[lap.runnerId]);   // bij een eerste ronde is een PR niets bijzonders
-                        const badge = isOverall ? ['Nieuw record!', 'bg-yellow-500 text-white'] : isHour ? [`Beste van ${d.getHours()}u`, 'bg-green-600 text-white'] : isPR ? ['PR', 'bg-blue-500 text-white'] : null;
+                        const badge = isOverall ? ['Nieuw record!', { background: '#ffd23f' }] : isHour ? [`Beste van ${d.getHours()}u`, { background: '#f2a342' }] : isPR ? ['PR', { background: '#fff' }] : null;
                         const fresh = lap.id && performance.now() - (seen.current[lap.id] ?? -1e9) < FRESH_MS;
                         const special = isOverall || isHour;
                         const pr = stats.runner[lap.runnerId];
                         return h('div', { key: lap.id || idx, 'data-flip': lap.id || idx, className: `flex items-center gap-3 py-1.5 px-2 -mx-2 rounded-lg ${fresh ? (special ? 'lap-record' : 'lap-fresh') : ''}` },
                             h('div', { className: 'w-[58px] flex-shrink-0 leading-tight' },
-                                h('div', { className: 'font-mono font-bold text-sm text-gray-800' }, d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })),
-                                h('div', { className: 'text-[10px] text-gray-400' }, ago(lap.timestamp))
+                                h('div', { className: 'font-mono font-bold text-base text-gray-900' }, d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })),
+                                h('div', { className: 'text-[11px] text-gray-500' }, ago(lap.timestamp))
                             ),
                             h('div', { className: 'flex-1 min-w-0 leading-tight' },
-                                h('div', { className: 'font-bold text-sm text-gray-900 truncate' }, lap.runnerName),
-                                h('div', { className: 'text-[11px] text-gray-500' }, `ronde ${lap.lapNumber || '?'}` + (pr && !isPR && !isOverall && !isHour ? ` · PR ${formatTimeSimple(pr)}` : ''))
+                                h('div', { className: 'flex items-center gap-1.5 min-w-0' }, crownMark(computeCrowns(laps)[lap.runnerId], 16), h('div', { className: 'font-extrabold text-base text-gray-900 truncate' }, lap.runnerName)),
+                                h('div', { className: 'text-xs text-gray-600' }, `ronde ${lap.lapNumber || '?'}` + (pr && !isPR && !isOverall && !isHour ? ` · PR ${formatTimeSimple(pr)}` : ''))
                             ),
-                            fresh && !special && h('span', { className: 'flex-shrink-0 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-sky-500 text-white tracking-wide' }, 'NIEUW'),
-                            badge && h('span', { className: `flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${badge[1]}` }, badge[0]),
-                            h('div', { className: `font-mono font-extrabold text-lg w-[52px] text-right flex-shrink-0 text-gray-900` }, formatTimeSimple(lap.time))
+                            fresh && !special && h('span', { className: 'flex-shrink-0 text-[10px] font-extrabold px-1.5 py-0.5 rounded tracking-wide', style: { background: '#17120d', color: '#fff' } }, 'NIEUW'),
+                            badge && h('span', { className: 'flex-shrink-0 text-[11px] font-extrabold px-1.5 py-0.5 rounded', style: { ...badge[1], color: '#17120d', border: '2px solid #17120d' } }, badge[0]),
+                            h('div', { className: 'font-mono font-extrabold text-xl w-[60px] text-right flex-shrink-0 text-gray-900' }, formatTimeSimple(lap.time))
                         );
                     })
                 )
@@ -900,9 +915,9 @@ function lapTileStyle(n) {
             laps.forEach(l => { if (pb[l.runnerId] === undefined || l.time < pb[l.runnerId]) pb[l.runnerId] = l.time; });
             const clock = (ms) => new Date(Date.now() + ms).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
             return h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3' },
-                h('div', { className: 'flex items-center justify-between border-b-2 pb-1 mb-2' },
-                    h('h2', { className: 'text-base font-bold text-gray-800' }, 'Volgende lopers'),
-                    h('span', { className: 'text-xs text-gray-500' }, `${waiting.length} in de wachtrij`)
+                h('div', { className: 'flex items-center justify-between pb-1 mb-2', style: { borderBottom: '3px solid #17120d' } },
+                    h('h2', { className: 'text-lg font-extrabold', style: { color: '#17120d' } }, 'Volgende lopers'),
+                    h('span', { className: 'text-xs font-semibold text-gray-600' }, `${waiting.length} in de wachtrij`)
                 ),
                 list.length === 0
                     ? h('div', { className: 'text-gray-500 py-3 text-center' }, 'Niemand in de wachtrij. Schrijf je in aan de stand!')
@@ -912,19 +927,20 @@ function lapTileStyle(n) {
                             const isNew = r && !r.totalLaps;
                             const best = pb[q.runnerId];
                             const ms = estimateWaitMs(i);
-                            const tone = i === 0 ? 'text-green-700' : i === 1 ? 'text-yellow-700' : 'text-gray-900';
-                            return h('div', { key: q.id || i, 'data-flip': q.id || i, className: `rounded-lg px-2.5 py-1.5 flex items-center gap-2.5 ${i === 0 ? 'bg-green-50 border-2 border-green-500' : i === 1 ? 'bg-yellow-50 border border-yellow-300' : 'bg-gray-50'}` },
-                                h('div', { className: `text-base font-bold w-5 text-center ${i === 0 ? 'text-green-600' : i === 1 ? 'text-yellow-600' : 'text-gray-400'}` }, i + 1),
+                            const tone = 'text-gray-900';
+                            return h('div', { key: q.id || i, 'data-flip': q.id || i, className: 'rounded-lg px-2.5 py-1.5 flex items-center gap-2.5', style: i === 0 ? { background: '#d9f7d0', border: '3px solid #17120d' } : i === 1 ? { background: '#ffe27a', border: '3px solid #17120d' } : { background: '#fff6df', border: '3px solid transparent' } },
+                                h('div', { className: 'text-base font-extrabold w-5 text-center', style: { color: i < 2 ? '#17120d' : '#8b7a63' } }, i + 1),
                                 h('div', { className: 'flex-1 min-w-0' },
                                     h('div', { className: 'flex items-center gap-1.5' },
-                                        h('div', { className: 'font-bold text-sm text-gray-800 truncate leading-tight' }, q.runnerName),
-                                        i < 2 && h('span', { className: `flex-shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${i === 0 ? 'bg-green-600 text-white' : 'bg-yellow-400 text-yellow-900'}` }, i === 0 ? 'Sta klaar!' : 'Maak je klaar')
+                                        crownMark(computeCrowns(laps)[q.runnerId], 16),
+                                        h('div', { className: 'font-extrabold text-base text-gray-900 truncate leading-tight' }, q.runnerName),
+                                        i < 2 && h('span', { className: 'flex-shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded', style: i === 0 ? { background: '#17120d', color: '#fff' } : { background: '#fff', color: '#17120d', border: '2px solid #17120d' } }, i === 0 ? 'Sta klaar!' : 'Maak je klaar')
                                     ),
-                                    h('div', { className: 'text-[10px] text-gray-500 leading-tight' },
+                                    h('div', { className: 'text-xs text-gray-600 leading-tight' },
                                         (isNew ? 'nieuwe loper ' : (r ? `${r.totalLaps} ${r.totalLaps === 1 ? 'ronde' : 'rondes'}` : '')) + (best ? ` · PR ${formatTimeSimple(best)}` : ''))
                                 ),
                                 h('div', { className: 'text-right whitespace-nowrap leading-none w-[92px]' },
-                                    h('div', { className: `${i === 0 && ms <= 5000 ? 'text-base' : 'text-xl'} font-semibold ${tone}`, style: { fontVariantNumeric: 'tabular-nums' } }, (i === 0 && ms <= 5000 ? 'elk moment' : i === 0 && ms < 90000 ? `± ${Math.max(10, Math.round(ms / 10000) * 10)} s` : `± ${Math.max(1, Math.round(ms / 60000))} min`)),
+                                    h('div', { className: `${i === 0 && ms <= 5000 ? 'text-base' : 'text-xl'} font-extrabold ${tone}`, style: { fontVariantNumeric: 'tabular-nums' } }, (i === 0 && ms <= 5000 ? 'elk moment' : i === 0 && ms < 90000 ? `± ${Math.max(10, Math.round(ms / 10000) * 10)} s` : `± ${Math.max(1, Math.round(ms / 60000))} min`)),
                                     h('div', { className: 'text-[11px] font-semibold text-gray-500 mt-0.5' }, `rond ${clock(ms)}`)
                                 )
                             );
@@ -1687,7 +1703,7 @@ function predictNext(times, gender, restMs) {
                         h('div', { style: { width: 3, alignSelf: 'stretch', background: '#17120d', borderRadius: 2 } }),
                         h('div', { style: { textAlign: 'left', lineHeight: 1.1, minWidth: 230 } },
                             h('div', { style: { fontSize: 12, letterSpacing: '.14em', fontWeight: 800, textTransform: 'uppercase', color: '#17120d' } }, 'Opgehaald voor Water for All'),
-                            h('div', { style: { fontSize: 44, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: '#e8590c', letterSpacing: '-.01em' } }, formatEuro(shown)),
+                            h('div', { style: { fontSize: 44, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: '#17120d', letterSpacing: '-.01em' } }, formatEuro(shown)),
                             h('div', { style: { height: 16, background: '#fff6df', border: '3px solid #17120d', borderRadius: 999, overflow: 'hidden', marginTop: 5 } },
                                 h('div', { style: { width: `${Math.max(progress, 2)}%`, height: '100%', background: '#f2a342', borderRight: progress > 1 ? '3px solid #17120d' : 'none', transition: 'width 1s ease' } })
                             ),
@@ -3980,7 +3996,7 @@ function predictNext(times, gender, restMs) {
                                                 }, '☰'),
                                                 h('div', { className: `text-xl font-bold w-6 text-center ${idx === 0 ? 'text-green-600' : idx === 1 ? 'text-yellow-600' : 'text-gray-400'}` }, idx + 1),
                                                 h('div', { className: 'min-w-0' },
-                                                    h('div', { className: 'font-semibold text-gray-900 truncate' }, runner.runnerName),
+                                                    h('div', { className: 'flex items-center gap-1.5 min-w-0' }, crownMark(computeCrowns(laps)[runner.runnerId], 16), h('div', { className: 'font-semibold text-gray-900 truncate' }, runner.runnerName)),
                                                     h('div', { className: `text-sm ${idx === 0 ? 'text-green-600 font-semibold' : idx === 1 ? 'text-yellow-600 font-semibold' : 'text-gray-500'}` }, getWaitTime(idx))
                                                 )
                                             ),
