@@ -4674,20 +4674,23 @@ function predictNext(times, gender, restMs) {
                                                 h('img', { src: 'humasol_logo.png', alt: 'Humasol', style: { height: 44, width: 'auto', flexShrink: 0 } }),
                                                 h('div', { style: { width: 4, alignSelf: 'stretch', background: '#f2a342', borderRadius: 2 } }),
                                                 h('div', { className: 'leading-tight', style: { color: '#17120d' } },
-                                                    h('div', { style: { fontSize: 28, fontWeight: 800, letterSpacing: '-.01em', whiteSpace: 'nowrap' } }, '24u Loop Leuven'),
-                                                    h('div', { style: { fontSize: 14, fontWeight: 600, color: '#4a3b2a' } }, dateTime.date)
+                                                    h('div', { style: { fontSize: 30, fontWeight: 800, letterSpacing: '-.01em', whiteSpace: 'nowrap' } }, '24u Loop Leuven')
                                                 )
                                             ),
-                                            h('div', { className: 'flex items-baseline rounded-xl px-4 py-1 bg-black/20 border border-white/25 shadow-inner', style: { fontVariantNumeric: 'tabular-nums' } },
-                                                h(ClockHMS, { mainClass: 'text-6xl font-semibold tracking-tight leading-none', secClass: 'text-3xl font-medium opacity-70 ml-1 leading-none' })
+                                            // datum, tijd en weer gebundeld in één blok
+                                            h('div', { className: 'flex items-center gap-4', style: { background: '#fff', border: '3px solid #17120d', borderRadius: 16, boxShadow: '4px 4px 0 #17120d', padding: '4px 16px', color: '#17120d', fontVariantNumeric: 'tabular-nums' } },
+                                                h('div', { className: 'leading-none' },
+                                                    h('div', { style: { fontSize: 13, fontWeight: 700, color: '#4a3b2a', marginBottom: 1 } }, dateTime.date),
+                                                    h('div', { className: 'flex items-baseline' }, h(ClockHMS, { mainClass: 'text-5xl font-extrabold tracking-tight leading-none', secClass: 'text-2xl font-semibold ml-1 leading-none text-gray-500' }))
+                                                ),
+                                                weather && h('div', { style: { width: 3, alignSelf: 'stretch', background: '#f2a342', borderRadius: 2 } }),
+                                                weather && h('div', { className: 'flex items-center gap-2', title: getWeatherInfo(weather.code).desc },
+                                                    h('span', { className: 'text-3xl' }, getWeatherInfo(weather.code).icon),
+                                                    h('div', { className: 'leading-tight' }, h('div', { style: { fontSize: 24, fontWeight: 800 } }, `${weather.temp}°C`), h('div', { style: { fontSize: 12, fontWeight: 600, color: '#4a3b2a' } }, getWeatherInfo(weather.code).desc))
+                                                )
                                             )
                                         );
                                     })(),
-                                    // Weather widget
-                                    weather && h('div', { className: 'flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/20', title: getWeatherInfo(weather.code).desc },
-                                        h('span', { className: 'text-2xl' }, getWeatherInfo(weather.code).icon),
-                                        h('div', { className: 'text-xl font-bold' }, `${weather.temp}°C`)
-                                    )
                                 ),
                                 // Water for All: bedrag in het midden van de balk
                                 h('div', { className: 'lg:justify-self-center' },
