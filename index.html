@@ -1694,20 +1694,21 @@ function predictNext(times, gender, restMs) {
                 return h('div', null,
                     h('div', {
                         style: {
-                            display: 'flex', alignItems: 'center', gap: 14, background: '#fff', color: '#17120d',
-                            borderRadius: 16, padding: '6px 20px 6px 12px', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d'
+                            display: 'flex', alignItems: 'center', gap: 14, background: '#bfe8f6', color: '#17120d',
+                            borderRadius: 16, padding: '6px 20px 6px 8px', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d'
                         }
                     },
-                        h('img', { src: 'atlas-copco-logo.png', alt: 'Atlas Copco', style: { height: 46, width: 'auto', flexShrink: 0 } }),
-                        h('img', { src: 'water-for-all-logo.png', alt: 'Water for All', style: { height: 54, width: 'auto', flexShrink: 0 } }),
-                        h('div', { style: { width: 3, alignSelf: 'stretch', background: '#17120d', borderRadius: 2 } }),
+                        // logo's op een wit vlak; de rest in de blauwtinten van die logo's
+                        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '3px solid #17120d', borderRadius: 12, padding: '4px 10px', flexShrink: 0 } },
+                            h('img', { src: 'atlas-copco-logo.png', alt: 'Atlas Copco', style: { height: 42, width: 'auto', flexShrink: 0 } }),
+                            h('img', { src: 'water-for-all-logo.png', alt: 'Water for All', style: { height: 50, width: 'auto', flexShrink: 0 } })),
                         h('div', { style: { textAlign: 'left', lineHeight: 1.1, minWidth: 230 } },
-                            h('div', { style: { fontSize: 12, letterSpacing: '.14em', fontWeight: 800, textTransform: 'uppercase', color: '#17120d' } }, 'Opgehaald voor Water for All'),
+                            h('div', { style: { fontSize: 12, letterSpacing: '.14em', fontWeight: 800, textTransform: 'uppercase', color: '#00577a' } }, 'Opgehaald voor Water for All'),
                             h('div', { style: { fontSize: 44, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: '#17120d', letterSpacing: '-.01em' } }, formatEuro(shown)),
-                            h('div', { style: { height: 16, background: '#fff6df', border: '3px solid #17120d', borderRadius: 999, overflow: 'hidden', marginTop: 5 } },
-                                h('div', { style: { width: `${Math.max(progress, 2)}%`, height: '100%', background: '#f2a342', borderRight: progress > 1 ? '3px solid #17120d' : 'none', transition: 'width 1s ease' } })
+                            h('div', { style: { height: 16, background: '#fff', border: '3px solid #17120d', borderRadius: 999, overflow: 'hidden', marginTop: 5 } },
+                                h('div', { style: { width: `${Math.max(progress, 2)}%`, height: '100%', background: '#0090c0', borderRight: progress > 1 ? '3px solid #17120d' : 'none', transition: 'width 1s ease' } })
                             ),
-                            h('div', { style: { fontSize: 12, color: '#17120d', fontWeight: 600, marginTop: 4 } }, `nog ${lapsToGo} ${lapsToGo === 1 ? 'ronde' : 'rondes'} tot ${formatEuro(next)} · € ${EUR_PER_LAP} per ronde`)
+                            h('div', { style: { fontSize: 12, color: '#00577a', fontWeight: 700, marginTop: 4 } }, `nog ${lapsToGo} ${lapsToGo === 1 ? 'ronde' : 'rondes'} tot ${formatEuro(next)} · € ${EUR_PER_LAP} per ronde`)
                         )
                     ),
                     celebrate && h(Celebration, { amount: celebrate.amount })
