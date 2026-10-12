@@ -4692,10 +4692,10 @@ function predictNext(times, gender, restMs) {
                                     h(DonationBanner, { laps: laps.length, variant: 'header' })
                                 ),
                                 h('div', { className: 'relative lg:justify-self-end' },
-                                    h('div', { className: 'text-right' },
-                                        h('div', { className: 'text-sm uppercase tracking-wider text-humasol-beige font-semibold' }, 'TOTAAL AANTAL RONDES'),
-                                        h('div', { className: 'text-5xl font-bold tracking-tight' }, totalLaps),
-                                        h('div', { className: 'text-base text-humasol-white font-medium' }, `${totalDistance.toFixed(2)} km gelopen`)
+                                    h('div', { className: 'text-right', style: { background: '#fff', color: '#17120d', border: '3px solid #17120d', borderRadius: 16, boxShadow: '4px 4px 0 #17120d', padding: '6px 18px', marginRight: isDisplayFullscreen ? 26 : 0 } },
+                                        h('div', { style: { fontSize: 12, letterSpacing: '.14em', fontWeight: 800, textTransform: 'uppercase' } }, 'Totaal aantal rondes'),
+                                        h('div', { style: { fontSize: 44, fontWeight: 800, lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' } }, totalLaps),
+                                        h('div', { style: { fontSize: 13, fontWeight: 600, color: '#4a3b2a' } }, `${totalDistance.toFixed(2).replace('.', ',')} km gelopen`)
                                     ),
                                     // Fullscreen: onopvallend icoon in de rechtermarge, vervaagt na 3s (alleen zichtbaar in fullscreen)
                                     isDisplayFullscreen && h('button', {
