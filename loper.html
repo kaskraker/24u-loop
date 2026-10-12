@@ -300,7 +300,15 @@ function viewSearch() {
 }
 
 const TRACK_D = 'M 13 70 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 13 70';
-const STAR_D = 'M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z', CROWN_D = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
+// Kleur van het rondes-vakje: loopt gradueel van crème (ronde 1) via geel en oranje naar diep oranje en uiteindelijk zwart met goud (ronde 14+)
+const TILE_STOPS = [[1, [255, 246, 223]], [4, [255, 226, 122]], [7, [242, 163, 66]], [10, [232, 89, 12]], [14, [23, 18, 13]]];
+function lapTileStyle(n) {
+  const c = Math.max(1, Math.min(14, n)); let i = 0; while (i < TILE_STOPS.length - 2 && c > TILE_STOPS[i + 1][0]) i++;
+  const [a, ca] = TILE_STOPS[i], [b, cb] = TILE_STOPS[i + 1], t = (c - a) / (b - a), rgb = ca.map((v, k) => Math.round(v + (cb[k] - v) * t));
+  const dark = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) < 150, top = n >= 14;
+  return { bg: `rgb(${rgb.join(',')})`, fg: top ? '#ffd23f' : dark ? '#fff' : '#17120d', sub: top ? '#ffd23f' : dark ? '#ffe9d0' : '#4a3b2a', shadow: top ? '3px 3px 0 #ffd23f' : 'none' };
+}
+const CROWN_D = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
 function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
@@ -308,20 +316,20 @@ function nowCard() {
   const mine = { length: nLaps };
   const rel = Math.max(0.06, Math.min(0.25, nLaps >= 3 && rnn.sd ? rnn.sd : 0.15));
   const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : ex * 1.12;
-  const lapNo = nLaps + 1, tier = lapNo >= 12 ? 4 : lapNo >= 8 ? 3 : lapNo >= 5 ? 2 : 1, stars = lapNo >= 5 ? Math.min(5, Math.floor(lapNo / 3)) : 0;
+  const lapNo = nLaps + 1;
   const topMost = SUM && SUM.top && SUM.top.most && SUM.top.most[0];
   const crown = SUM && SUM.record && SUM.record.name && SUM.record.name === active.runner.runnerName ? 'Recordhouder' : (topMost && topMost.id === rid && topMost.n >= 4 ? 'Koploper' : '');
-  const bg = ['#ffd58a', '#ffd58a', '#ffc566', '#ffb347', '#ffa62b'][tier], svgI = (d, s) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="flex:none"><path d="${d}" fill="#ffd23f" stroke="#17120d" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
-  return `<div class="card" style="background:${bg};${tier >= 3 ? 'animation:tierGlow ' + (tier >= 4 ? '1.6' : '2.4') + 's ease-in-out infinite;' : ''}"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">Nu aan het lopen${crown ? ' · ' + crown : ''}</div>
+  const svgI = (d, s) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="flex:none"><path d="${d}" fill="#ffd23f" stroke="#17120d" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+  return `<div class="card" style="background:#ffd58a"><div class="k" style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--deep)">Nu aan het lopen${crown ? ' · ' + crown : ''}</div>
     <div style="display:flex;align-items:center;gap:10px">
-      <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${crown ? svgI(CROWN_D, 26) + ' ' : ''}${esc(active.runner.runnerName)}${stars ? '<div style="display:flex;gap:1px;margin-top:3px">' + Array.from({ length: stars }, () => svgI(STAR_D, 18)).join('') + '</div>' : ''}</div>
+      <div style="flex:1;min-width:0"><div data-act="view" data-id="${esc(rid)}" style="font-size:24px;font-weight:800;line-height:1.1;cursor:pointer">${crown ? svgI(CROWN_D, 26) + ' ' : ''}${esc(active.runner.runnerName)}</div>
         <div data-live="${st}" style="font-size:44px;font-weight:800;line-height:1.1">0:00.00</div></div>
       <svg viewBox="0 0 260 140" style="width:46%;flex:none;overflow:visible" data-track data-start="${st}" data-fast="${fast}" data-slow="${slow}">
         <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
         <path class="tlo" d="${TRACK_D}" fill="none" stroke="#f2a342" stroke-width="17" pathLength="1" stroke-dasharray=".001 2" opacity=".55"/>
         <path class="thi" d="${TRACK_D}" fill="none" stroke="#e8590c" stroke-width="17" pathLength="1" stroke-dasharray=".05 2"/>
         <line x1="0" y1="70" x2="26" y2="70" stroke="#17120d" stroke-width="5"/></svg></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${(lapNo === 1 ? [['Eerste ronde', 'Succes!']] : [['Ronde', lapNo], ['Verwacht', mmss(ex)]]).map(([k, v]) => `<div style="background:#fff6df;border:3px solid var(--ink);border-radius:12px;padding:4px 10px"><div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">${k}</div><div style="font-size:22px;font-weight:800;line-height:1.15">${v}</div></div>`).join('')}</div></div>`;
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${(lapNo === 1 ? [['Eerste ronde', 'Succes!']] : [['Ronde', lapNo], ['Verwacht', mmss(ex)]]).map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#6a5a48', shadow: 'none' }; return `<div style="background:${ts.bg};box-shadow:${ts.shadow};border:3px solid var(--ink);border-radius:12px;padding:4px 10px"><div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${ts.sub}">${k}</div><div style="font-size:22px;font-weight:800;line-height:1.15;color:${ts.fg}">${v}</div></div>`; }).join('')}</div></div>`;
 }
 function viewQueue() {
   const w = waiting();

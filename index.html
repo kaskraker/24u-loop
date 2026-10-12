@@ -749,6 +749,14 @@
         };
 
         // ===== Display links: "Nu aan het lopen" met piste =====
+// Kleur van het rondes-vakje: loopt gradueel van crème (ronde 1) via geel en oranje naar diep oranje en uiteindelijk zwart met goud (ronde 14+)
+const TILE_STOPS = [[1, [255, 246, 223]], [4, [255, 226, 122]], [7, [242, 163, 66]], [10, [232, 89, 12]], [14, [23, 18, 13]]];
+function lapTileStyle(n) {
+  const c = Math.max(1, Math.min(14, n)); let i = 0; while (i < TILE_STOPS.length - 2 && c > TILE_STOPS[i + 1][0]) i++;
+  const [a, ca] = TILE_STOPS[i], [b, cb] = TILE_STOPS[i + 1], t = (c - a) / (b - a), rgb = ca.map((v, k) => Math.round(v + (cb[k] - v) * t));
+  const dark = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) < 150, top = n >= 14;
+  return { bg: `rgb(${rgb.join(',')})`, fg: top ? '#ffd23f' : dark ? '#fff' : '#17120d', sub: top ? '#ffd23f' : dark ? '#ffe9d0' : '#4a3b2a', shadow: top ? '3px 3px 0 #ffd23f' : 'none' };
+}
         const DisplayNow = ({ activeRunner, isRunning, startTime, elapsedTime, formatTime, formatTimeSimple, runners, laps, waiting }) => {
             const running = activeRunner && isRunning;
             if (!running) {
@@ -781,31 +789,30 @@
             const swapKey = `${activeRunner.runnerId}_${+startTime}`;
             // Hoe meer rondes, hoe feestelijker de kaart: ster per 3 rondes, vanaf ronde 5 warmere kleur, vanaf 8 een gloed, vanaf 12 draaiende stralen. Een kroon voor wie het snelste ronde-record of de meeste rondes heeft.
             const testLap = Number(new URLSearchParams(window.location.search).get('testlap')) || 0;   // ?testlap=12 toont het ontwerp van ronde 12 (voor testen)
-            const lapNo = testLap || (me && me.totalLaps || 0) + 1, tier = lapNo >= 12 ? 4 : lapNo >= 8 ? 3 : lapNo >= 5 ? 2 : 1, stars = lapNo >= 5 ? Math.min(5, Math.floor(lapNo / 3)) : 0;
+            const lapNo = testLap || (me && me.totalLaps || 0) + 1;
             const recBest = laps.reduce((m, l) => l.time < m.t ? { t: l.time, id: l.runnerId } : m, { t: Infinity, id: null });
             const cnt = {}; laps.forEach(l => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
             const maxCnt = Math.max(0, ...Object.values(cnt));
             const crown = new URLSearchParams(window.location.search).get('testcrown') ? 'Recordhouder' : recBest.id === activeRunner.runnerId ? 'Recordhouder' : (maxCnt >= 4 && cnt[activeRunner.runnerId] === maxCnt ? 'Koploper' : null);
-            const STAR = 'M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z', CROWN = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
+            const CROWN = 'M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z';
             const tiles = lapNo === 1 ? [['Eerste ronde', 'Succes!']] : [['Ronde', String(lapNo)], ['Verwacht', formatTimeSimple(expected)]];
-            return h('div', { className: `relative bg-white rounded-lg shadow-lg border-4 border-orange-500 p-4 now-t${tier}`, style: { overflow: 'hidden' } },
+            return h('div', { className: 'relative bg-white rounded-lg shadow-lg border-4 border-orange-500 p-4' },
                 h('style', null, '@keyframes swapGlow { 0% { box-shadow: 0 0 0 0 rgba(234,88,12,.5); } 100% { box-shadow: 0 0 0 26px rgba(234,88,12,0); } }'),
                 // zachte lichtpuls rond de kaart bij elke nieuwe loper
                 h('div', { key: 'glow' + swapKey, style: { position: 'absolute', inset: -4, borderRadius: 8, pointerEvents: 'none', animation: 'swapGlow .9s ease-out 1' } }),
-                tier >= 4 && h('div', { 'aria-hidden': true, style: { position: 'absolute', left: '50%', top: '50%', width: 900, height: 900, marginLeft: -450, marginTop: -450, background: 'repeating-conic-gradient(rgba(255,255,255,.22) 0deg 10deg, rgba(255,255,255,0) 10deg 20deg)', animation: 'tierRays 40s linear infinite', pointerEvents: 'none' } }),
                 h('div', { className: 'relative text-sm font-bold tracking-wider uppercase text-orange-600' }, crown ? `Nu aan het lopen · ${crown}` : 'Nu aan het lopen'),
                 h('div', { className: 'relative flex items-center gap-3 mt-1' },
                     h('div', { key: swapKey, className: 'flex-1 min-w-0', style: { animation: 'swapIn .5s cubic-bezier(.2,.8,.2,1) 1' } },
                         h('div', { className: 'flex items-center gap-2 min-w-0' },
                             crown && h('svg', { viewBox: '0 0 24 24', width: 38, height: 38, style: { flexShrink: 0, animation: 'crownBob 2.2s ease-in-out infinite' }, 'aria-label': crown }, h('path', { d: CROWN, fill: '#ffd23f', stroke: '#17120d', strokeWidth: 1.6, strokeLinejoin: 'round' })),
                             h('div', { className: 'text-3xl font-extrabold text-gray-900 truncate' }, activeRunner.runnerName),
-                            stars > 0 && h('div', { className: 'flex flex-shrink-0' }, Array.from({ length: stars }, (_, i) => h('svg', { key: i, viewBox: '0 0 24 24', width: 22, height: 22 }, h('path', { d: STAR, fill: '#ffd23f', stroke: '#17120d', strokeWidth: 1.6, strokeLinejoin: 'round' }))))
                         ),
                         h(LiveClock, { startTime, running, format: formatTime, className: 'font-extrabold leading-none mt-1', style: { fontSize: 'clamp(48px, 4.2vw, 84px)', color: '#17120d' } }),
                         h('div', { className: 'flex gap-2 mt-3' },
-                            tiles.map(([k, v]) => h('div', { key: k, className: 'rounded-lg px-3 py-1', style: { border: '3px solid #17120d', background: '#fff6df' } },
-                                h('div', { className: 'text-[10px] font-extrabold uppercase tracking-wide text-gray-700' }, k),
-                                h('div', { className: 'text-2xl font-extrabold leading-tight', style: { color: '#17120d' } }, v)))
+                            tiles.map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#4a3b2a', shadow: 'none' };
+                                return h('div', { key: k, className: 'rounded-lg px-3 py-1', style: { border: '3px solid #17120d', background: ts.bg, boxShadow: ts.shadow, transition: 'background .6s' } },
+                                    h('div', { className: 'text-[10px] font-extrabold uppercase tracking-wide', style: { color: ts.sub } }, k),
+                                    h('div', { className: 'text-2xl font-extrabold leading-tight', style: { color: ts.fg } }, v)); })
                         )
                     ),
                     h('div', { style: { width: 320, flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
