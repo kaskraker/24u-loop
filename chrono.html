@@ -660,7 +660,10 @@ function viewChrono() {
   const actions = running ? `<button class="btn" data-act="moreacts" style="width:100%">${moreOpen ? 'Andere acties ▴' : 'Andere acties ▾'}</button>
     ${moreOpen ? `<div class="row2"><button class="btn" data-act="manual">Tijd intikken</button><button class="btn" data-act="stop">Stoppen na deze</button></div><div class="row2"><button class="btn" data-act="swap">Andere loper loopt</button><button class="btn" data-act="skip" ${w.length ? '' : 'disabled'}>Volgende niet aanwezig</button></div><button class="btn danger" data-act="cancel">Loop annuleren (niet opslaan)</button>` : ''}`
     : (w.length ? '<button class="btn" data-act="skip">Niet aanwezig: naar het einde van de rij</button>' : '');
-  if (focusMode) return `${top}${undoCard}${nextCard || (running ? '<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">Niemand meer</div></div>' : '')}${button.replace('class="big hold', 'class="big fixed hold')}`;
+  if (focusMode) {   // tijdnemer-modus: ook de drie lopers daarna, compact
+    const after = w.slice(1, 4).map((q, i) => `<div class="row"><div class="no">${i + 2}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + 1), i + 1)}</div></div>`).join('');
+    return `${top}${undoCard}${nextCard || (running ? '<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">Niemand meer</div></div>' : '')}${after ? `<div class="card" style="padding:10px 12px"><h2 style="font-size:15px;margin-bottom:6px">Daarna <small>${w.length} wachtend</small></h2>${after}</div>` : ''}${button.replace('class="big hold', 'class="big fixed hold')}`;
+  }
   const focusBtn = '<button class="focusin" data-act="focus" aria-label="Tijdnemer-modus">⤢ Focus</button>';
   return `${top.replace(/^(<div class="card now"[^>]*>)/, '$1' + focusBtn)}${button}${undoCard}${nextCard}${actions}
     <div class="card"><h2>Daarna <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>
