@@ -100,7 +100,7 @@
 </style>
 </head>
 <body>
-<header><div class="ttl"><span class="logo"><img src="humasol_logo.png" alt="Humasol"></span><div style="min-width:0;line-height:1.1"><h1>Chronometer</h1><span id="env"></span></div></div><span class="chip wait" id="chip"><i></i><span id="chipTxt">Verbinden…</span></span></header>
+<header><div class="ttl"><span class="logo"><img src="humasol_logo.png" alt="Humasol"></span><div style="min-width:0;line-height:1.1"><h1>Chronometer</h1><span id="env"></span></div></div><span class="chip wait" id="chip" style="cursor:pointer"><i></i><span id="chipTxt">Verbinden…</span></span><div id="sig" style="display:none;position:fixed;top:58px;right:10px;z-index:80;min-width:230px;background:#fff;color:#17120d;border:3px solid #17120d;border-radius:14px;box-shadow:4px 4px 0 #17120d;padding:10px 14px;font-size:14px"></div></header>
 <div id="banner"></div>
 <main id="view"></main>
 <nav id="nav"></nav>
@@ -768,6 +768,31 @@ setInterval(() => {
 }, 50);
 setInterval(render, 5000);
 window.addEventListener('online', render); window.addEventListener('offline', render);
+
+// Signaalsterkte: tik op de chip. Browsers geven geen wifi-dBm, dus we meten de reactietijd naar de server (enkel terwijl het paneel open staat, sluit na 1 min)
+let sigOn = false, sigIv = null, sigStop = null, sigHist = [];
+function sigShow() {
+  const el = $('sig'), valid = sigHist.filter((x) => x != null), ping = sigHist.length ? sigHist[sigHist.length - 1] : undefined;
+  const q = ping === undefined ? { l: 'Meten…', c: '#9ca3af', b: 0 } : ping == null ? { l: 'Geen verbinding', c: '#e03131', b: 0 } : ping < 250 ? { l: 'Sterk', c: '#2fb344', b: 4 } : ping < 600 ? { l: 'Goed', c: '#74b816', b: 3 } : ping < 1500 ? { l: 'Zwak', c: '#f59f00', b: 2 } : { l: 'Zeer zwak', c: '#e03131', b: 1 };
+  const avg = valid.length ? Math.round(valid.reduce((a, c) => a + c, 0) / valid.length) : null, cn = navigator.connection || {};
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:20px"><span style="opacity:.6">${k}</span><b>${v}</b></div>`;
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><div style="display:flex;align-items:flex-end;gap:3px;height:22px">${[1, 2, 3, 4].map((i) => `<div style="width:6px;height:${5 + i * 4}px;border-radius:2px;background:${i <= q.b ? q.c : '#e5e7eb'}"></div>`).join('')}</div><b style="font-size:17px;color:${q.c}">${q.l}</b></div>`
+    + (ping !== undefined ? row('Reactietijd', ping == null ? 'geen antwoord' : ping + ' ms') : '') + (avg != null ? row('Gemiddeld', avg + ' ms') : '')
+    + (sigHist.length > 2 ? row('Gemist', (sigHist.length - valid.length) + ' van ' + sigHist.length) : '')
+    + (cn.effectiveType ? row('Netwerk', (cn.type ? cn.type + ' · ' : '') + cn.effectiveType) : '') + (cn.downlink != null ? row('Snelheid', cn.downlink + ' Mbps') : '');
+}
+async function sigMeasure() {
+  let ms = null;
+  try { if (navigator.onLine) { const t0 = performance.now(); await Promise.race([db.collection(col('meta')).doc('chrono').get({ source: 'server' }), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))]); ms = Math.round(performance.now() - t0); } } catch (e) {}
+  if (!sigOn) return; sigHist = sigHist.concat([ms]).slice(-12); sigShow();
+}
+function sigToggle(on) {
+  sigOn = on; clearInterval(sigIv); clearTimeout(sigStop); $('sig').style.display = on ? 'block' : 'none';
+  if (!on) return;
+  sigHist = []; sigShow(); sigMeasure(); sigIv = setInterval(sigMeasure, 3000); sigStop = setTimeout(() => sigToggle(false), 60000);
+}
+$('chip').addEventListener('click', () => sigToggle(!sigOn));
+
 render();
 </script>
 </body>
