@@ -183,7 +183,7 @@ function predictNext(times, gender, restMs) {
   return e;
 }
 
-const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const mmss = (ms) => { const s = Math.ceil(ms / 1000);   /* zoals in de atletiek naar boven afronden, net als het grote scherm en de lopers-app */ return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
 const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
 const sortedQueue = () => [...queue].sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt));

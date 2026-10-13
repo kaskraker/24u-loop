@@ -227,9 +227,9 @@ const $ = (id) => document.getElementById(id);
 const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 function findRunners(q, n) { const words = norm(q).split(/\s+/).filter(Boolean); return words.length ? runners.filter((x) => { const nm = norm(x.name); return words.every((w) => nm.includes(w)); }).slice(0, n) : []; }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const mmss = (ms) => { const s = Math.floor(ms / 1000);   /* naar beneden afronden, zoals het grote scherm en de tienden in de ranglijsten (1:21,9 = 1:21) */ return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const mmss = (ms) => { const s = Math.ceil(ms / 1000);   /* zoals in de atletiek naar boven afronden (1:21,1 -> 1:22), net als het grote scherm */ return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
-const tenths = (ms) => { const d = Math.floor(ms / 100); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, '0')},${d % 10}`; };   // ranglijsten: 81 930 ms -> 1:21,9 (zelfde als het grote scherm)
+const tenths = (ms) => { const d = Math.ceil(ms / 100); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, '0')},${d % 10}`; };   // ranglijsten, handtijd zoals in de atletiek naar boven: 81 930 ms -> 1:22,0 (zelfde als het grote scherm)
 const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
 
 const isRunning = () => !!(active && active.isRunning && active.runner);
@@ -437,7 +437,7 @@ function viewRank() {
     const open = !!lbOpen[key], arr = open ? fullList(key) : top, f = rankFocus && rankFocus.list === key ? rankFocus.id : '';
     const total = open ? arr.length : fullList(key).length;
     // gelijke tijden of rondes krijgen dezelfde plaats
-    const rows = arr.length ? (() => { let rk = 0, prev; return arr.map((x, i) => { const kv = x.t !== undefined ? Math.floor(x.t / 100) : x.n; /* gelijk = gelijk in tienden, zoals getoond */ if (i === 0 || kv !== prev) rk = i + 1; prev = kv; return row(x, i, val, (me && x.id === me) || (f && x.id === f), rk); }).join(''); })() : '<div class="empty">Nog geen data</div>';
+    const rows = arr.length ? (() => { let rk = 0, prev; return arr.map((x, i) => { const kv = x.t !== undefined ? Math.ceil(x.t / 100) : x.n; /* gelijk = gelijk in tienden, zoals getoond */ if (i === 0 || kv !== prev) rk = i + 1; prev = kv; return row(x, i, val, (me && x.id === me) || (f && x.id === f), rk); }).join(''); })() : '<div class="empty">Nog geen data</div>';
     const toggle = total > 10 ? `<button class="link" data-act="lbtoggle" data-list="${key}" style="display:block;margin:2px auto 0;font-size:13px;color:var(--muted)">${open ? 'Toon minder ▴' : `Toon alle ${total} ▾`}</button>` : '';
     return `<div class="card" id="lb-${key}"><h2>${title} ${sub ? `<small>${sub}</small>` : ''}</h2>${rows}${toggle}</div>`;
   };

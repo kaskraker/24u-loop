@@ -708,8 +708,8 @@
             : idx === 2 ? { background: '#ffd58a', border: '3px solid #17120d' }
             : { background: '#fff6df', border: '3px solid transparent' };
         // plaats met gelijke plaatsen bij gelijke waarde (bv. vier lopers met 8 rondes staan allemaal op dezelfde plek)
-        // Rondetijd met tienden voor de ranglijsten (naar beneden afgerond, zoals de hele seconden elders): 81 930 ms -> 1:21,9
-        const lapTenths = (ms) => { const d = Math.floor(ms / 100); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, '0')},${d % 10}`; };
+        // Rondetijd met tienden voor de ranglijsten, zoals handtijden in de atletiek naar boven afgerond: 81 930 ms -> 1:22,0, 81 040 ms -> 1:21,1
+        const lapTenths = (ms) => { const d = Math.ceil(ms / 100); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, '0')},${d % 10}`; };
         const tieRank = (arr, i, f) => { let j = i; while (j > 0 && f(arr[j - 1]) === f(arr[i])) j--; return j + 1; };
         const lbRow = ({ idx, rank, id, val, name, sub, recent, value, badge }) => { idx = (rank || idx + 1) - 1; return h('div', { key: id, 'data-flip': id, 'data-val': val, className: 'flex items-center justify-between gap-2 px-2.5 rounded-lg', style: { ...lbRowStyle(idx), paddingTop: 7, paddingBottom: 7, color: '#17120d' } },
             h('div', { className: 'flex items-center gap-2 flex-1 min-w-0' },
@@ -1081,7 +1081,7 @@ function predictNext(times, gender, restMs) {
         };
 
         const LiveCharts = ({ laps, runners, weather }) => {
-            const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+            const mmss = (sec) => { const s = Math.ceil(sec - 1e-6); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };   // naar boven, zoals in de atletiek
             const [qh, setQh] = React.useState([]);
             React.useEffect(() => {
                 try { if (typeof db === 'undefined' || !db) return; return db.collection(colName('meta')).doc('queueHistory').onSnapshot((snap) => { const a = (snap.exists && snap.data().samples) || []; setQh(a.slice().sort((x, y) => x.t - y.t)); }, () => {}); } catch (e) {}
@@ -2258,7 +2258,7 @@ function predictNext(times, gender, restMs) {
             };
 
             const formatTimeSimple = (ms) => {
-                const totalSeconds = Math.floor(ms / 1000);
+                const totalSeconds = Math.ceil(ms / 1000);   // zoals in de atletiek: naar boven afronden (1:21,1 -> 1:22)
                 const minutes = Math.floor(totalSeconds / 60);
                 const seconds = totalSeconds % 60;
                 return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -4785,7 +4785,7 @@ function predictNext(times, gender, restMs) {
                                         fastestLapsWomen.length === 0 ? h('div', { className: 'text-center text-gray-400 py-4 text-xs' }, 'Nog geen data') :
                                         h(FlipBox, { className: 'space-y-1.5', flash: true },
                                             fastestLapsWomen.slice(0, DISPLAY_TOP_N).map((lap, idx) =>
-                                                lbRow({ idx, rank: tieRank(fastestLapsWomen, idx, x => Math.floor(x.time / 100)), id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: lapTenths(lap.time), badge: rankBadge('fastestWomen', lap.id) })
+                                                lbRow({ idx, rank: tieRank(fastestLapsWomen, idx, x => Math.ceil(x.time / 100)), id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: lapTenths(lap.time), badge: rankBadge('fastestWomen', lap.id) })
                                             )
                                         )
                                     ),
@@ -4796,7 +4796,7 @@ function predictNext(times, gender, restMs) {
                                         fastestLapsMen.length === 0 ? h('div', { className: 'text-center text-gray-400 py-4 text-xs' }, 'Nog geen data') :
                                         h(FlipBox, { className: 'space-y-1.5', flash: true },
                                             fastestLapsMen.slice(0, DISPLAY_TOP_N).map((lap, idx) =>
-                                                lbRow({ idx, rank: tieRank(fastestLapsMen, idx, x => Math.floor(x.time / 100)), id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: lapTenths(lap.time), badge: rankBadge('fastestMen', lap.id) })
+                                                lbRow({ idx, rank: tieRank(fastestLapsMen, idx, x => Math.ceil(x.time / 100)), id: lap.id || idx, name: lap.runnerName, sub: `Om ${clockOf(lap.timestamp)}`, recent: isRecent(lap.timestamp), value: lapTenths(lap.time), badge: rankBadge('fastestMen', lap.id) })
                                             )
                                         )
                                     ),
