@@ -1518,9 +1518,50 @@ function predictNext(times, gender, restMs) {
                 error: { dot: '#e03131', text: 'Opslaan mislukt', bg: '#ffd0c2', title: st.error || 'Fout' }
             };
             const c = map[st.state] || map.connecting;
-            return h('div', { className: 'flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold', style: { background: c.bg, color: '#17120d', border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d' }, title: c.title },
+            const [open, setOpen] = React.useState(false), [ping, setPing] = React.useState(null), [hist, setHist] = React.useState([]);
+            // Signaalsterkte: browsers geven geen wifi-dBm, dus meten we de echte reactietijd naar de server (alleen terwijl het paneel open staat)
+            React.useEffect(() => {
+                if (!open || !IS_SIGNUP) return;
+                let stop = false;
+                const measure = async () => {
+                    let ms = null;
+                    try {
+                        if (navigator.onLine && typeof db !== 'undefined' && db) {
+                            const t0 = performance.now();
+                            await Promise.race([db.collection(colName('meta')).doc('chrono').get({ source: 'server' }), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))]);
+                            ms = Math.round(performance.now() - t0);
+                        }
+                    } catch (e) {}
+                    if (stop) return;
+                    setPing(ms); setHist(hh => hh.concat([ms]).slice(-12));
+                };
+                measure(); const iv = setInterval(measure, 3000);
+                return () => { stop = true; clearInterval(iv); };
+            }, [open]);
+            const q = ping == null ? { label: 'Geen verbinding', color: '#e03131', bars: 0 } : ping < 250 ? { label: 'Sterk', color: '#2fb344', bars: 4 } : ping < 600 ? { label: 'Goed', color: '#74b816', bars: 3 } : ping < 1500 ? { label: 'Zwak', color: '#f59f00', bars: 2 } : { label: 'Zeer zwak', color: '#e03131', bars: 1 };
+            const conn = navigator.connection || {};
+            const valid = hist.filter(x => x != null);
+            const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : null;
+            const lost = hist.length - valid.length;
+            const chip = h('div', { className: 'flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold', style: { background: c.bg, color: '#17120d', border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d', cursor: IS_SIGNUP ? 'pointer' : 'default' }, title: c.title, onClick: IS_SIGNUP ? () => { setOpen(o => !o); setHist([]); setPing(null); } : undefined },
                 h('div', { style: { width: 9, height: 9, borderRadius: 999, background: c.dot, border: '1.5px solid #17120d', animation: c.pulse ? 'livePulse 1.4s ease-in-out infinite' : 'none' } }),
                 h('span', null, c.text)
+            );
+            if (!IS_SIGNUP) return chip;
+            const row = (k, v) => h('div', { className: 'flex justify-between gap-6' }, h('span', { style: { opacity: .6 } }, k), h('span', { className: 'font-bold' }, v));
+            return h('div', { style: { position: 'relative' } }, chip,
+                open && h('div', { style: { position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 70, minWidth: 250, background: '#fff', color: '#17120d', border: '3px solid #17120d', borderRadius: 14, boxShadow: '4px 4px 0 #17120d', padding: '12px 16px' }, className: 'text-sm' },
+                    h('div', { className: 'flex items-center gap-3 mb-2' },
+                        h('div', { className: 'flex items-end gap-1', style: { height: 22 } }, [1, 2, 3, 4].map(i => h('div', { key: i, style: { width: 6, height: 5 + i * 4, borderRadius: 2, background: i <= q.bars ? q.color : '#e5e7eb' } }))),
+                        h('div', { className: 'text-lg font-extrabold', style: { color: q.color } }, q.label)
+                    ),
+                    row('Reactietijd', ping == null ? (hist.length ? 'geen antwoord' : 'meten…') : `${ping} ms`),
+                    avg != null && row('Gemiddeld', `${avg} ms`),
+                    hist.length > 2 && row('Gemist', `${lost} van ${hist.length}`),
+                    conn.effectiveType && row('Netwerk', `${conn.type ? conn.type + ' · ' : ''}${conn.effectiveType}`),
+                    conn.downlink != null && row('Snelheid', `${conn.downlink} Mbps`),
+                    row('Laatste update', fmtClock(st.lastServer))
+                )
             );
         };
 
