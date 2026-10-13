@@ -229,7 +229,7 @@ function findRunners(q, n) { const words = norm(q).split(/\s+/).filter(Boolean);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const mmss = (ms) => { const s = Math.ceil(ms / 1000);   /* zoals in de atletiek naar boven afronden (1:21,1 -> 1:22), net als het grote scherm */ return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
-const tenths = (ms) => { const d = Math.ceil(ms / 100); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, '0')},${d % 10}`; };   // ranglijsten, handtijd zoals in de atletiek naar boven: 81 930 ms -> 1:22,0 (zelfde als het grote scherm)
+const tenths = (ms) => { const d = Math.ceil(ms / 100); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, '0')}<span style="font-size:.68em">,${d % 10}</span>`; };   // ranglijsten (tiende kleiner, zoals in sportuitslagen), handtijd zoals in de atletiek naar boven: 81 930 ms -> 1:22,0 (zelfde als het grote scherm)
 const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
 
 const isRunning = () => !!(active && active.isRunning && active.runner);
