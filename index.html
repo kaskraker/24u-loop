@@ -2475,7 +2475,7 @@ function predictNext(times, gender, restMs) {
 
             const addRunner = async (forceNew) => {
                 if (!firstName.trim() || !lastName.trim()) { setQueueNotice({ type: 'warn', text: 'Vul voornaam en achternaam in.' }); return; }
-                if (!genderInput) { setQueueNotice({ type: 'warn', text: 'Kies een gender.' }); return; }
+                if (!genderInput) { setQueueNotice({ type: 'warn', text: 'Kies een klassement.' }); return; }
                 handleAddResult(await addNewRunnerCore({ first: firstName, last: lastName, gender: genderInput }, forceNew === true));
             };
 
@@ -4024,9 +4024,10 @@ function predictNext(times, gender, restMs) {
                                 h('input', { type: 'text', placeholder: 'Voornaam', value: firstName, onChange: e => setFirstName(e.target.value), onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addRunner(); } }, className: 'min-w-0 px-4 py-3 border rounded-lg' }),
                                 h('input', { type: 'text', placeholder: 'Achternaam', value: lastName, ref: lastNameRef, onChange: e => setLastName(e.target.value), onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addRunner(); } }, className: 'min-w-0 px-4 py-3 border rounded-lg' })
                             ),
-                            // gender: één klik (of Tab + Enter); M, V of X typen kiest ook
-                            h('div', { className: 'grid grid-cols-3 gap-3 mb-4', role: 'radiogroup', 'aria-label': 'Gender', onKeyDown: e => { const k = e.key.toUpperCase(); if (k === 'M' || k === 'V' || k === 'X') { e.preventDefault(); setGenderInput(k); } else if (e.key === 'Enter' && genderInput) { e.preventDefault(); addRunner(); } } },
-                                [['M', 'Man'], ['V', 'Vrouw'], ['X', 'X']].map(([g, l], i) => h('button', {
+                            // klassement (intern M / V / X): één klik; M, V of G (geen) typen kiest ook. 'Geen' = enkel in de algemene ranglijsten
+                            h('div', { className: 'text-sm font-medium text-gray-700 mb-1.5' }, 'Klassement'),
+                            h('div', { className: 'grid grid-cols-3 gap-3 mb-4', role: 'radiogroup', 'aria-label': 'Klassement', onKeyDown: e => { const k = e.key.toUpperCase(), g = k === 'G' ? 'X' : k; if (g === 'M' || g === 'V' || g === 'X') { e.preventDefault(); setGenderInput(g); } else if (e.key === 'Enter' && genderInput) { e.preventDefault(); addRunner(); } } },
+                                [['M', 'Mannen'], ['V', 'Vrouwen'], ['X', 'Geen']].map(([g, l], i) => h('button', {
                                     key: g, type: 'button', role: 'radio', 'aria-checked': genderInput === g, ref: i === 0 ? genderRef : null,
                                     onClick: () => setGenderInput(g),
                                     className: 'keep-light py-2.5 rounded-lg font-extrabold',
