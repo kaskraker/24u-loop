@@ -336,7 +336,7 @@ function swapActive() {
   $('swapNo').onclick = () => { $('overlay').innerHTML = ''; };
   $('overlay').querySelectorAll('[data-swap]').forEach((el) => { el.onclick = () => {
     const q = queue.find((x) => x.id === el.dataset.swap), a = activeData(); $('overlay').innerHTML = ''; if (!q || !a) return;
-    const b = db.batch(); b.set(ref('activeRunner', 'current'), { ...a, runner: { id: q.id, runnerId: q.runnerId, runnerName: q.runnerName, addedAt: q.addedAt, order: q.order || 0 } }); commit(b); buzz('undo');
+    const b = db.batch(); b.set(ref('activeRunner', 'current'), { ...a, runner: { id: q.id, runnerId: q.runnerId, runnerName: q.runnerName, gender: q.gender || null, addedAt: q.addedAt, order: q.order || 0 } }); commit(b); buzz('undo');
     toast(`Nu loopt: ${q.runnerName}`, 3000);
   }; });
 }
@@ -482,7 +482,7 @@ function enqueue(r) {
   const w = waiting(), i = w.findIndex((q) => q.runnerId === r.id);
   if (i >= 0) { toast(`${r.name} staat al in de rij (plek ${i + 1})`, 3000); return; }
   const b = db.batch();
-  b.set(ref('queue').doc(), { runnerId: r.id, runnerName: r.name, addedAt: new Date(tnow()).toISOString(), order: Math.max(0, ...queue.map((q) => q.order || 0)) + 1 });
+  b.set(ref('queue').doc(), { runnerId: r.id, runnerName: r.name, gender: r.gender || null, addedAt: new Date(tnow()).toISOString(), order: Math.max(0, ...queue.map((q) => q.order || 0)) + 1 });
   commit(b); buzz('tick'); toast(`${r.name} staat in de rij (plek ${w.length + 1})`, 3500);
   sq = ''; nr = null; unfocus(); render();
 }
@@ -496,7 +496,7 @@ async function addNewRunner() {
   }
   const b = db.batch(), rr = ref('runners').doc();
   b.set(rr, { name, firstName: f, lastName: l, gender: g, totalLaps: 0, totalTime: 0, addedAt: new Date(tnow()).toISOString() });
-  b.set(ref('queue').doc(), { runnerId: rr.id, runnerName: name, addedAt: new Date(tnow()).toISOString(), order: Math.max(0, ...queue.map((q) => q.order || 0)) + 1 });
+  b.set(ref('queue').doc(), { runnerId: rr.id, runnerName: name, gender: g, addedAt: new Date(tnow()).toISOString(), order: Math.max(0, ...queue.map((q) => q.order || 0)) + 1 });
   commit(b); buzz('tick'); toast(`${name} staat in de rij (plek ${waiting().length + 1})`, 3500);
   sq = ''; nr = null; unfocus(); render();
 }

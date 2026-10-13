@@ -204,9 +204,9 @@ function applyIndex(list) {
 // Zulke lopers nemen we voorlopig over uit de wachtrij, de lopende loper of de laatste rondes, zodat ze meteen hun wachttijd zien.
 function mergeKnown() {
   const known = new Set(idxRunners.map((r) => r.id)), extra = [];
-  const add = (id, name) => { if (id && name && !known.has(id)) { known.add(id); extra.push({ id, name, gender: 'X', totalLaps: 0, totalTime: 0, best: 0, sd: 0, exp: 0, temp: true }); } };
-  queue.forEach((q) => add(q.runnerId, q.runnerName));
-  if (active && active.runner) add(active.runner.runnerId, active.runner.runnerName);
+  const add = (id, name, gender) => { if (id && name && !known.has(id)) { known.add(id); extra.push({ id, name, gender: gender || 'X', totalLaps: 0, totalTime: 0, best: 0, sd: 0, exp: 0, temp: true }); } };   // klassement staat mee in de wachtrij
+  queue.forEach((q) => add(q.runnerId, q.runnerName, q.gender));
+  if (active && active.runner) add(active.runner.runnerId, active.runner.runnerName, active.runner.gender);
   recent.forEach((l) => add(l.runnerId, l.runnerName));
   if (me && LAPS[me] && LAPS[me][0]) add(me, LAPS[me][0].runnerName);
   runners = extra.length ? idxRunners.concat(extra) : idxRunners;

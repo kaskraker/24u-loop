@@ -1937,7 +1937,7 @@ function predictNext(times, gender, restMs) {
                 const applied = new Set();
                 const EARLY = Date.UTC(2000, 0, 1);      // wachtrij-items van autoplay staan altijd vóór handmatig toegevoegde
                 const lapId = (seq) => `import_l_${String(seq).padStart(4, '0')}`;
-                const qItem = (l) => ({ runnerId: l.runnerId, runnerName: l.name, addedAt: new Date(EARLY + l.seq * 1000).toISOString(), order: l.seq });
+                const qItem = (l) => ({ runnerId: l.runnerId, runnerName: l.name, gender: l.gender || null, addedAt: new Date(EARLY + l.seq * 1000).toISOString(), order: l.seq });
                 const tick = () => {
                     if (stopped) return;
                     clearTimeout(timer);
@@ -2478,6 +2478,7 @@ function predictNext(times, gender, restMs) {
                     await firestoreWrapper.collection('queue').add({
                         runnerId: runner.id,
                         runnerName: runner.name,
+                        gender: runner.gender || (runners.find(r => r.id === runner.id) || {}).gender || null,   // klassement mee in de rij: de lopers-app kent zo ook wie nog niet in de lopersindex staat
                         addedAt: new Date().toISOString(),
                         order: maxOrder + 1
                     });
@@ -2504,7 +2505,7 @@ function predictNext(times, gender, restMs) {
                         name: fullName, firstName: f, lastName: l, gender,
                         totalLaps: 0, totalTime: 0, addedAt: new Date().toISOString()
                     });
-                    return await enqueueRunner({ id: ref.id, name: fullName });
+                    return await enqueueRunner({ id: ref.id, name: fullName, gender });
                 } catch (error) {
                     console.error('Loper aanmaken mislukt:', error);
                     return { ok: false, reason: 'error', name: fullName, message: error.message };
