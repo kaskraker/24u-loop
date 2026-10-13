@@ -2995,8 +2995,8 @@ function predictNext(times, gender, restMs) {
                 }
                 const timeMs = (min * 60 + sec) * 1000;
 
-                if (timeMs <= 0) {
-                    alert('Tijd moet groter zijn dan 0!');
+                if (timeMs < 60000) {   // 515 m: sneller dan een minuut kan niet
+                    alert('Een ronde duurt minstens 1 minuut.');
                     return;
                 }
 

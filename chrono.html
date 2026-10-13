@@ -215,6 +215,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
 // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
 const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
+const MIN_LAP = 60000, MIN_LAP_TXT = 'Een ronde duurt minstens 1 minuut';   // 515 m: sneller dan een minuut kan niet (record vorig jaar 1:14)
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
 const EW_FIRST = 0.7, EW_NEXT = 0.6;
@@ -301,7 +302,7 @@ async function pressMain(opts) {
   }
   const st = startMs(), time = st ? at - st : 0, run = activeData().runner;
   const mine = laps.filter((l) => l.runnerId === run.runnerId).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0;
-  const limit = best ? Math.max(20000, best * 0.6) : 40000;   // duidelijk te kort voor deze loper
+  const limit = Math.max(MIN_LAP, best ? best * 0.6 : 0);   // korter dan een minuut, of duidelijk te kort voor deze loper
   if (time < limit && !(await ask('Al klaar?', `${run.runnerName} is pas ${(time / 1000).toFixed(1)} s onderweg${best ? ` (snelste ronde ${mmss(best)})` : ''}.\nZeker dat de ronde klaar is?`, { ok: 'Ja, ronde klaar' }))) { buzz('undo'); return; }
   finishLap(time, true, new Date(at).toISOString());
 }
@@ -355,7 +356,7 @@ async function undo(given) {
 function adjustLast(d, given) {
   const la = given || lastAction; if (!la) return;
   const newTime = la.time - d;
-  if (newTime < 20000) { toast('Zo kort kan een ronde niet zijn', 3000); buzz('fail'); return; }
+  if (newTime < MIN_LAP) { toast(MIN_LAP_TXT, 3000); buzz('fail'); return; }
   const a = activeData(), b = db.batch(), newTs = new Date(new Date(la.lapData.timestamp).getTime() - d).toISOString();
   b.update(ref('laps', la.lapId), { time: newTime, timestamp: newTs, startTime: la.lapData.startTime });
   if (la.runnerDocId) b.update(ref('runners', la.runnerDocId), { totalTime: FV.increment(-d) });
@@ -388,6 +389,7 @@ async function manualTime() {
   const m = /^\s*(\d+):(\d{1,2})(?:[.,](\d{1,2}))?\s*$/.exec(v);
   if (!m) { toast('Ongeldige tijd. Gebruik m:ss', 3500); return; }
   const ms = (+m[1] * 60 + +m[2]) * 1000 + (m[3] ? Math.round(parseFloat('0.' + m[3]) * 1000) : 0);
+  if (ms < MIN_LAP) { toast(MIN_LAP_TXT, 3500); return; }
   finishLap(ms, true);
 }
 async function stopAfterThis() {
@@ -424,6 +426,7 @@ async function editLap(id) {
   if (v === null) return;
   const m = /^\s*(\d+):(\d{1,2})(?:[.,](\d{1,2}))?\s*$/.exec(v); if (!m) { toast('Ongeldige tijd', 3000); return; }
   const ms = (+m[1] * 60 + +m[2]) * 1000 + (m[3] ? Math.round(parseFloat('0.' + m[3]) * 1000) : 0);
+  if (ms < MIN_LAP) { toast(MIN_LAP_TXT, 3500); return; }
   const rn = runners.find((r) => r.id === l.runnerId), b = db.batch();
   b.update(ref('laps', id), { time: ms }); if (rn) b.update(ref('runners', rn.id), { totalTime: FV.increment(ms - l.time) }); commit(b);
 }
@@ -557,7 +560,8 @@ async function addLapManual() {   // gemiste ronde toevoegen
   const r = await pickRunner('Ronde toevoegen', 'Voor welke loper?'); if (!r) return;
   const v = await ask('Ronde toevoegen', `Rondetijd van ${r.name}, bijvoorbeeld 1:35 of 1:35.4`, { input: 'm:ss', ok: 'Opslaan' });
   if (v === null) return;
-  const ms = parseTime(v); if (!ms || ms < 20000) { toast('Ongeldige tijd. Gebruik m:ss', 3500); return; }
+  const ms = parseTime(v); if (!ms) { toast('Ongeldige tijd. Gebruik m:ss', 3500); return; }
+  if (ms < MIN_LAP) { toast(MIN_LAP_TXT, 3500); return; }
   const mine = laps.filter((l) => l.runnerId === r.id), prevBest = mine.length ? Math.min(...mine.map((l) => l.time)) : Infinity, now = new Date(tnow());
   const b = db.batch();
   b.set(ref('laps').doc(), { runnerId: r.id, runnerName: r.name, time: ms, distance: 515, timestamp: now.toISOString(), startTime: new Date(now.getTime() - ms).toISOString(), isPersonalRecord: ms < prevBest, lapNumber: mine.length + 1, manual: true });
