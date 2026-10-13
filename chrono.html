@@ -322,9 +322,22 @@ function finishLap(time, startNext, atISO) {
   commit(b); lockButtons(1500); buzz('lap');
   toast(`Opgeslagen: ${run.runnerName} ${mmssc(time)}${startNext && nxt ? `  →  ${nxt.runnerName} loopt` : ''}`, 5000);
 }
-async function undo() {
-  if (!lastAction) return;
-  const la = lastAction;
+// De laatst opgeslagen ronde, ook als een ander toestel (of autoplay) ze opsloeg: zelf opbouwen wat 'ongedaan maken' nodig heeft.
+function lastLapAction() {
+  const L = [...laps].sort((x, y) => new Date(y.timestamp) - new Date(x.timestamp))[0];
+  if (!L) return null;
+  if (lastAction && lastAction.lapId === L.id) return lastAction;
+  const at = new Date(L.timestamp).getTime(); if (tnow() - at > 10 * 60e3) return null;
+  const a = activeData(), q = sortedQueue(), rn = runners.find((r) => r.id === L.runnerId), qid = 'undo_' + L.id;
+  const addedAt = new Date((q[0] ? new Date(q[0].addedAt).getTime() : tnow()) - 1000).toISOString();   // vooraan in de rij
+  const item = { runnerId: L.runnerId, runnerName: L.runnerName, gender: (rn && rn.gender) || null, addedAt, order: 0 };
+  const nextStarted = !!(a && a.isRunning && a.startTime === L.timestamp);
+  return { lapId: L.id, lapData: L, time: L.time, runnerDocId: rn ? rn.id : null, at, nextStartISO: nextStarted ? L.timestamp : null,
+    queueItem: { id: qid, data: item }, prevActive: { runner: { id: qid, ...item }, isRunning: true, startTime: L.startTime || new Date(at - L.time).toISOString() },
+    canUndo: !(a && a.isRunning) || nextStarted };   // enkel als er sindsdien niets anders gebeurde
+}
+async function undo(given) {
+  const la = given || lastAction; if (!la) return;
   if (Date.now() - la.at > 120000 && !(await ask('Ongedaan maken?', `De laatste actie was meer dan 2 minuten geleden.\nDe ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd en de timer loopt weer verder voor die loper.`, { ok: 'Ja, ongedaan maken', danger: true }))) return;
   if (!la.at || Date.now() - la.at <= 120000) { if (!(await ask('Ongedaan maken?', `De ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd.\nDe timer loopt weer verder voor ${la.lapData.runnerName}.`, { ok: 'Ja, ongedaan maken', danger: true }))) return; }
   const b = db.batch();
@@ -336,15 +349,15 @@ async function undo() {
   lastAction = null; try { localStorage.removeItem('lastAction_' + NS); } catch (e) {}
   commit(b); lockButtons(800); toast('Ongedaan gemaakt: de timer loopt weer', 3500);
 }
-function adjustLast(d) {
-  const la = lastAction; if (!la) return;
+function adjustLast(d, given) {
+  const la = given || lastAction; if (!la) return;
   const newTime = la.time - d;
   if (newTime < 20000) { toast('Zo kort kan een ronde niet zijn', 3000); buzz('fail'); return; }
   const a = activeData(), b = db.batch(), newTs = new Date(new Date(la.lapData.timestamp).getTime() - d).toISOString();
   b.update(ref('laps', la.lapId), { time: newTime, timestamp: newTs, startTime: la.lapData.startTime });
   if (la.runnerDocId) b.update(ref('runners', la.runnerDocId), { totalTime: FV.increment(-d) });
   if (la.nextStartISO && a && a.isRunning && a.startTime === la.nextStartISO) { b.update(ref('activeRunner', 'current'), { startTime: new Date(new Date(a.startTime).getTime() - d).toISOString() }); la.nextStartISO = new Date(new Date(la.nextStartISO).getTime() - d).toISOString(); }
-  commit(b); la.time = newTime; la.lapData = { ...la.lapData, time: newTime, timestamp: newTs };
+  commit(b); la.time = newTime; la.lapData = { ...la.lapData, time: newTime, timestamp: newTs }; lastAction = la;
   try { localStorage.setItem('lastAction_' + NS, JSON.stringify(la)); } catch (e) {}
   buzz('undo'); toast(`Tijd aangepast: ${la.lapData.runnerName} nu ${mmssc(newTime)}`, 3500); render();
 }
@@ -615,12 +628,12 @@ async function reloadApp() {
 }
 // 'Foutje?': alle correcties per situatie, enkel wat op dit moment kan
 function oopsSheet() {
-  const running = isRunning(), w = waiting(), la = lastAction, b = (act, txt, sub, cls = '') => `<button class="btn ${cls}" data-act="${act}">${txt}${sub ? `<small>${sub}</small>` : ''}</button>`;
+  const running = isRunning(), w = waiting(), la = lastLapAction(), b = (act, txt, sub, cls = '') => `<button class="btn ${cls}" data-act="${act}">${txt}${sub ? `<small>${sub}</small>` : ''}</button>`;
   let h = '';
   if (la) {
     h += `<h4>Laatste ronde · ${esc(la.lapData.runnerName)} ${mmssc(la.time)}</h4>`;
-    if (Date.now() - la.at < 10 * 60e3) h += `<div class="adj"><button class="btn" data-adj="5000">−5 s</button><button class="btn" data-adj="10000">−10 s</button><button class="btn" data-adj="20000">−20 s</button></div>`;
-    h += b('undo', 'Per ongeluk gedrukt', 'ronde wissen, de timer loopt weer verder', 'danger');
+    h += `<div class="adj"><button class="btn" data-adj="5000" data-last="1">−5 s</button><button class="btn" data-adj="10000" data-last="1">−10 s</button><button class="btn" data-adj="20000" data-last="1">−20 s</button></div>`;
+    if (la.canUndo !== false) h += b('undolast', 'Per ongeluk gedrukt', 'ronde wissen, de timer loopt weer verder', 'danger');
   }
   if (running) {
     const nm = esc(activeData().runner.runnerName);
@@ -693,7 +706,7 @@ function viewChrono() {
     ${recentAdj ? `<div class="corr" style="width:100%"><b>Te laat gedrukt?</b><button class="btn small" data-adj="5000">−5 s</button><button class="btn small" data-adj="10000">−10 s</button><button class="btn small" data-adj="20000">−20 s</button></div>` : ''}</div>` : '';
   const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   const nextCard = running && w.length ? `<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${runnerFacts(w[0].runnerId, true)}</div>` : '';
-  const showOops = running || lastAction || w.length;
+  const showOops = running || w.length || lastLapAction();
   const bigRow = (fixed) => `<div class="bigrow${fixed ? ' fixed' : ''}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>`;
   if (focusMode) {   // tijdnemer-modus: ook de drie lopers daarna, compact
     const after = w.slice(1, 4).map((q, i) => `<div class="row"><div class="no">${i + 2}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + 1), i + 1)}</div></div>`).join('');
@@ -805,7 +818,7 @@ setInterval(() => {   // laat de wachtrij-laptop weten dat de chronometer actief
 }, 15000);
 
 document.addEventListener('click', (e) => {
-  const adj = e.target.closest('[data-adj]'); if (adj) { if ($('overlay').querySelector('[data-act=closeov]')) $('overlay').innerHTML = ''; adjustLast(Number(adj.dataset.adj)); return; }
+  const adj = e.target.closest('[data-adj]'); if (adj) { if ($('overlay').querySelector('[data-act=closeov]')) $('overlay').innerHTML = ''; adjustLast(Number(adj.dataset.adj), adj.dataset.last ? lastLapAction() : null); return; }
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
   if (t.dataset.tab) { tab = t.dataset.tab; unfocus(); render(); window.scrollTo(0, 0); return; }
   const a = t.dataset.act, id = t.dataset.id;
@@ -814,10 +827,10 @@ document.addEventListener('click', (e) => {
   if (a === 'oops') { oopsSheet(); return; }
   if (a === 'closeov') { if (t.classList.contains('modal') && e.target !== t) return; $('overlay').innerHTML = ''; return; }   // achtergrond of kruisje
   if (a === 'reload') { $('overlay').innerHTML = ''; reloadApp(); return; }
-  if (['manual', 'stop', 'swap', 'skip', 'cancel', 'unfocus', 'undo'].includes(a) && $('overlay').querySelector('[data-act=closeov]')) $('overlay').innerHTML = '';
+  if (['manual', 'stop', 'swap', 'skip', 'cancel', 'unfocus', 'undo', 'undolast'].includes(a) && $('overlay').querySelector('[data-act=closeov]')) $('overlay').innerHTML = '';
   if (a === 'unfocus') { setFocus(false); return; }
   if (a === 'install') { if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render(); }); } return; }
-  ({ main: pressMain, undo, manual: manualTime, stop: stopAfterThis, cancel: cancelRun, awake: () => { keepAwake().then(render); }, csvLaps: () => exportCsv('laps'), csvRunners: () => exportCsv('runners'), reset: resetAll, hapTest: () => { const m = buzz('lap'); toast('Test: ' + (m === 'vibrate' ? 'trillen' : m === 'switch' ? 'schakelaar-haptiek' : 'niet beschikbaar') + ' (voel je iets?)', 4000); }, swap: swapActive, skip: skipNext, holdmode: () => { holdMode = !holdMode; try { localStorage.setItem('holdMode', holdMode ? 'on' : 'off'); } catch (e) {} buzz('tick'); render(); }, logout: () => { firebase.auth().signOut().then(() => location.reload()); },
+  ({ main: pressMain, undo: () => undo(), undolast: () => undo(lastLapAction()), manual: manualTime, stop: stopAfterThis, cancel: cancelRun, awake: () => { keepAwake().then(render); }, csvLaps: () => exportCsv('laps'), csvRunners: () => exportCsv('runners'), reset: resetAll, hapTest: () => { const m = buzz('lap'); toast('Test: ' + (m === 'vibrate' ? 'trillen' : m === 'switch' ? 'schakelaar-haptiek' : 'niet beschikbaar') + ' (voel je iets?)', 4000); }, swap: swapActive, skip: skipNext, holdmode: () => { holdMode = !holdMode; try { localStorage.setItem('holdMode', holdMode ? 'on' : 'off'); } catch (e) {} buzz('tick'); render(); }, logout: () => { firebase.auth().signOut().then(() => location.reload()); },
      up: () => moveQueued(id, -1), down: () => moveQueued(id, 1), rm: () => removeQueued(id), del: () => deleteLap(id), edit: () => editLap(id),
      enq: () => { const r = runners.find((x) => x.id === id); if (r) enqueue(r); },
      newr: () => { const parts = tidyName(sq).split(' '); nr = { first: parts[0] || '', last: parts.slice(1).join(' '), g: '' }; unfocus(); render(); },
