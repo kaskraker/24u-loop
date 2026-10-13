@@ -1105,9 +1105,9 @@ function predictNext(times, gender, restMs) {
                 Object.values(by).forEach(r => r.laps.sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)));
                 const now = Date.now();
                 // Spotlights. Reeks, metronoom en steeds sneller kijken naar de laatste 3 uur (zo schuiven ze mee door de nacht);
-                // is die lijst leeg, dan het hele event. Eerste ronde, record en mijlpaal gaan over het laatste halfuur.
+                // is die lijst leeg, dan het hele event. Record en mijlpaal gaan over het laatste halfuur.
                 const tsOf = (l) => new Date(l.timestamp).getTime(), W3 = 3 * 3600e3, W30 = 30 * 60e3;
-                const hotL = [], firstL = [], prL = [], mileL = [];
+                const hotL = [], prL = [], mileL = [];
                 const lists = (win) => {
                     const streakL = [], metroL = [], improveL = [];
                     Object.values(by).forEach(r => {
@@ -1133,11 +1133,10 @@ function predictNext(times, gender, restMs) {
                     const t = r.laps.map(l => l.time), last = r.laps[r.laps.length - 1], lastAt = tsOf(last);
                     const recent = r.laps.filter(l => now - tsOf(l) < 3600e3);
                     if (recent.length >= 3) hotL.push({ name: r.name, n: recent.length, times: recent.map(l => l.time) });
-                    if (now - tsOf(r.laps[0]) < W30) firstL.push({ name: r.name, time: r.laps[0].time, at: tsOf(r.laps[0]) });
                     if (t.length >= 2 && now - lastAt < W30 && last.time < Math.min(...t.slice(0, -1))) prL.push({ name: r.name, time: last.time, prev: Math.min(...t.slice(0, -1)), at: lastAt, times: t });
                     if (t.length >= 5 && t.length % 5 === 0 && now - lastAt < W30) mileL.push({ name: r.name, n: t.length, at: lastAt, times: t });
                 });
-                hotL.sort((x, y) => y.n - x.n); [firstL, prL, mileL].forEach(a => a.sort((x, y) => y.at - x.at));   // net gebeurd: nieuwste eerst
+                hotL.sort((x, y) => y.n - x.n); [prL, mileL].forEach(a => a.sort((x, y) => y.at - x.at));   // net gebeurd: nieuwste eerst
 
                 // drukte: laatste kwartier, drukste kwartier (schuivend venster) en 8 kwartieren terug
                 const stamps = laps.map(l => new Date(l.timestamp).getTime()).sort((x, y) => x - y);
@@ -1165,7 +1164,7 @@ function predictNext(times, gender, restMs) {
                 // 24u-klok (20:00 bovenaan)
                 const slots = new Array(24).fill(0);
                 laps.forEach(l => { slots[(new Date(l.timestamp).getHours() - 20 + 24) % 24]++; });
-                return { bins, avg, LO, STEP, N, hours, hotL, streakL, metroL, improveL, firstL, prL, mileL, agg, buckets, nRunners, repeat, slots, nowSlot: (new Date().getHours() - 20 + 24) % 24, peak, quarters, last15, hourNow, hourPrev, newcomers, tempoHours, evStart };
+                return { bins, avg, LO, STEP, N, hours, hotL, streakL, metroL, improveL, prL, mileL, agg, buckets, nRunners, repeat, slots, nowSlot: (new Date().getHours() - 20 + 24) % 24, peak, quarters, last15, hourNow, hourPrev, newcomers, tempoHours, evStart };
             }, [laps, runners]);
 
             const label = (t) => h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, t);
@@ -1444,7 +1443,7 @@ function predictNext(times, gender, restMs) {
 
             // ---- welke slides hebben genoeg data? Wisselende slides komen vaak, de trage grafieken af en toe ----
             // Per ronde van slides schuift elke lijst één plaats op (top 8), en wie al in een andere spotlight stond, wordt overgeslagen.
-            const SPOT_N = 8, SPOTS = [['first', d.firstL], ['pr', d.prL], ['mile', d.mileL], ['hot', d.hotL], ['streak', d.streakL], ['metro', d.metroL], ['imp', d.improveL]];
+            const SPOT_N = 8, SPOTS = [['pr', d.prL], ['mile', d.mileL], ['hot', d.hotL], ['streak', d.streakL], ['metro', d.metroL], ['imp', d.improveL]];
             const spotPicks = (r) => {
                 const used = new Set(), out = {};
                 SPOTS.forEach(([k, arr]) => { const n = Math.min(SPOT_N, arr.length); for (let j = 0; j < n; j++) { const x = arr[(r + j) % n]; if (!used.has(x.name)) { used.add(x.name); out[k] = x; break; } } });
@@ -1452,7 +1451,6 @@ function predictNext(times, gender, restMs) {
             };
             const rankOf = (arr, r, k) => spotPicks(r)[k] || arr[r % Math.min(SPOT_N, arr.length)];
             const dyn = [];   // elk onderdeel: (ronde) => [id, element]
-            if (d.firstL.length) dyn.push((r) => { const x = rankOf(d.firstL, r, 'first'); return ['first' + r, spot('eerste ronde', x.name, mmss(x.time / 1000), `om ${hhmmOf(x.at)} · welkom!`, null)]; });
             if (d.prL.length) dyn.push((r) => { const x = rankOf(d.prL, r, 'pr'); return ['pr' + r, spot('persoonlijk record', x.name, mmss(x.time / 1000), `${Math.max(1, Math.round((x.prev - x.time) / 1000))} s sneller dan de vorige beste`, x.times)]; });
             if (d.mileL.length) dyn.push((r) => { const x = rankOf(d.mileL, r, 'mile'); return ['mile' + r, spot('mijlpaal', x.name, `${x.n} rondes`, `${(x.n * 0.515).toFixed(1).replace('.', ',')} km · € ${x.n * 5} voor Water for All`, x.times)]; });
             if (d.hotL.length) dyn.push((r) => { const x = rankOf(d.hotL, r, 'hot'); return ['hot' + r, spot('op dreef', x.name, `${x.n} rondes in het laatste uur`, `gemiddeld ${mmss(x.times.reduce((a, b) => a + b, 0) / x.times.length / 1000)} per ronde`, x.times)]; });
