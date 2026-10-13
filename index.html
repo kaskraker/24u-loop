@@ -1014,63 +1014,57 @@ function predictNext(times, gender, restMs) {
             { km: 760, label: 'Leuven → Berlijn' }, { km: 1500, label: 'Leuven → Rome' }
         ];
 
-        const LiveStats = ({ laps, formatTimeSimple }) => {
+        const LiveStats = ({ laps }) => {
             const now = Date.now(), hour = 3600e3;
             const ageOf = (l) => now - new Date(l.timestamp).getTime();
             const lastHour = laps.filter(l => ageOf(l) < hour);
             const prevHour = laps.filter(l => ageOf(l) >= hour && ageOf(l) < 2 * hour);
             const trend = lastHour.length - prevHour.length;
-            const runnersCount = new Set(laps.map(l => l.runnerId)).size;
+            // trend enkel tonen bij een duidelijk verschil (een paar rondes meer of minder is gewone schommeling), in neutrale kleur
+            const showTrend = prevHour.length > 0 && Math.abs(trend) >= Math.max(5, prevHour.length * 0.15);
+            const first = {};
+            laps.forEach(l => { const t = new Date(l.timestamp).getTime(); if (first[l.runnerId] === undefined || t < first[l.runnerId]) first[l.runnerId] = t; });
+            const runnersCount = Object.keys(first).length;
+            const newRunners = Object.values(first).filter(t => now - t < hour).length;
             const km = laps.length * 0.515;
             const avgMs = laps.length ? laps.reduce((sum, l) => sum + l.time, 0) / laps.length : 0;
             const kmh = avgMs ? 0.515 / (avgMs / hour) : 0;
-            const ps = avgMs ? Math.round((avgMs / 1000) / 0.515) : 0;
-            const pace = ps ? `${Math.floor(ps / 60)}:${String(ps % 60).padStart(2, '0')}` : '–';
-            const minBy = (arr) => arr.length ? arr.reduce((m, l) => l.time < m.time ? l : m) : null;
-            const best = minBy(laps), bestHour = minBy(lastHour);
-            const clock = (l) => new Date(l.timestamp).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+            const nl1 = (x) => x.toFixed(1).replace('.', ',');
+            const ps = avgMs ? Math.round(avgMs / 1000 / 0.515) : 0, pace = ps ? `${Math.floor(ps / 60)}:${String(ps % 60).padStart(2, '0')}` : null;   // min/km voor de Strava-lopers
 
-            // afstanden
+            // afstanden: één vergelijking (de laatst gehaalde stad) en een balk van 0 tot de volgende halte
             const doneCities = CITY_ROUTES.filter(c => km >= c.km);
             const city = doneCities[doneCities.length - 1];
             const nextCity = CITY_ROUTES.find(c => km < c.km);
+            const pct = nextCity ? Math.min(100, Math.max(2, km / nextCity.km * 100)) : 100;
 
-            const tile = (label, value, sub, color, subColor) => h('div', { className: 'keep-light rounded-lg p-2 min-w-0', style: { border: '2px solid #17120d', background: '#fff6df' } },
-                h('div', { className: 'text-[11px] font-bold uppercase tracking-wide text-gray-500' }, label),
-                h('div', { className: 'text-3xl font-extrabold leading-tight', style: { color: '#17120d', fontVariantNumeric: 'tabular-nums' } }, value),
-                h('div', { className: 'text-xs font-semibold', style: subColor ? { color: subColor } : null }, sub)
-            );
-            const record = (label, l) => h('div', { className: 'keep-light rounded-lg p-2 min-w-0', style: { border: '2px solid #17120d', background: '#ffe27a' } },
-                h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, label),
-                l ? h('div', { className: 'flex items-baseline justify-between gap-2' },
-                    h('div', { className: 'text-base font-bold text-gray-900 truncate' }, l.runnerName),
-                    h('div', { className: 'text-2xl font-extrabold font-mono text-gray-900' }, formatTimeSimple(l.time))
-                ) : h('div', { className: 'text-gray-400 text-sm' }, 'Nog geen ronde'),
-                l && h('div', { className: 'text-xs text-gray-500' }, `om ${clock(l)}`)
+            const INK = '#17120d';
+            const label = (t) => h('div', { className: 'font-extrabold uppercase tracking-wide', style: { fontSize: 13, color: '#4a3b2a' } }, t);
+            // eenheid of trend klein naast het getal: alle vakjes even hoog, geen lege regels
+            const tile = (k, value, suffix) => h('div', { className: 'keep-light rounded-lg p-2 min-w-0', style: { border: `3px solid ${INK}`, background: '#fff6df' } },
+                label(k),
+                h('div', { className: 'flex items-baseline gap-2 min-w-0 whitespace-nowrap' },
+                    h('span', { className: 'text-3xl font-extrabold leading-tight', style: { color: INK, fontVariantNumeric: 'tabular-nums' } }, value),
+                    suffix && h('span', { className: 'text-sm font-bold truncate', style: { color: '#4a3b2a' } }, suffix))
             );
 
             return h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3' },
-                h('h3', { className: 'text-lg font-bold mb-2 text-gray-800 border-b-2 pb-1' }, 'Live statistieken'),
-                h('div', { className: 'grid grid-cols-3 gap-2 mb-2' },
-                    tile('Lopers', runnersCount, 'verschillende lopers', '#6366f1'),
-                    tile('Laatste uur', lastHour.length, prevHour.length === 0 && lastHour.length === 0 ? 'rondes' : trend === 0 ? 'gelijk aan vorig uur' : `${trend > 0 ? '▲' : '▼'} ${Math.abs(trend)} t.o.v. vorig uur`, '#f2a342', trend > 0 ? '#16a34a' : trend < 0 ? '#dc2626' : '#6b7280'),
-                    tile('Gemiddeld tempo', pace, `min/km · ${kmh ? kmh.toFixed(1).replace('.', ',') : '–'} km/u`, '#0891b2')
+                h('h3', { className: 'text-lg font-extrabold mb-2 pb-1', style: { color: INK, borderBottom: `3px solid ${INK}` } }, 'Live statistieken'),
+                h('div', { className: 'grid grid-cols-2 gap-2 mb-2' },
+                    tile('Lopers', runnersCount),
+                    tile('Rondes laatste uur', lastHour.length, showTrend ? `${trend > 0 ? '▲' : '▼'} ${Math.abs(trend)} t.o.v. vorig uur` : null),
+                    tile('Nieuwe lopers', newRunners, 'laatste uur'),
+                    tile('Gemiddeld tempo', kmh ? nl1(kmh) : '–', pace ? `km/u · ${pace} /km` : 'km/u')
                 ),
-                h('div', { className: 'grid grid-cols-2 gap-2 mb-2' }, record('Snelste ronde', best), record('Snelste laatste uur', bestHour)),
-                (() => {
-                    const span = city && nextCity ? Math.max(1, nextCity.km - city.km) : 0, pct = span ? Math.min(100, Math.max(4, (km - city.km) / span * 100)) : 0;
-                    return h('div', { className: 'keep-light rounded-lg p-3', style: { background: '#fff6df', border: '3px solid #17120d' } },
-                        h('div', { className: 'flex items-center justify-between gap-3' },
-                            h('div', null,
-                                h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, 'Samen gelopen'),
-                                h('div', { className: 'text-4xl font-extrabold leading-none', style: { color: '#e8590c' } }, `${km.toFixed(1).replace('.', ',')} km`)),
-                            h('div', { className: 'text-right' },
-                                h('div', { className: 'text-lg font-extrabold leading-tight text-gray-900' }, `${(km / 42.195).toFixed(1).replace('.', ',')} marathons`),
-                                h('div', { className: 'text-sm font-semibold text-gray-700' }, city ? `ongeveer ${city.label.replace(' → ', ' tot ')}` : (nextCity ? `nog ${Math.ceil(nextCity.km - km)} km tot Brussel` : '')))),
-                        nextCity && city && h('div', { className: 'mt-2' },
-                            h('div', { style: { height: 12, border: '2px solid #17120d', borderRadius: 999, background: '#fff', overflow: 'hidden' } }, h('div', { style: { width: pct + '%', height: '100%', background: '#f2a342', borderRight: '2px solid #17120d' } })),
-                            h('div', { className: 'text-xs font-semibold text-gray-700 mt-1' }, `Volgende halte: ${nextCity.label.replace('Leuven → ', '')}, nog ${Math.ceil(nextCity.km - km)} km`)));
-                })()
+                h('div', { className: 'keep-light rounded-lg p-3', style: { background: '#fff6df', border: `3px solid ${INK}` } },
+                    h('div', { className: 'flex items-end justify-between gap-3' },
+                        h('div', null,
+                            label('Samen gelopen'),
+                            h('div', { className: 'text-4xl font-extrabold leading-none', style: { color: '#e8590c' } }, `${nl1(km)} km`)),
+                        city && h('div', { className: 'text-lg font-extrabold leading-tight text-right', style: { color: INK } }, `≈ ${city.label.replace(' → ', ' – ')}`)),
+                    nextCity && h('div', { className: 'mt-2' },
+                        h('div', { style: { height: 12, border: `2px solid ${INK}`, borderRadius: 999, background: '#fff', overflow: 'hidden' } }, h('div', { style: { width: pct + '%', height: '100%', background: '#f2a342', borderRight: `2px solid ${INK}` } })),
+                        h('div', { className: 'text-sm font-bold mt-1', style: { color: '#4a3b2a' } }, `Volgende halte: ${nextCity.label.replace('Leuven → ', '')}, nog ${Math.ceil(nextCity.km - km)} km`)))
             );
         };
 
@@ -4943,7 +4937,7 @@ function predictNext(times, gender, restMs) {
                                     ),
 
                                     // Live statistieken (nieuw)
-                                    h(LiveStats, { laps, formatTimeSimple }),
+                                    h(LiveStats, { laps }),
                                     h(LiveCharts, { laps, runners, weather }),
 
                                     // Humasol-blok met QR-codes (stijl "Gedurfd"): lopers-app en Instagram
