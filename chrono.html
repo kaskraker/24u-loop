@@ -99,7 +99,9 @@
   .sres .row { cursor: pointer; }
   /* tijdnemer-modus: enkel het nodige, grote knop vast onderaan (schuift nooit op) */
   .now { position: relative; }
-  .focusin { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12px; font-weight: 800; border: 2px solid var(--ink); border-radius: 999px; background: #fff; color: var(--ink); padding: 3px 9px; box-shadow: 2px 2px 0 var(--ink); }
+  .khead { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .khead.split { justify-content: space-between; }
+  .focusin { flex: none; font: inherit; font-size: 12px; font-weight: 800; border: 2px solid var(--ink); border-radius: 999px; background: #fff; color: var(--ink); padding: 3px 9px; box-shadow: 2px 2px 0 var(--ink); }
   body.focus header, body.focus nav, body.focus #banner { display: none; }
   body.focus { padding-bottom: calc(150px + env(safe-area-inset-bottom)); padding-top: env(safe-area-inset-top); }
   body.focus .big.fixed { position: fixed; left: 14px; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); width: auto; max-width: 532px; margin: 0 auto; z-index: 30; }
@@ -630,8 +632,10 @@ function oopsSheet() {
 
 // ===== tijdnemer-modus =====
 let focusMode = false; try { focusMode = localStorage.getItem('chronoFocus') === 'on'; } catch (e) {}
+let focusOffer = true; try { focusOffer = localStorage.getItem('chronoFocusOffer') !== 'done'; } catch (e) {}   // eenmalig aanbieden per toestel
+const offerDone = () => { focusOffer = false; try { localStorage.setItem('chronoFocusOffer', 'done'); } catch (e) {} };
 function setFocus(on) {
-  focusMode = on; try { localStorage.setItem('chronoFocus', on ? 'on' : 'off'); } catch (e) {}
+  focusMode = on; offerDone(); try { localStorage.setItem('chronoFocus', on ? 'on' : 'off'); } catch (e) {}
   if (on) { tab = 'chrono'; try { if (!isIOS() && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
   else { try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {} }
   buzz('tick'); window.scrollTo(0, 0); render();
@@ -669,17 +673,18 @@ function runnerFacts(rid, next) {
   const first = next ? `<span><small>Rondje</small>${mine.length + 1}</span>` : `<span><small>Schatting</small>± ${mmss(expected(rid))}</span>`;
   return `<div class="facts">${first}<span><small>Laatste</small>${mmss(last)}</span><span><small>Snelste</small>${mmss(best)}</span></div>`;
 }
+const khead = (pill) => focusMode ? `<div class="khead">${pill}</div>` : `<div class="khead split">${pill}<button class="focusin" data-act="focus" aria-label="Tijdnemer-modus">⤢ Tijdnemer</button></div>`;
 function viewChrono() {
   if (!loaded.queue || !loaded.active) return `<div class="card now" style="background:#fff"><div class="nm" style="color:var(--muted)">Laden…</div><div class="sub">Even geduld, de wachtrij wordt opgehaald</div></div><button class="big wait" disabled>EVEN GEDULD</button>`;
   const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
   let top = '', button = '';
   if (running) {
     const run = a.runner, ex = expected(run.runnerId);
-    top = `<div class="card now"><div class="k"><span class="dot"></span>Nu aan het lopen</div><div class="nm" style="margin-top:6px">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div>${runnerFacts(run.runnerId)}</div>`;
+    top = `<div class="card now">${khead('<div class="k"><span class="dot"></span>Nu aan het lopen</div>')}<div class="nm" style="margin-top:6px">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div>${runnerFacts(run.runnerId)}</div>`;
     const hint = holdMode ? '<span class="hint">houd ingedrukt</span>' : '';
     button = w.length ? `<button class="big hold" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small>${hint}</button>` : `<button class="big hold stop" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small>${hint}</button>`;
   } else {
-    top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm" style="margin-top:6px">${w.length ? esc(w[0].runnerName) : '—'}</div>${w.length ? runnerFacts(w[0].runnerId, true) : '<div class="sub">Wachtrij is leeg</div>'}</div>`;
+    top = `<div class="card now" style="background:#fff">${khead('<div class="k" style="color:var(--muted)">Klaar om te starten</div>')}<div class="nm" style="margin-top:6px">${w.length ? esc(w[0].runnerName) : '—'}</div>${w.length ? runnerFacts(w[0].runnerId, true) : '<div class="sub">Wachtrij is leeg</div>'}</div>`;
     button = `<button class="big hold ${w.length ? '' : 'wait'}" data-hold="main" ${(!w.length || busy) ? 'disabled' : ''}>START<small>${w.length ? esc(w[0].runnerName) : 'wacht op een loper'}</small>${holdMode && w.length ? '<span class="hint">houd ingedrukt</span>' : ''}</button>`;
   }
   const recentLaps = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
@@ -694,8 +699,8 @@ function viewChrono() {
     const after = w.slice(1, 4).map((q, i) => `<div class="row"><div class="no">${i + 2}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + 1), i + 1)}</div></div>`).join('');
     return `${top}${undoCard}${nextCard || (running ? '<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">Niemand meer</div></div>' : '')}${after ? `<div class="card" style="padding:10px 12px"><h2 style="font-size:15px;margin-bottom:6px">Daarna <small>${w.length} wachtend</small></h2>${after}</div>` : ''}${bigRow(true)}`;
   }
-  const focusBtn = '<button class="focusin" data-act="focus" aria-label="Tijdnemer-modus">⤢ Focus</button>';
-  return `${top.replace(/^(<div class="card now"[^>]*>)/, '$1' + focusBtn)}${bigRow(false)}${undoCard}${nextCard}
+  const offer = focusOffer ? `<div class="card" style="background:#d9f7d0;padding:12px 14px"><div style="font-size:17px;font-weight:800">Ben jij de tijdnemer?</div><div class="lbl2" style="margin:2px 0 10px">Enkel de klok, de volgende lopers en de grote knop, vast onderaan.</div><div class="row2"><button class="btn primary" data-act="focus">Start tijdnemer-modus</button><button class="btn" data-act="nooffer">Nee</button></div></div>` : '';
+  return `${offer}${top}${bigRow(false)}${undoCard}${nextCard}
     <div class="card"><h2>Daarna <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>
     <div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>${recentLaps || '<div class="empty">Nog geen rondes</div>'}</div>`;
 }
@@ -755,6 +760,7 @@ function viewMore() {
     <div class="row"><div class="nm">Haptiek<small>${canVibrate ? 'trillen wordt ondersteund' : 'iPhone: via de schakelaar-truc (iOS 17.4+); zet Instellingen → Geluid en haptiek → Systeemhaptiek aan'}</small></div><button class="btn small primary" data-act="hapTest">Test</button></div>
     <div class="row"><div class="nm">Batterij<small>${batt ? `${Math.round(batt.level * 100)}%${batt.charging ? ' · aan de lader' : ' · niet aan de lader'}` : 'kan niet worden uitgelezen op dit toestel (iPhone): zet de gsm aan de lader'}</small></div></div>
     <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
+    <div class="row"><div class="nm">Tijdnemer-modus<small>enkel klok, wachtrij en de grote knop</small></div><button class="btn small primary" data-act="focus">Start</button></div>
     <div class="row"><div class="nm">App vernieuwen<small>als iets niet meer meeloopt; niets gaat verloren</small></div><button class="btn small" data-act="reload">↻</button></div>
     <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
     <div class="card"><h2>Gegevens</h2><div class="row2"><button class="btn" data-act="csvLaps">Rondes (CSV)</button><button class="btn" data-act="csvRunners">Lopers (CSV)</button></div></div>
@@ -804,6 +810,7 @@ document.addEventListener('click', (e) => {
   if (t.dataset.tab) { tab = t.dataset.tab; unfocus(); render(); window.scrollTo(0, 0); return; }
   const a = t.dataset.act, id = t.dataset.id;
   if (a === 'focus') { setFocus(true); return; }
+  if (a === 'nooffer') { offerDone(); render(); return; }
   if (a === 'oops') { oopsSheet(); return; }
   if (a === 'closeov') { if (t.classList.contains('modal') && e.target !== t) return; $('overlay').innerHTML = ''; return; }   // achtergrond of kruisje
   if (a === 'reload') { $('overlay').innerHTML = ''; reloadApp(); return; }
