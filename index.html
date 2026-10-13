@@ -56,6 +56,7 @@
         .lap-fresh { animation: lapFade 56s ease-out forwards; }
         .lap-record { animation: lapGold 0.9s ease-in-out infinite; }
         @keyframes rowFlash { 0%, 100% { box-shadow: 0 0 0 0 rgba(251,146,60,0); } 15%, 55% { box-shadow: 0 0 0 3px rgba(251,146,60,.95), 0 0 22px rgba(251,146,60,.85); } 35%, 75% { box-shadow: 0 0 0 1px rgba(251,146,60,.35), 0 0 6px rgba(251,146,60,.35); } }
+        @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
         @keyframes tierGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(232,89,12,.0), 5px 5px 0 #17120d; } 50% { box-shadow: 0 0 0 10px rgba(232,89,12,.28), 5px 5px 0 #17120d; } }
         @keyframes tierRays { to { transform: rotate(360deg); } }
         @keyframes crownBob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-4px) rotate(4deg); } }
@@ -1499,23 +1500,23 @@ function predictNext(times, gender, restMs) {
         const SyncChip = () => {
             const st = useSyncStatus();
             const map = {
-                demo: { dot: 'bg-gray-400', text: 'Demo', cls: 'bg-gray-100 text-gray-700', title: 'Demomodus: er wordt niets opgeslagen' },
-                connecting: { dot: 'bg-gray-400 animate-pulse', text: 'Verbinden…', cls: 'bg-gray-100 text-gray-700', title: 'Verbinden met de server' },
-                online: { dot: 'bg-green-500', text: 'Verbonden', cls: 'bg-green-100 text-green-700', title: `Alles gesynchroniseerd · laatste update ${fmtClock(st.lastServer)}` },
-                syncing: { dot: 'bg-blue-500 animate-pulse', text: `Synchroniseren (${st.pending})`, cls: 'bg-blue-100 text-blue-700', title: 'Wijzigingen worden verstuurd naar de server' },
-                offline: { dot: 'bg-red-500 animate-pulse', text: st.pending > 0 ? `Offline · ${st.pending} wachtend` : 'Offline', cls: 'bg-red-100 text-red-700', title: `Geen verbinding sinds ${fmtClock(st.offlineSince)} · ${st.pending} wijzigingen bewaard op dit toestel` },
-                error: { dot: 'bg-red-500', text: 'Opslaan mislukt', cls: 'bg-red-100 text-red-700', title: st.error || 'Fout' }
+                demo: { dot: '#9ca3af', text: 'Demo', bg: '#ffffff', title: 'Demomodus: er wordt niets opgeslagen' },
+                connecting: { dot: '#9ca3af', pulse: true, text: 'Verbinden…', bg: '#ffffff', title: 'Verbinden met de server' },
+                online: { dot: '#2fb344', text: 'Verbonden', bg: '#ffffff', title: `Alles gesynchroniseerd · laatste update ${fmtClock(st.lastServer)}` },
+                syncing: { dot: '#1d4ed8', pulse: true, text: `Synchroniseren (${st.pending})`, bg: '#dbeafe', title: 'Wijzigingen worden verstuurd naar de server' },
+                offline: { dot: '#e03131', pulse: true, text: st.pending > 0 ? `Offline · ${st.pending} wachtend` : 'Offline', bg: '#ffd0c2', title: `Geen verbinding sinds ${fmtClock(st.offlineSince)} · ${st.pending} wijzigingen bewaard op dit toestel` },
+                error: { dot: '#e03131', text: 'Opslaan mislukt', bg: '#ffd0c2', title: st.error || 'Fout' }
             };
             const c = map[st.state] || map.connecting;
-            return h('div', { className: `flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${c.cls}`, title: c.title },
-                h('div', { className: `w-2 h-2 rounded-full ${c.dot}` }),
+            return h('div', { className: 'flex items-center gap-2 px-3 py-1 rounded-full text-xs font-extrabold', style: { background: c.bg, color: '#17120d', border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d' }, title: c.title },
+                h('div', { style: { width: 9, height: 9, borderRadius: 999, background: c.dot, border: '1.5px solid #17120d', animation: c.pulse ? 'livePulse 1.4s ease-in-out infinite' : 'none' } }),
                 h('span', null, c.text)
             );
         };
 
         // Duidelijke label zolang je in een oefenomgeving werkt (nooit per ongeluk de echte data gebruiken)
         const PracticeBadge = () => NS ? h('div', {
-            style: { position: 'fixed', left: 8, bottom: 8, zIndex: 65, background: '#ea580c', color: '#fff', padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 800, boxShadow: '0 2px 8px rgba(0,0,0,.3)', pointerEvents: 'none' }
+            style: { position: 'fixed', left: 8, bottom: 8, zIndex: 65, background: '#e8590c', color: '#fff', padding: '3px 12px', borderRadius: 999, fontSize: 12, fontWeight: 800, border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d', pointerEvents: 'none' }
         }, `OEFENMODUS · ${NS}${AUTOPLAY ? ' · ▶ autoplay' : ''}`) : null;
 
         // Waarschuwing op de wachtrij-laptop als de chronometer niets meer laat horen (hij schrijft elke 15 s een levensteken) of bijna leeg is
@@ -1537,7 +1538,7 @@ function predictNext(times, gender, restMs) {
                 text = 'Laat de tijdopnemer de telefoon aan de lader hangen.';
             }
             if (!title) return null;
-            return h('div', { style: { position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 59, background: '#b91c1c', color: '#fff', padding: '10px 16px', borderTop: '3px solid #17120d', boxShadow: '0 -4px 14px rgba(0,0,0,.3)' }, className: 'flex items-center justify-center gap-3 text-sm', role: 'alert' },
+            return h('div', { style: { position: 'fixed', left: 12, right: 12, bottom: NS ? 44 : 12, zIndex: 59, background: '#e03131', color: '#fff', padding: '10px 16px', border: '3px solid #17120d', borderRadius: 14, boxShadow: '4px 4px 0 #17120d' }, className: 'flex items-center justify-center gap-3 text-sm', role: 'alert' },
                 h('div', { className: 'text-center' }, h('span', { className: 'font-extrabold mr-2' }, title), h('span', null, text)));
         };
 
@@ -1562,7 +1563,7 @@ function predictNext(times, gender, restMs) {
             }
             if (!cfg) return null;
             return h('div', {
-                style: { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 60, background: cfg.bg, color: '#fff', padding: '8px 16px', boxShadow: '0 4px 14px rgba(0,0,0,.35)' },
+                style: { position: 'fixed', top: 8, left: 12, right: 12, zIndex: 60, background: cfg.bg, color: '#fff', padding: '8px 16px', border: '3px solid #17120d', borderRadius: 14, boxShadow: '4px 4px 0 #17120d' },
                 className: 'flex items-center justify-center gap-3 text-sm'
             },
                 h('span', { className: 'text-lg' }, cfg.icon),
@@ -4013,16 +4014,14 @@ function predictNext(times, gender, restMs) {
                         // Rechts: wie loopt nu en de wachtrij
                         h('div', { className: 'lg:col-span-3 space-y-6 min-w-0' },
                         // Active runner display (same as Display view)
-                        activeRunner && isRunning && h('div', { className: 'bg-white rounded-lg shadow-lg border-4 border-orange-500 p-6 animate-pulse' },
-                            h('div', { className: 'flex items-center justify-between' },
-                                h('div', null,
-                                    h('div', { className: 'text-sm font-semibold text-orange-600 uppercase tracking-wide mb-1' }, 'NU AAN HET LOPEN'),
-                                    h('div', { className: 'text-3xl font-bold text-gray-800' }, activeRunner.runnerName)
+                        activeRunner && isRunning && h('div', { className: 'keep-light', style: { background: '#ffd58a', border: '3px solid #17120d', borderRadius: 16, boxShadow: '5px 5px 0 #17120d', padding: '14px 20px', color: '#17120d' } },
+                            h('div', { className: 'flex items-center justify-between gap-4' },
+                                h('div', { className: 'min-w-0' },
+                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', background: '#fff', border: '3px solid #17120d', borderRadius: 999, padding: '1px 11px' } },
+                                        h('span', { style: { width: 9, height: 9, borderRadius: 999, background: '#e24b4a', animation: 'livePulse 1.4s ease-in-out infinite' } }), 'Nu aan het lopen'),
+                                    h('div', { className: 'truncate', style: { fontSize: 28, fontWeight: 800, lineHeight: 1.15, marginTop: 6 } }, activeRunner.runnerName)
                                 ),
-                                h('div', { className: 'text-right' },
-                                    h('div', { className: 'text-sm text-gray-600 mb-1' }, 'Huidige Tijd'),
-                                    h(LiveClock, { startTime, running: isRunning, format: formatTime, className: 'text-4xl font-mono font-bold text-orange-600' })
-                                )
+                                h(LiveClock, { startTime, running: isRunning, format: formatTime, className: 'font-extrabold', style: { fontSize: 44, lineHeight: 1, fontVariantNumeric: 'tabular-nums' } })
                             )
                         ),
 
@@ -4039,11 +4038,13 @@ function predictNext(times, gender, restMs) {
                                     }
                                     setQDrag(null); setQDropAt(null);
                                 };
-                                const iconBtn = 'w-9 h-9 flex items-center justify-center rounded-lg font-bold text-base transition-colors disabled:opacity-30 disabled:cursor-not-allowed';
+                                const iconBtn = 'w-9 h-9 flex items-center justify-center rounded-lg font-extrabold text-base disabled:opacity-30 disabled:cursor-not-allowed';
+                                const btnStyle = (bg) => ({ background: bg, color: '#17120d', border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d' });
+                                const rowStyle = (idx) => idx === 0 ? { background: '#d9f7d0', border: '2px solid #17120d' } : idx === 1 ? { background: '#ffe9a8', border: '2px solid #17120d' } : { background: '#fff6df', border: '2px solid transparent' };
                                 return h('div', null,
                                     h('div', { className: 'flex items-baseline justify-between mb-1' },
                                         h('h2', { className: 'text-lg font-semibold text-gray-900' }, `Wachtrij (${waiting.length})`),
-                                        waiting.length > 1 && h('span', { className: 'text-xs text-gray-500' }, 'Sleep via ☰ of gebruik de pijltjes')
+                                        waiting.length > 1 && h('span', { className: 'text-xs font-semibold', style: { color: '#6a5a48' } }, 'Sleep via ☰ of gebruik de pijltjes')
                                     ),
                                     waiting.length === 0 ? h('div', { className: 'text-center text-gray-400 py-8' }, queueLoaded ? 'Geen lopers' : 'Wachtrij laden…') :
                                     h('div', { ref: queueListRef, className: 'relative space-y-2 mt-3 lg:overflow-y-auto pr-1 ' + (isDisplayFullscreen || IS_SIGNUP ? 'lg:max-h-[calc(100vh-14rem)]' : 'lg:max-h-[calc(100vh-21rem)]'), onDragOver: (e) => e.preventDefault(), onDrop: finishDrop },
@@ -4058,12 +4059,8 @@ function predictNext(times, gender, restMs) {
                                                 setQDropAt(e.clientY > r.top + r.height / 2 ? idx + 1 : idx);
                                             },
                                             onDrop: finishDrop,
-                                            style: qDrag !== null && qDropAt === idx ? { boxShadow: '0 -4px 0 0 #3b82f6' } : (qDrag !== null && qDropAt === waiting.length && idx === waiting.length - 1 ? { boxShadow: '0 4px 0 0 #3b82f6' } : null),
-                                            className: `flex items-center justify-between gap-2 p-3 rounded-lg border-2 transition-all ${
-                                                qDrag === idx ? 'opacity-40' :
-                                                idx === 0 ? 'bg-green-50 border-green-500' :
-                                                idx === 1 ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-200'
-                                            }`
+                                            style: { ...rowStyle(idx), color: '#17120d', ...(qDrag !== null && qDropAt === idx ? { boxShadow: '0 -4px 0 0 #e8590c' } : (qDrag !== null && qDropAt === waiting.length && idx === waiting.length - 1 ? { boxShadow: '0 4px 0 0 #e8590c' } : null)) },
+                                            className: `keep-light flex items-center justify-between gap-2 p-3 rounded-xl transition-all ${qDrag === idx ? 'opacity-40' : ''}`
                                         },
                                             h('div', { className: 'flex items-center gap-3 flex-1 min-w-0' },
                                                 h('span', {
@@ -4074,20 +4071,20 @@ function predictNext(times, gender, restMs) {
                                                         setQDrag(idx);
                                                     },
                                                     onDragEnd: () => { setQDrag(null); setQDropAt(null); },
-                                                    className: 'cursor-grab active:cursor-grabbing select-none text-xl text-gray-400 hover:text-gray-700 px-1',
+                                                    className: 'cursor-grab active:cursor-grabbing select-none text-xl px-1', style: { color: '#8b7a63' },
                                                     title: 'Sleep om de volgorde aan te passen'
                                                 }, '☰'),
-                                                h('div', { className: `text-xl font-bold w-6 text-center ${idx === 0 ? 'text-green-600' : idx === 1 ? 'text-yellow-600' : 'text-gray-400'}` }, idx + 1),
+                                                h('div', { className: 'text-xl font-extrabold w-6 text-center', style: { color: idx < 2 ? '#17120d' : '#8b7a63' } }, idx + 1),
                                                 h('div', { className: 'min-w-0' },
-                                                    h('div', { className: 'flex items-center gap-1.5 min-w-0' }, crownMark(computeCrowns(laps)[runner.runnerId], 16), h('div', { className: 'font-semibold text-gray-900 truncate' }, runner.runnerName)),
-                                                    h('div', { className: `text-sm ${idx === 0 ? 'text-green-600 font-semibold' : idx === 1 ? 'text-yellow-600 font-semibold' : 'text-gray-500'}` }, getWaitTime(idx))
+                                                    h('div', { className: 'flex items-center gap-1.5 min-w-0' }, crownMark(computeCrowns(laps)[runner.runnerId], 16), h('div', { className: 'font-extrabold truncate' }, runner.runnerName)),
+                                                    h('div', { className: 'text-sm', style: { fontWeight: idx < 2 ? 800 : 600, color: idx === 0 ? '#1f7a33' : idx === 1 ? '#8a5a00' : '#6a5a48' } }, getWaitTime(idx))
                                                 )
                                             ),
                                             h('div', { className: 'flex items-center gap-1 flex-shrink-0' },
-                                                h('button', { disabled: idx === 0, onClick: () => move(idx, 0), className: `${iconBtn} bg-gray-200 hover:bg-gray-300 text-gray-700`, title: 'Helemaal bovenaan zetten' }, '⤒'),
-                                                h('button', { disabled: idx === 0, onClick: () => move(idx, idx - 1), className: `${iconBtn} bg-gray-200 hover:bg-gray-300 text-gray-700`, title: 'Eén plaats naar voor' }, '▲'),
-                                                h('button', { disabled: idx === waiting.length - 1, onClick: () => move(idx, idx + 1), className: `${iconBtn} bg-gray-200 hover:bg-gray-300 text-gray-700`, title: 'Eén plaats naar achter' }, '▼'),
-                                                h('button', { onClick: () => removeFromQueue(runner), className: `${iconBtn} bg-red-500 hover:bg-red-600 text-white ml-1`, title: 'Uit de wachtrij verwijderen' }, h(Icon, { name: 'trash', className: 'w-4 h-4' }))
+                                                h('button', { disabled: idx === 0, onClick: () => move(idx, 0), className: iconBtn, style: btnStyle('#ffffff'), title: 'Helemaal bovenaan zetten' }, '⤒'),
+                                                h('button', { disabled: idx === 0, onClick: () => move(idx, idx - 1), className: iconBtn, style: btnStyle('#ffffff'), title: 'Eén plaats naar voor' }, '▲'),
+                                                h('button', { disabled: idx === waiting.length - 1, onClick: () => move(idx, idx + 1), className: iconBtn, style: btnStyle('#ffffff'), title: 'Eén plaats naar achter' }, '▼'),
+                                                h('button', { onClick: () => removeFromQueue(runner), className: `${iconBtn} ml-1`, style: btnStyle('#ff8f7a'), title: 'Uit de wachtrij verwijderen' }, h(Icon, { name: 'trash', className: 'w-4 h-4' }))
                                             )
                                         ))
                                     )
