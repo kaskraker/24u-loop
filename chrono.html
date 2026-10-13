@@ -106,7 +106,8 @@
   body.focus main { padding-top: 58px; }   /* plaats voor het kruisje en een eventuele meldingsbalk */
   body.focus .toast { top: calc(10px + env(safe-area-inset-top)); bottom: auto; }
   .fx { position: fixed; top: calc(8px + env(safe-area-inset-top)); right: 10px; z-index: 40; width: 40px; height: 40px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; color: var(--ink); font: inherit; font-size: 20px; font-weight: 800; box-shadow: 2px 2px 0 var(--ink); display: grid; place-items: center; padding: 0; }
-  .slim { position: fixed; top: env(safe-area-inset-top); left: 0; right: 56px; z-index: 35; background: #fecaca; border-bottom: 3px solid var(--ink); font-size: 13px; font-weight: 800; padding: 6px 12px; }
+  .fx.more { right: 58px; }
+  .slim { position: fixed; top: env(safe-area-inset-top); left: 0; right: 106px; z-index: 35; background: #fecaca; border-bottom: 3px solid var(--ink); font-size: 13px; font-weight: 800; padding: 6px 12px; }
   .inst { font-size: 14px; font-weight: 600; line-height: 1.5; } .inst b { font-weight: 800; }
   .sec { margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 </style>
@@ -596,6 +597,20 @@ function installCard() {
 }
 if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('service-worker.js').catch(() => {});   // pagina ook zonder internet opnieuw kunnen openen
 
+// ===== vernieuwen: een geïnstalleerde app heeft geen herlaadknop =====
+async function reloadApp() {
+  if (pending > 0 && persistence !== 'on' && !(await ask('Vernieuwen?', `${pending} ${pending === 1 ? 'wijziging is' : 'wijzigingen zijn'} nog niet verstuurd en offline-opslag werkt niet in deze browser. Die gaan verloren als je nu vernieuwt.`, { ok: 'Toch vernieuwen', danger: true }))) return;
+  location.reload();
+}
+// acties in de tijdnemer-modus (zonder de modus te verlaten)
+function focusActions() {
+  const running = isRunning(), w = waiting(), b = (act, txt, extra = '') => `<button class="btn pick ${extra}" data-act="${act}">${txt}</button>`;
+  $('overlay').innerHTML = `<div class="modal" data-act="closeov"><div class="box"><h3>Acties</h3>
+    ${running ? b('manual', 'Tijd intikken') + b('stop', 'Stoppen na deze') + b('swap', 'Andere loper loopt') + (w.length ? b('skip', 'Volgende niet aanwezig') : '') + b('cancel', 'Loop annuleren (niet opslaan)', 'danger') : (w.length ? b('skip', 'Niet aanwezig: naar het einde van de rij') : '')}
+    ${b('reload', '↻ Vernieuwen')}${b('unfocus', 'Tijdnemer-modus verlaten')}
+    <button class="btn" data-act="closeov" style="width:100%;margin-top:6px">Sluiten</button></div></div>`;
+}
+
 // ===== tijdnemer-modus =====
 let focusMode = false; try { focusMode = localStorage.getItem('chronoFocus') === 'on'; } catch (e) {}
 function setFocus(on) {
@@ -625,7 +640,7 @@ function renderChrome() {
   document.body.classList.toggle('focus', focusMode);
   // tijdnemer-modus: enkel geen verbinding of lege batterij, als smalle balk die niets verschuift
   const crit = st === 'off' ? 'Geen verbinding: alles wordt bewaard en later verstuurd' : (batt && batt.level <= 0.2 && !batt.charging) ? `Batterij ${Math.round(batt.level * 100)}%: sluit de lader aan` : '';
-  $('fxBox').innerHTML = focusMode ? `${crit ? `<div class="slim">${crit}</div>` : ''}<button class="fx" data-act="unfocus" aria-label="Tijdnemer-modus verlaten">✕</button>` : '';
+  $('fxBox').innerHTML = focusMode ? `${crit ? `<div class="slim">${crit}</div>` : ''}<button class="fx more" data-act="focusacts" aria-label="Acties">⋯</button><button class="fx" data-act="unfocus" aria-label="Tijdnemer-modus verlaten">✕</button>` : '';
   $('nav').innerHTML = [['chrono', 'Chrono'], ['queue', 'Rij'], ['laps', 'Rondes'], ['runners', 'Lopers'], ['more', 'Beheer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
 }
 // korte info over een loper (voor wie nu loopt of als volgende komt)
@@ -658,7 +673,7 @@ function viewChrono() {
   const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   const nextCard = running && w.length ? `<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${runnerFacts(w[0].runnerId, true)}</div>` : '';
   const actions = running ? `<button class="btn" data-act="moreacts" style="width:100%">${moreOpen ? 'Andere acties ▴' : 'Andere acties ▾'}</button>
-    ${moreOpen ? `<div class="row2"><button class="btn" data-act="manual">Tijd intikken</button><button class="btn" data-act="stop">Stoppen na deze</button></div><div class="row2"><button class="btn" data-act="swap">Andere loper loopt</button><button class="btn" data-act="skip" ${w.length ? '' : 'disabled'}>Volgende niet aanwezig</button></div><button class="btn danger" data-act="cancel">Loop annuleren (niet opslaan)</button>` : ''}`
+    ${moreOpen ? `<div class="row2"><button class="btn" data-act="manual">Tijd intikken</button><button class="btn" data-act="stop">Stoppen na deze</button></div><div class="row2"><button class="btn" data-act="swap">Andere loper loopt</button><button class="btn" data-act="skip" ${w.length ? '' : 'disabled'}>Volgende niet aanwezig</button></div><button class="btn danger" data-act="cancel">Loop annuleren (niet opslaan)</button><button class="btn" data-act="reload">↻ Vernieuwen</button>` : ''}`
     : (w.length ? '<button class="btn" data-act="skip">Niet aanwezig: naar het einde van de rij</button>' : '');
   if (focusMode) {   // tijdnemer-modus: ook de drie lopers daarna, compact
     const after = w.slice(1, 4).map((q, i) => `<div class="row"><div class="no">${i + 2}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + 1), i + 1)}</div></div>`).join('');
@@ -725,6 +740,7 @@ function viewMore() {
     <div class="row"><div class="nm">Haptiek<small>${canVibrate ? 'trillen wordt ondersteund' : 'iPhone: via de schakelaar-truc (iOS 17.4+); zet Instellingen → Geluid en haptiek → Systeemhaptiek aan'}</small></div><button class="btn small primary" data-act="hapTest">Test</button></div>
     <div class="row"><div class="nm">Batterij<small>${batt ? `${Math.round(batt.level * 100)}%${batt.charging ? ' · aan de lader' : ' · niet aan de lader'}` : 'kan niet worden uitgelezen op dit toestel (iPhone): zet de gsm aan de lader'}</small></div></div>
     <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
+    <div class="row"><div class="nm">App vernieuwen<small>als iets niet meer meeloopt; niets gaat verloren</small></div><button class="btn small" data-act="reload">↻</button></div>
     <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
     <div class="card"><h2>Gegevens</h2><div class="row2"><button class="btn" data-act="csvLaps">Rondes (CSV)</button><button class="btn" data-act="csvRunners">Lopers (CSV)</button></div></div>
     <div class="card"><h2>Gevaarlijke zone</h2><div class="sec" style="margin-bottom:8px">${NS ? `Wist enkel de oefenomgeving "${esc(NS)}"` : 'Wist het ECHTE event'}</div><button class="btn danger" style="width:100%" data-act="reset">Alle data wissen…</button></div>
@@ -774,6 +790,10 @@ document.addEventListener('click', (e) => {
   const a = t.dataset.act, id = t.dataset.id;
   if (a === 'moreacts') { moreOpen = !moreOpen; render(); return; }
   if (a === 'focus') { setFocus(true); return; }
+  if (a === 'focusacts') { focusActions(); return; }
+  if (a === 'closeov') { if (t.classList.contains('modal') && e.target !== t) return; $('overlay').innerHTML = ''; return; }
+  if (a === 'reload') { $('overlay').innerHTML = ''; reloadApp(); return; }
+  if (['manual', 'stop', 'swap', 'skip', 'cancel', 'unfocus'].includes(a) && $('overlay').querySelector('[data-act=closeov]')) $('overlay').innerHTML = '';
   if (a === 'unfocus') { setFocus(false); return; }
   if (a === 'install') { if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render(); }); } return; }
   if (['manual', 'stop', 'swap', 'skip', 'cancel'].includes(a)) moreOpen = false;
