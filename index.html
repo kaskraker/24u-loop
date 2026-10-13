@@ -1104,24 +1104,40 @@ function predictNext(times, gender, restMs) {
                 laps.forEach(l => { (by[l.runnerId] = by[l.runnerId] || { name: l.runnerName, laps: [] }).laps.push(l); });
                 Object.values(by).forEach(r => r.laps.sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)));
                 const now = Date.now();
-                const hotL = [], streakL = [], metroL = [], improveL = [];
+                // Spotlights. Reeks, metronoom en steeds sneller kijken naar de laatste 3 uur (zo schuiven ze mee door de nacht);
+                // is die lijst leeg, dan het hele event. Eerste ronde, record en mijlpaal gaan over het laatste halfuur.
+                const tsOf = (l) => new Date(l.timestamp).getTime(), W3 = 3 * 3600e3, W30 = 30 * 60e3;
+                const hotL = [], firstL = [], prL = [], mileL = [];
+                const lists = (win) => {
+                    const streakL = [], metroL = [], improveL = [];
+                    Object.values(by).forEach(r => {
+                        const all = r.laps.map(l => l.time), inWin = win ? r.laps.filter(l => now - tsOf(l) < win) : r.laps, t = inWin.map(l => l.time), off = all.length - t.length;
+                        let cur = 0, best = 0, end = 0;
+                        t.forEach((x, i) => { if (x < 90000) { cur++; if (cur > best) { best = cur; end = i; } } else cur = 0; });
+                        if (best >= 3) streakL.push({ name: r.name, n: best, times: all, from: off + end - best + 1, to: off + end });
+                        if (t.length >= (win ? 4 : 5)) {
+                            const m = t.reduce((x, y) => x + y, 0) / t.length, sd = Math.sqrt(t.reduce((x, y) => x + (y - m) * (y - m), 0) / t.length);
+                            metroL.push({ name: r.name, sd, avg: m, n: t.length, times: t });
+                        }
+                        if (all.length >= 3) {   // beste ronde vergeleken met de eerste; met venster: enkel als die beste ronde in het venster viel
+                            const bi = all.indexOf(Math.min(...all)), gain = all[0] - all[bi];
+                            if (gain >= 5000 && (!win || now - tsOf(r.laps[bi]) < win)) improveL.push({ name: r.name, gain, first: all[0], best: all[bi], times: all });
+                        }
+                    });
+                    streakL.sort((x, y) => y.n - x.n); metroL.sort((x, y) => x.sd - y.sd); improveL.sort((x, y) => y.gain - x.gain);
+                    return { streakL, metroL, improveL };
+                };
+                const L3 = lists(W3), LA = lists(0);
+                const streakL = L3.streakL.length ? L3.streakL : LA.streakL, metroL = L3.metroL.length ? L3.metroL : LA.metroL, improveL = L3.improveL.length ? L3.improveL : LA.improveL;
                 Object.values(by).forEach(r => {
-                    const t = r.laps.map(l => l.time);
-                    const recent = r.laps.filter(l => now - new Date(l.timestamp).getTime() < 3600e3);
+                    const t = r.laps.map(l => l.time), last = r.laps[r.laps.length - 1], lastAt = tsOf(last);
+                    const recent = r.laps.filter(l => now - tsOf(l) < 3600e3);
                     if (recent.length >= 3) hotL.push({ name: r.name, n: recent.length, times: recent.map(l => l.time) });
-                    let cur = 0, best = 0, end = 0;
-                    t.forEach((x, i) => { if (x < 90000) { cur++; if (cur > best) { best = cur; end = i; } } else cur = 0; });
-                    if (best >= 3) streakL.push({ name: r.name, n: best, times: t, from: end - best + 1, to: end });
-                    if (t.length >= 5) {
-                        const m = t.reduce((x, y) => x + y, 0) / t.length, sd = Math.sqrt(t.reduce((x, y) => x + (y - m) * (y - m), 0) / t.length);
-                        metroL.push({ name: r.name, sd, avg: m, n: t.length, times: t });
-                    }
-                    if (t.length >= 3) {
-                        const gain = t[0] - Math.min(...t);
-                        if (gain >= 5000) improveL.push({ name: r.name, gain, first: t[0], best: Math.min(...t), times: t });
-                    }
+                    if (now - tsOf(r.laps[0]) < W30) firstL.push({ name: r.name, time: r.laps[0].time, at: tsOf(r.laps[0]) });
+                    if (t.length >= 2 && now - lastAt < W30 && last.time < Math.min(...t.slice(0, -1))) prL.push({ name: r.name, time: last.time, prev: Math.min(...t.slice(0, -1)), at: lastAt, times: t });
+                    if (t.length >= 5 && t.length % 5 === 0 && now - lastAt < W30) mileL.push({ name: r.name, n: t.length, at: lastAt, times: t });
                 });
-                hotL.sort((x, y) => y.n - x.n); streakL.sort((x, y) => y.n - x.n); metroL.sort((x, y) => x.sd - y.sd); improveL.sort((x, y) => y.gain - x.gain);
+                hotL.sort((x, y) => y.n - x.n); [firstL, prL, mileL].forEach(a => a.sort((x, y) => y.at - x.at));   // net gebeurd: nieuwste eerst
 
                 // drukte: laatste kwartier, drukste kwartier (schuivend venster) en 8 kwartieren terug
                 const stamps = laps.map(l => new Date(l.timestamp).getTime()).sort((x, y) => x - y);
@@ -1149,7 +1165,7 @@ function predictNext(times, gender, restMs) {
                 // 24u-klok (20:00 bovenaan)
                 const slots = new Array(24).fill(0);
                 laps.forEach(l => { slots[(new Date(l.timestamp).getHours() - 20 + 24) % 24]++; });
-                return { bins, avg, LO, STEP, N, hours, hotL, streakL, metroL, improveL, agg, buckets, nRunners, repeat, slots, nowSlot: (new Date().getHours() - 20 + 24) % 24, peak, quarters, last15, hourNow, hourPrev, newcomers, tempoHours, evStart };
+                return { bins, avg, LO, STEP, N, hours, hotL, streakL, metroL, improveL, firstL, prL, mileL, agg, buckets, nRunners, repeat, slots, nowSlot: (new Date().getHours() - 20 + 24) % 24, peak, quarters, last15, hourNow, hourPrev, newcomers, tempoHours, evStart };
             }, [laps, runners]);
 
             const label = (t) => h('div', { className: 'text-[11px] font-extrabold uppercase tracking-wide text-gray-800' }, t);
@@ -1208,7 +1224,7 @@ function predictNext(times, gender, restMs) {
                 h('div', { className: 'text-2xl font-extrabold text-gray-900 truncate leading-tight mt-1' }, name),
                 h('div', { className: 'text-3xl font-extrabold leading-tight', style: { color: '#e8590c' } }, big),
                 h('div', { className: 'text-sm text-gray-600 mb-2' }, sub),
-                spark(times, hi)
+                times && times.length > 1 ? spark(times, hi) : null
             );
 
             // ---- slide: mannen vs vrouwen ----
@@ -1427,15 +1443,25 @@ function predictNext(times, gender, restMs) {
                 h('div', { className: 'text-sm text-gray-700 mt-3' }, 'Volg ons op Instagram: @humasol_vzw'));
 
             // ---- welke slides hebben genoeg data? Wisselende slides komen vaak, de trage grafieken af en toe ----
-            const rankOf = (arr, r) => arr[r % Math.min(3, arr.length)];
+            // Per ronde van slides schuift elke lijst één plaats op (top 8), en wie al in een andere spotlight stond, wordt overgeslagen.
+            const SPOT_N = 8, SPOTS = [['first', d.firstL], ['pr', d.prL], ['mile', d.mileL], ['hot', d.hotL], ['streak', d.streakL], ['metro', d.metroL], ['imp', d.improveL]];
+            const spotPicks = (r) => {
+                const used = new Set(), out = {};
+                SPOTS.forEach(([k, arr]) => { const n = Math.min(SPOT_N, arr.length); for (let j = 0; j < n; j++) { const x = arr[(r + j) % n]; if (!used.has(x.name)) { used.add(x.name); out[k] = x; break; } } });
+                return out;
+            };
+            const rankOf = (arr, r, k) => spotPicks(r)[k] || arr[r % Math.min(SPOT_N, arr.length)];
             const dyn = [];   // elk onderdeel: (ronde) => [id, element]
-            if (d.hotL.length) dyn.push((r) => { const x = rankOf(d.hotL, r); return ['hot' + r % 3, spot('op dreef', x.name, `${x.n} rondes in het laatste uur`, `gemiddeld ${mmss(x.times.reduce((a, b) => a + b, 0) / x.times.length / 1000)} per ronde`, x.times)]; });
+            if (d.firstL.length) dyn.push((r) => { const x = rankOf(d.firstL, r, 'first'); return ['first' + r, spot('eerste ronde', x.name, mmss(x.time / 1000), `om ${hhmmOf(x.at)} · welkom!`, null)]; });
+            if (d.prL.length) dyn.push((r) => { const x = rankOf(d.prL, r, 'pr'); return ['pr' + r, spot('persoonlijk record', x.name, mmss(x.time / 1000), `${Math.max(1, Math.round((x.prev - x.time) / 1000))} s sneller dan de vorige beste`, x.times)]; });
+            if (d.mileL.length) dyn.push((r) => { const x = rankOf(d.mileL, r, 'mile'); return ['mile' + r, spot('mijlpaal', x.name, `${x.n} rondes`, `${(x.n * 0.515).toFixed(1).replace('.', ',')} km · € ${x.n * 5} voor Water for All`, x.times)]; });
+            if (d.hotL.length) dyn.push((r) => { const x = rankOf(d.hotL, r, 'hot'); return ['hot' + r, spot('op dreef', x.name, `${x.n} rondes in het laatste uur`, `gemiddeld ${mmss(x.times.reduce((a, b) => a + b, 0) / x.times.length / 1000)} per ronde`, x.times)]; });
             if (laps.length >= 10) dyn.push(() => ['busy', busy()]);
-            if (d.streakL.length) dyn.push((r) => { const x = rankOf(d.streakL, r); return ['streak' + r % 3, spot('reeks onder 1:30', x.name, `${x.n}× na elkaar onder 1:30`, 'Elke groene stip was sneller dan 1:30', x.times, [x.from, x.to])]; });
+            if (d.streakL.length) dyn.push((r) => { const x = rankOf(d.streakL, r, 'streak'); return ['streak' + r, spot('reeks onder 1:30', x.name, `${x.n}× na elkaar onder 1:30`, 'Elke groene stip was sneller dan 1:30', x.times, [x.from, x.to])]; });
             if (laps.length >= 20) dyn.push(() => ['vs', vsPrev()]);
-            if (d.metroL.length) dyn.push((r) => { const x = rankOf(d.metroL, r); return ['metro' + r % 3, spot('de metronoom', x.name, `±${(x.sd / 1000).toFixed(1).replace('.', ',')} s spreiding`, `${x.n} rondes, gemiddeld ${mmss(x.avg / 1000)}: bijna elke ronde even snel`, x.times)]; });
+            if (d.metroL.length) dyn.push((r) => { const x = rankOf(d.metroL, r, 'metro'); return ['metro' + r, spot('de metronoom', x.name, `±${(x.sd / 1000).toFixed(1).replace('.', ',')} s spreiding`, `${x.n} rondes, gemiddeld ${mmss(x.avg / 1000)}: bijna elke ronde even snel`, x.times)]; });
             if (d.nRunners >= 5) dyn.push(() => ['new', newbies()]);
-            if (d.improveL.length) dyn.push((r) => { const x = rankOf(d.improveL, r); return ['imp' + r % 3, spot('steeds sneller', x.name, `${mmss(x.first / 1000)} → ${mmss(x.best / 1000)}`, `${Math.round(x.gain / 1000)} s sneller dan de eerste ronde`, x.times)]; });
+            if (d.improveL.length) dyn.push((r) => { const x = rankOf(d.improveL, r, 'imp'); return ['imp' + r, spot('steeds sneller', x.name, `${mmss(x.first / 1000)} → ${mmss(x.best / 1000)}`, `${Math.round(x.gain / 1000)} s sneller dan de eerste ronde`, x.times)]; });
             dyn.push((r) => ['km' + r, distance(r)]);
             if (laps.length >= 30) dyn.push(() => ['tempo', tempoHour()]);
             if (qh.filter(x => x.t > Date.now() - 24 * 3600e3).length >= 3) dyn.push(() => ['queue', queueSlide()]);
