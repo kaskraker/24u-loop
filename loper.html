@@ -337,7 +337,7 @@ function viewSearch() {
     <div id="sres">${resultsHtml(res, q, 'view')}</div></div>`;
 }
 
-const TRACK_D = 'M 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 55 112';   // start/wissel aan de Humasol-stand (linksonder), tegen wijzerzin: eerst naar rechts
+const TRACK_D = 'M 25.3 99.7 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 25.3 99.7';   // start/wissel aan de Humasol-stand (in de linkerbocht, schuin linksonder), tegen wijzerzin
 // Kleur van het rondes-vakje: gewoon crème, goud bij elke vijfde ronde
 function lapTileStyle(n) {
   if (n > 0 && n % 5 === 0) return { bg: '#ffd23f', fg: '#17120d', sub: '#4a3b2a', shadow: '3px 3px 0 #17120d' };   // mijlpaal: goud bij ronde 5, 10, 15, ...
@@ -364,7 +364,7 @@ function nowCard() {
         <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
         <path class="tlo" d="${TRACK_D}" fill="none" stroke="#f2a342" stroke-width="17" pathLength="1" stroke-dasharray=".001 2" opacity=".55"/>
         <path class="thi" d="${TRACK_D}" fill="none" stroke="#e8590c" stroke-width="17" pathLength="1" stroke-dasharray=".05 2"/>
-        <line x1="55" y1="97" x2="55" y2="127" stroke="#17120d" stroke-width="5"/></svg></div>
+        <line x1="34.5" y1="90.5" x2="16.1" y2="108.9" stroke="#17120d" stroke-width="5"/></svg></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${(lapNo === 1 ? [['Ronde', 1]] : [['Ronde', lapNo], ['Schatting', '± ' + mmss(ex)]]).map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#6a5a48', shadow: 'none' }; return `<div style="background:${ts.bg};box-shadow:${ts.shadow};border:3px solid var(--ink);border-radius:12px;padding:4px 10px"><div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${ts.sub}">${k}</div><div style="font-size:22px;font-weight:800;line-height:1.15;color:${ts.fg}">${v}</div></div>`; }).join('')}</div></div>`;
 }
 // ---------- voor en na het event ----------

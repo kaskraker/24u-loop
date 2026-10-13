@@ -276,13 +276,16 @@
                     }
                     return Promise.resolve();
                 },
+                // Schrijft in pakjes van 400. Geeft een belofte terug die pas klaar is als ALLE pakjes door de server bevestigd zijn:
+                // wie 'await' gebruikt (bv. de import), weet zo zeker dat alles weg is voor hij het venster verlaat. Wie niet wacht, schrijft gewoon offline-first.
                 setMany: (entries) => {
+                    const commits = [];
                     for (let i = 0; i < entries.length; i += 400) {
                         const batch = db.batch();
                         entries.slice(i, i + 400).forEach(e => e.merge ? batch.set(coll().doc(e.id), e.data, { merge: true }) : batch.set(coll().doc(e.id), e.data));
-                        trackWrite(batch.commit());
+                        const c = batch.commit(); trackWrite(c); commits.push(c);
                     }
-                    return Promise.resolve();
+                    return Promise.all(commits);
                 },
                 add: (data) => {
                     const ref = coll().doc();            // id bestaat meteen, zonder server
@@ -638,19 +641,20 @@
             return out.sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0)).slice(0, 3);
         };
         // ===== Piste-grafiek: ovaal van 515 m, liggend getekend (kaart een kwartslag gedraaid: noorden/Stadion OHL links) =====
-        // Start/wissel aan de Humasol-stand: linksonder, waar de bocht begint (plan 2026). Er wordt tegen wijzerzin gelopen: eerst naar rechts.
+        // Start/wissel aan de Humasol-stand: in de linkerbocht, schuin linksonder (45° voor het einde van de bocht). Humasol is de eerste stand
+        // van de groep in die bocht die de lopers tegenkomen (plan 2026). Er wordt tegen wijzerzin gelopen: eerst de bocht uit, dan naar rechts.
         // Het oranje stuk is waar de loper waarschijnlijk zit (bereik), het lichte stuk is al gelopen.
         const TRACK = { L: 150, r: 42, cxL: 55, cxR: 205, cy: 70 };
-        const TRACK_PATH = 'M 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 55 112';
+        const TRACK_PATH = 'M 25.3 99.7 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 25.3 99.7';
         const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '-92 0 352 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#17120d', strokeWidth: 26, strokeLinejoin: 'round' }),
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#ffffff', strokeWidth: 17 }),
             h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 17, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.55 }),
             h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#e8590c', strokeWidth: 17, strokeLinecap: 'butt', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
-            h('line', { x1: 55, y1: 97, x2: 55, y2: 127, stroke: '#17120d', strokeWidth: 5 }),
-            // het Humasol-icoon linksonder, naast de start: daar staat de stand
-            h('rect', { x: -86, y: 70, width: 66, height: 64, rx: 14, fill: '#ffffff', stroke: '#17120d', strokeWidth: 4 }),
-            h('svg', { x: -80, y: 78, width: 54, height: 48, viewBox: '25 75 465 400' }, h('image', { href: 'humasol_icon.png', width: 512, height: 512 })),
+            h('line', { x1: 34.5, y1: 90.5, x2: 16.1, y2: 108.9, stroke: '#17120d', strokeWidth: 5 }),
+            // klein Humasol-icoon naast de start: daar staat de stand
+            h('rect', { x: -50, y: 94, width: 42, height: 40, rx: 10, fill: '#ffffff', stroke: '#17120d', strokeWidth: 3 }),
+            h('svg', { x: -46, y: 99, width: 34, height: 30, viewBox: '25 75 465 400' }, h('image', { href: 'humasol_icon.png', width: 512, height: 512 })),
             label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
