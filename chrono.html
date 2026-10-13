@@ -587,11 +587,13 @@ function renderChrome() {
   $('nav').innerHTML = [['chrono', 'Chrono'], ['queue', 'Rij'], ['laps', 'Rondes'], ['runners', 'Lopers'], ['more', 'Beheer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
 }
 // korte info over een loper (voor wie nu loopt of als volgende komt)
-function runnerFacts(rid) {
+// lopende loper: schatting, laatste en snelste; volgende loper: het hoeveelste rondje, laatste en snelste
+function runnerFacts(rid, next) {
   const mine = laps.filter((l) => l.runnerId === rid).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   if (!mine.length) return '<div class="facts"><span>Eerste rondje</span></div>';
   const best = Math.min(...mine.map((l) => l.time)), last = mine[mine.length - 1].time;
-  return `<div class="facts"><span><small>Schatting</small>± ${mmss(expected(rid))}</span><span><small>Laatste</small>${mmss(last)}</span><span><small>Snelste</small>${mmss(best)}</span></div>`;
+  const first = next ? `<span><small>Rondje</small>${mine.length + 1}</span>` : `<span><small>Schatting</small>± ${mmss(expected(rid))}</span>`;
+  return `<div class="facts">${first}<span><small>Laatste</small>${mmss(last)}</span><span><small>Snelste</small>${mmss(best)}</span></div>`;
 }
 let moreOpen = false;   // 'Andere acties' open of dicht
 function viewChrono() {
@@ -604,7 +606,7 @@ function viewChrono() {
     const hint = holdMode ? '<span class="hint">houd ingedrukt</span>' : '';
     button = w.length ? `<button class="big hold" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small>${hint}</button>` : `<button class="big hold stop" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small>${hint}</button>`;
   } else {
-    top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm" style="margin-top:6px">${w.length ? esc(w[0].runnerName) : '—'}</div>${w.length ? runnerFacts(w[0].runnerId) : '<div class="sub">Wachtrij is leeg</div>'}</div>`;
+    top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm" style="margin-top:6px">${w.length ? esc(w[0].runnerName) : '—'}</div>${w.length ? runnerFacts(w[0].runnerId, true) : '<div class="sub">Wachtrij is leeg</div>'}</div>`;
     button = `<button class="big hold ${w.length ? '' : 'wait'}" data-hold="main" ${(!w.length || busy) ? 'disabled' : ''}>START<small>${w.length ? esc(w[0].runnerName) : 'wacht op een loper'}</small>${holdMode && w.length ? '<span class="hint">houd ingedrukt</span>' : ''}</button>`;
   }
   const recentLaps = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
@@ -612,7 +614,7 @@ function viewChrono() {
   const undoCard = lastAction ? `<div class="undo" style="flex-wrap:wrap"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button>
     ${recentAdj ? `<div class="corr" style="width:100%"><b>Te laat gedrukt?</b><button class="btn small" data-adj="5000">−5 s</button><button class="btn small" data-adj="10000">−10 s</button><button class="btn small" data-adj="20000">−20 s</button></div>` : ''}</div>` : '';
   const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
-  const nextCard = running && w.length ? `<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${runnerFacts(w[0].runnerId)}</div>` : '';
+  const nextCard = running && w.length ? `<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${runnerFacts(w[0].runnerId, true)}</div>` : '';
   const actions = running ? `<button class="btn" data-act="moreacts" style="width:100%">${moreOpen ? 'Andere acties ▴' : 'Andere acties ▾'}</button>
     ${moreOpen ? `<div class="row2"><button class="btn" data-act="manual">Tijd intikken</button><button class="btn" data-act="stop">Stoppen na deze</button></div><div class="row2"><button class="btn" data-act="swap">Andere loper loopt</button><button class="btn" data-act="skip" ${w.length ? '' : 'disabled'}>Volgende niet aanwezig</button></div><button class="btn danger" data-act="cancel">Loop annuleren (niet opslaan)</button>` : ''}`
     : (w.length ? '<button class="btn" data-act="skip">Niet aanwezig: naar het einde van de rij</button>' : '');
