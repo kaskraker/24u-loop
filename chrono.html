@@ -20,11 +20,14 @@
   body { font-family: 'Bricolage Grotesque', system-ui, sans-serif; background: var(--butter); color: var(--ink); font-variant-numeric: tabular-nums; padding-bottom: 90px; user-select: none; -webkit-user-select: none; }
   header { background: var(--orange); border-bottom: 3px solid var(--ink); padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   header h1 { font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+  header .ttl { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  header .logo { flex: none; background: #fff; border: 3px solid var(--ink); border-radius: 10px; box-shadow: 2px 2px 0 var(--ink); padding: 2px 7px; display: flex; }
+  header .logo img { height: 20px; width: auto; display: block; }
+  .envpill { display: inline-block; background: var(--deep); color: #fff; font-size: 11px; font-weight: 800; border: 2px solid var(--ink); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
   .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; background: #fff; border: 3px solid var(--ink); border-radius: 999px; padding: 3px 10px; }
   .chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }
-  .chip.off i { background: var(--bad); animation: pulse 1s infinite; } .chip.sync i { background: #3b82f6; animation: pulse 1s infinite; }
+  .chip.off i { background: var(--bad); animation: pulse 1s infinite; } .chip.sync i { background: #3b82f6; animation: pulse 1s infinite; } .chip.wait i { background: #9ca3af; animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .3; } }
-  .env { background: var(--deep); color: #fff; text-align: center; font-weight: 800; font-size: 13px; padding: 5px; border-bottom: 3px solid var(--ink); letter-spacing: .05em; }
   .banner { margin: 10px 14px 0; border: 3px solid var(--ink); border-radius: 14px; padding: 10px 12px; font-weight: 700; font-size: 14px; background: #fde68a; box-shadow: 3px 3px 0 var(--ink); }
   .banner.red { background: #fecaca; }
   main { padding: 12px 20px 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; max-width: 560px; margin: 0 auto; }
@@ -32,7 +35,14 @@
   .card h2 { font-size: 18px; font-weight: 800; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
   .card h2 small { font-size: 12px; font-weight: 500; color: var(--muted); }
   .now { background: #ffd58a; text-align: center; }
-  .now .k { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--deep); }
+  .now .k { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); background: #fff; border: 3px solid var(--ink); border-radius: 999px; padding: 1px 11px; }
+  .now .k .dot { width: 9px; height: 9px; border-radius: 50%; background: #e24b4a; animation: pulse 1.4s ease-in-out infinite; }
+  .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
+  .facts span { font-size: 13px; font-weight: 800; background: var(--cream); border: 2px solid var(--ink); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .facts span small { font-weight: 600; color: var(--muted); margin-right: 4px; }
+  .nextc { padding: 10px 14px; text-align: center; }
+  .nextc .lbl { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .nextc .nm2 { font-size: 20px; font-weight: 800; line-height: 1.15; }
   .now .nm { font-size: 30px; font-weight: 800; line-height: 1.1; margin-top: 2px; }
   .now .clk { font-size: 76px; font-weight: 800; line-height: 1.05; letter-spacing: -.02em; margin: 4px 0; }
   .now .sub { font-size: 13px; color: var(--muted); font-weight: 500; }
@@ -81,8 +91,7 @@
 </style>
 </head>
 <body>
-<header><h1>Chronometer</h1><span class="chip" id="chip"><i></i><span id="chipTxt">Verbinden…</span></span></header>
-<div id="env"></div>
+<header><div class="ttl"><span class="logo"><img src="humasol_logo.png" alt="Humasol"></span><div style="min-width:0;line-height:1.1"><h1>Chronometer</h1><span id="env"></span></div></div><span class="chip wait" id="chip"><i></i><span id="chipTxt">Verbinden…</span></span></header>
 <div id="banner"></div>
 <main id="view"></main>
 <nav id="nav"></nav>
@@ -448,9 +457,9 @@ function connState() {
 }
 function renderChrome() {
   const st = connState(), chip = $('chip');
-  chip.className = 'chip ' + (st === 'off' ? 'off' : st === 'sync' ? 'sync' : '');
+  chip.className = 'chip ' + (!loaded.queue ? 'wait' : st === 'off' ? 'off' : st === 'sync' ? 'sync' : '');
   $('chipTxt').textContent = !loaded.queue ? 'Verbinden…' : st === 'off' ? (pending ? `Offline · ${pending} wacht` : 'Offline') : st === 'sync' ? `Verzenden (${pending})` : 'Verbonden';
-  $('env').innerHTML = NS ? `<div class="env">OEFENMODUS · ${esc(NS)} — de echte data blijft ongemoeid</div>` : '';
+  $('env').innerHTML = NS ? `<span class="envpill" title="Oefenmodus: de echte data blijft ongemoeid">OEFEN · ${esc(NS)}</span>` : '';
   let ban = '';
   if (st === 'off') ban = `<div class="banner red">Geen verbinding. Je kan gewoon doorgaan: alles wordt bewaard op dit toestel en automatisch verstuurd zodra het internet terug is. Sluit of herlaad deze pagina niet.</div>`;
   else if (batt && batt.level <= 0.2 && !batt.charging) ban = `<div class="banner red">Batterij bijna leeg (${Math.round(batt.level * 100)}%). Sluit de lader aan.</div>`;
@@ -460,26 +469,38 @@ function renderChrome() {
   $('banner').innerHTML = ban;
   $('nav').innerHTML = [['chrono', 'Chrono'], ['queue', 'Rij'], ['laps', 'Rondes'], ['more', 'Meer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
 }
+// korte info over een loper (voor wie nu loopt of als volgende komt)
+function runnerFacts(rid) {
+  const mine = laps.filter((l) => l.runnerId === rid).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  if (!mine.length) return '<div class="facts"><span>Eerste rondje</span></div>';
+  const best = Math.min(...mine.map((l) => l.time)), last = mine[mine.length - 1].time;
+  return `<div class="facts"><span><small>Schatting</small>± ${mmss(expected(rid))}</span><span><small>Laatste</small>${mmss(last)}</span><span><small>Snelste</small>${mmss(best)}</span></div>`;
+}
+let moreOpen = false;   // 'Andere acties' open of dicht
 function viewChrono() {
+  if (!loaded.queue || !loaded.active) return `<div class="card now" style="background:#fff"><div class="nm" style="color:var(--muted)">Laden…</div><div class="sub">Even geduld, de wachtrij wordt opgehaald</div></div><button class="big wait" disabled>EVEN GEDULD</button>`;
   const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
   let top = '', button = '';
   if (running) {
     const run = a.runner, ex = expected(run.runnerId);
-    top = `<div class="card now"><div class="k">Nu aan het lopen</div><div class="nm">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div><div class="sub">${laps.some((l) => l.runnerId === run.runnerId) ? `Verwacht ≈ ${mmss(ex)}` : 'Eerste ronde'}</div></div>`;
+    top = `<div class="card now"><div class="k"><span class="dot"></span>Nu aan het lopen</div><div class="nm" style="margin-top:6px">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div>${runnerFacts(run.runnerId)}</div>`;
     const hint = holdMode ? '<span class="hint">houd ingedrukt</span>' : '';
     button = w.length ? `<button class="big hold" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small>${hint}</button>` : `<button class="big hold stop" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small>${hint}</button>`;
   } else {
-    top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm">${w.length ? esc(w[0].runnerName) : '—'}</div><div class="sub">${w.length ? 'is de eerste in de rij' : 'Wachtrij is leeg'}</div></div>`;
+    top = `<div class="card now" style="background:#fff"><div class="k" style="color:var(--muted)">Klaar om te starten</div><div class="nm" style="margin-top:6px">${w.length ? esc(w[0].runnerName) : '—'}</div>${w.length ? runnerFacts(w[0].runnerId) : '<div class="sub">Wachtrij is leeg</div>'}</div>`;
     button = `<button class="big hold ${w.length ? '' : 'wait'}" data-hold="main" ${(!w.length || busy) ? 'disabled' : ''}>START<small>${w.length ? esc(w[0].runnerName) : 'wacht op een loper'}</small>${holdMode && w.length ? '<span class="hint">houd ingedrukt</span>' : ''}</button>`;
   }
   const recentLaps = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
   const recentAdj = lastAction && Date.now() - lastAction.at < 90000;
   const undoCard = lastAction ? `<div class="undo" style="flex-wrap:wrap"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button>
     ${recentAdj ? `<div class="corr" style="width:100%"><b>Te laat gedrukt?</b><button class="btn small" data-adj="5000">−5 s</button><button class="btn small" data-adj="10000">−10 s</button><button class="btn small" data-adj="20000">−20 s</button></div>` : ''}</div>` : '';
-  const next = w.slice(running ? 0 : 1, (running ? 0 : 1) + 5).map((q, i) => { const idx = i + (running ? 0 : 1); return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
-  return `${top}${button}${undoCard}
-    ${running ? `<div class="row2"><button class="btn" data-act="manual">Tijd intikken</button><button class="btn" data-act="stop">Stoppen na deze</button></div><div class="row2"><button class="btn" data-act="swap">Andere loper loopt</button><button class="btn" data-act="skip" ${w.length ? '' : 'disabled'}>Volgende niet aanwezig</button></div><button class="btn danger" data-act="cancel">Loop annuleren (niet opslaan)</button>` : (w.length ? '<button class="btn" data-act="skip">Niet aanwezig: naar het einde van de rij</button>' : '')}
-    <div class="card"><h2>${running ? 'Hierna' : 'Daarna'} <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>
+  const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
+  const nextCard = running && w.length ? `<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${runnerFacts(w[0].runnerId)}</div>` : '';
+  const actions = running ? `<button class="btn" data-act="moreacts" style="width:100%">${moreOpen ? 'Andere acties ▴' : 'Andere acties ▾'}</button>
+    ${moreOpen ? `<div class="row2"><button class="btn" data-act="manual">Tijd intikken</button><button class="btn" data-act="stop">Stoppen na deze</button></div><div class="row2"><button class="btn" data-act="swap">Andere loper loopt</button><button class="btn" data-act="skip" ${w.length ? '' : 'disabled'}>Volgende niet aanwezig</button></div><button class="btn danger" data-act="cancel">Loop annuleren (niet opslaan)</button>` : ''}`
+    : (w.length ? '<button class="btn" data-act="skip">Niet aanwezig: naar het einde van de rij</button>' : '');
+  return `${top}${button}${undoCard}${nextCard}${actions}
+    <div class="card"><h2>Daarna <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>
     <div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>${recentLaps || '<div class="empty">Nog geen rondes</div>'}</div>`;
 }
 function viewQueue() {
@@ -550,6 +571,8 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
   if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
   const a = t.dataset.act, id = t.dataset.id;
+  if (a === 'moreacts') { moreOpen = !moreOpen; render(); return; }
+  if (['manual', 'stop', 'swap', 'skip', 'cancel'].includes(a)) moreOpen = false;
   ({ main: pressMain, undo, manual: manualTime, stop: stopAfterThis, cancel: cancelRun, awake: () => { keepAwake().then(render); }, csvLaps: () => exportCsv('laps'), csvRunners: () => exportCsv('runners'), reset: resetAll, hapTest: () => { const m = buzz('lap'); toast('Test: ' + (m === 'vibrate' ? 'trillen' : m === 'switch' ? 'schakelaar-haptiek' : 'niet beschikbaar') + ' (voel je iets?)', 4000); }, swap: swapActive, skip: skipNext, holdmode: () => { holdMode = !holdMode; try { localStorage.setItem('holdMode', holdMode ? 'on' : 'off'); } catch (e) {} buzz('tick'); render(); }, logout: () => { firebase.auth().signOut().then(() => location.reload()); },
      up: () => moveQueued(id, -1), down: () => moveQueued(id, 1), rm: () => removeQueued(id), del: () => deleteLap(id), edit: () => editLap(id) })[a]?.();
 });
