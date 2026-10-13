@@ -647,15 +647,12 @@
         // Het oranje stuk is waar de loper waarschijnlijk zit (bereik), het lichte stuk is al gelopen.
         const TRACK = { L: 150, r: 42, cxL: 55, cxR: 205, cy: 70 };
         const TRACK_PATH = 'M 25.3 99.7 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 25.3 99.7';
-        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '-92 0 352 140', width: '100%', style: { display: 'block', overflow: 'visible' } },
+        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '-2 -2 264 144', width: '100%', style: { display: 'block', overflow: 'visible' } },
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#17120d', strokeWidth: 26, strokeLinejoin: 'round' }),
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#ffffff', strokeWidth: 17 }),
             h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 17, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.55 }),
             h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#e8590c', strokeWidth: 17, strokeLinecap: 'butt', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
             h('line', { x1: 34.5, y1: 90.5, x2: 16.1, y2: 108.9, stroke: '#17120d', strokeWidth: 5 }),
-            // klein Humasol-icoon naast de start: daar staat de stand
-            h('rect', { x: -50, y: 94, width: 42, height: 40, rx: 10, fill: '#ffffff', stroke: '#17120d', strokeWidth: 3 }),
-            h('svg', { x: -46, y: 99, width: 34, height: 30, viewBox: '25 75 465 400' }, h('image', { href: 'humasol_icon.png', width: 512, height: 512 })),
             label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
@@ -866,7 +863,7 @@ function lapTileStyle(n) {
                                     h('div', { className: 'font-extrabold leading-tight', style: { color: ts.fg, fontSize: 'clamp(24px, 2vw, 48px)' } }, v)); })
                         )
                     ),
-                    h('div', { style: { width: 'clamp(320px, 24vw, 640px)', flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
+                    h('div', { style: { width: 'clamp(300px, 20vw, 540px)', flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
                 )
             );
         };
