@@ -706,7 +706,7 @@ function viewChrono() {
   }
   const recentLaps = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
   const recentAdj = lastAction && Date.now() - lastAction.at < 90000;
-  const undoCard = lastAction ? `<div class="undo" style="flex-wrap:wrap"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button>
+  const undoCard = lastAction && Date.now() - (lastAction.at || 0) < 30000 ? `<div class="undo" style="flex-wrap:wrap"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button>
     ${recentAdj ? `<div class="corr" style="width:100%"><b>Tijd</b>${adjBtns([5, 1], false, 'small')}${adjBtns([-1, -5], false, 'small')}</div><div style="width:100%;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--muted);padding:0 4px"><span>← te laat gedrukt</span><span>te vroeg gedrukt →</span></div>` : ''}</div>` : '';
   const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   // wanneer de volgende loper start (zoals op het grote scherm): de tijdnemer staat het dichtst bij die loper en kan hem verwittigen
