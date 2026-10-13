@@ -705,6 +705,14 @@
             if (bestId) out[bestId] = 'Recordhouder';
             _crownKey = key; _crownVal = out; return out;
         };
+        // Rondes per loper, één keer opgebouwd per nieuwe lijst rondes (i.p.v. voor elke loper opnieuw alle rondes te doorzoeken)
+        const _lapIdx = new WeakMap();
+        const lapIndex = (laps) => {
+            let m = _lapIdx.get(laps);
+            if (!m) { m = {}; laps.forEach(l => { (m[l.runnerId] || (m[l.runnerId] = [])).push(l); }); _lapIdx.set(laps, m); }
+            return m;
+        };
+        const lapsOfRunner = (laps, id) => lapIndex(laps)[id] || [];
         const crownMark = (label, size = 18) => label ? h('svg', { viewBox: '0 0 24 24', width: size, height: size, style: { flexShrink: 0 }, role: 'img', 'aria-label': label }, h('title', null, label), h('path', { d: LB_CROWN, fill: '#ffd23f', stroke: '#17120d', strokeWidth: 1.8, strokeLinejoin: 'round' })) : null;
         const lbRowStyle = (idx) => idx === 0 ? { background: '#ffd23f', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d' }
             : idx === 1 ? { background: '#f2a342', border: '3px solid #17120d' }
@@ -794,7 +802,9 @@
                 const iv = setInterval(() => draw(performance.now()), 100);   // vangnet als het venster op de achtergrond staat
                 return () => { cancelAnimationFrame(raf); clearInterval(iv); };
             }, []);
-            return h(TrackGraphic, { lo: lo0, hi: hi0, loRef, hiRef });
+            // enkel de beginwaarden aan React geven: anders zet elke render de piste even terug op een oude stand
+            const init = React.useRef({ lo: lo0, hi: hi0 });
+            return h(TrackGraphic, { lo: init.current.lo, hi: init.current.hi, loRef, hiRef });
         };
 
         // ===== Display links: "Nu aan het lopen" met piste =====
@@ -829,8 +839,9 @@ function lapTileStyle(n) {
             const best = n ? Math.min(...mine.map(l => l.time)) : null;
             const fastMs = best ? Math.max(expected * (1 - rel), best * 0.99) : expected * 0.82;   // nog nooit gelopen: brede marge
             const slowMs = best ? Math.max(expected * (1 + rel), fastMs * 1.08) : expected * 1.12;
-            const hi = Math.min(1, elapsedTime / fastMs);
-            const lo = Math.max(0, Math.min(hi - 0.05, elapsedTime / slowMs));
+            const el = startTime ? Math.max(0, tnow() - startTime) : elapsedTime;   // elapsedTime loopt op het scherm maar elke 30 s bij (en is bij een wissel nog die van de vorige loper)
+            const hi = Math.min(1, el / fastMs);
+            const lo = Math.max(0, Math.min(hi - 0.05, el / slowMs));
             const metersMid = Math.round(((lo + hi) / 2) * 515 / 10) * 10;
             const swapKey = `${activeRunner.runnerId}_${+startTime}`;
             // Hoe meer rondes, hoe feestelijker de kaart: ster per 3 rondes, vanaf ronde 5 warmere kleur, vanaf 8 een gloed, vanaf 12 draaiende stralen. Een kroon voor wie het snelste ronde-record of de meeste rondes heeft.
@@ -2156,13 +2167,17 @@ function predictNext(times, gender, restMs) {
                 const VIEWER = IS_DISPLAY_ONLY || URL_MODE === 'public';
                 // Rondes/lopers/wachtrij worden vastgehouden tot de nieuwe actieve loper (de timer) binnen is, en dan samen getoond.
                 // Komt die niet (bv. laatste loper, handmatige correctie), dan na 1,2 s toch.
-                const pend = []; let flushT = null;
-                const flushNow = () => { clearTimeout(flushT); flushT = null; pend.splice(0).forEach(f => f()); };
+                // ReactDOM.render bundelt geen state-wijzigingen buiten klikken: zonder batchedUpdates wordt elke set... apart getekend
+                // (eerst de nieuwe naam met de oude starttijd, dan de nieuwe starttijd...) en hapert de wissel.
+                const batched = ReactDOM.unstable_batchedUpdates || ((f) => f());
+                const pend = []; let flushT = null, activeAt = -1e9;
+                const flushNow = () => { clearTimeout(flushT); flushT = null; const fs = pend.splice(0); batched(() => fs.forEach(f => f())); };
                 const later = (fn, flushAll) => {
-                    if (!VIEWER) { fn(); return; }
+                    if (!VIEWER) { batched(fn); return; }
                     pend.push(fn);
-                    if (flushAll) { flushNow(); return; }
-                    if (!flushT) flushT = setTimeout(flushNow, 1200);
+                    // Firestore meldt elke lijst in een eigen taak: wacht heel even zodat wat bij dezelfde wissel hoort mee in dezelfde update zit
+                    if (flushAll) { activeAt = performance.now(); clearTimeout(flushT); flushT = setTimeout(flushNow, 80); return; }
+                    if (!flushT) flushT = setTimeout(flushNow, performance.now() - activeAt < 2000 ? 80 : 1200);
                 };
                 let lastActiveKey = '__init__';
                 const unsubRunners = firestoreWrapper.collection('runners').onSnapshot(snapshot => {
@@ -2211,12 +2226,12 @@ function predictNext(times, gender, restMs) {
                         later(() => { setActiveRunner(data.runner); setIsRunning(data.isRunning); setStartTime(startTimeMs); }, changed);
                     } else {
                         // even wachten: bij een wissel van loper is het document heel kort weg
-                        emptyTimer = setTimeout(() => {
+                        emptyTimer = setTimeout(() => batched(() => {
                             setActiveRunner(null);
                             setIsRunning(false);
                             setStartTime(null);
                             setElapsedTime(0);
-                        }, 2500);
+                        }), 2500);
                     }
                 });
 
@@ -3365,20 +3380,18 @@ function predictNext(times, gender, restMs) {
             
             const lapsByRunner = runners.map(runner => ({
                 ...runner,
-                laps: laps.filter(l => l.runnerId === runner.id).length
+                laps: lapsOfRunner(laps, runner.id).length
             })).sort((a, b) => b.laps - a.laps);
 
             const avgTimeByRunner = runners.map(runner => {
-                const runnerLaps = laps.filter(l => l.runnerId === runner.id);
+                const runnerLaps = lapsOfRunner(laps, runner.id);
                 const avg = runnerLaps.length ? runnerLaps.reduce((sum, l) => sum + l.time, 0) / runnerLaps.length : 0;
                 return { ...runner, avgTime: avg, lapCount: runnerLaps.length };
             }).filter(r => r.lapCount > 0).sort((a, b) => a.avgTime - b.avgTime);
 
             // Gender-specific rankings
-            const getRunnerGender = (runnerId) => {
-                const runner = runners.find(r => r.id === runnerId);
-                return runner?.gender || 'X';
-            };
+            const genderOf = {}; runners.forEach(r => { genderOf[r.id] = r.gender; });
+            const getRunnerGender = (runnerId) => genderOf[runnerId] || 'X';
 
             const fastestLapsMen = [...laps]
                 .filter(lap => getRunnerGender(lap.runnerId) === 'M')
@@ -3394,7 +3407,7 @@ function predictNext(times, gender, restMs) {
                 .filter(r => r.gender === 'M')
                 .map(runner => ({
                     ...runner,
-                    laps: laps.filter(l => l.runnerId === runner.id).length
+                    laps: lapsOfRunner(laps, runner.id).length
                 }))
                 .sort((a, b) => b.laps - a.laps);
 
@@ -3402,7 +3415,7 @@ function predictNext(times, gender, restMs) {
                 .filter(r => r.gender === 'V')
                 .map(runner => ({
                     ...runner,
-                    laps: laps.filter(l => l.runnerId === runner.id).length
+                    laps: lapsOfRunner(laps, runner.id).length
                 }))
                 .sort((a, b) => b.laps - a.laps);
 
@@ -4877,9 +4890,9 @@ function predictNext(times, gender, restMs) {
                                         h(FlipBox, { className: 'space-y-1.5', flash: true },
                                             lapsByRunner.slice(0, DISPLAY_TOP_N).map((runner, idx) => {
                                                 // Get the last lap time for this runner
-                                                const runnerLaps = laps.filter(l => l.runnerId === runner.id);
+                                                const runnerLaps = lapsOfRunner(laps, runner.id);
                                                 const lastLap = runnerLaps.length > 0 
-                                                    ? runnerLaps.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]
+                                                    ? [...runnerLaps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]
                                                     : null;
                                                 
                                                 return lbRow({ idx, rank: tieRank(lapsByRunner, idx, x => x.laps), id: runner.id, val: runner.laps, name: runner.name, sub: lastLap ? `Laatste om ${clockOf(lastLap.timestamp)}` : '', recent: lastLap && isRecent(lastLap.timestamp), value: runner.laps, badge: rankBadge('mostLapsOverall', runner.id) });
