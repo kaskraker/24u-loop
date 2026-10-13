@@ -1,0 +1,16 @@
+{
+  "id": "chrono",
+  "name": "24u Loop · Chronometer",
+  "short_name": "Chrono",
+  "description": "Chronometer en beheer voor de 24u Loop Leuven",
+  "start_url": "./chrono.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff1cf",
+  "theme_color": "#f2a342",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
