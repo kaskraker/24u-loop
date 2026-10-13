@@ -2064,6 +2064,9 @@ function predictNext(times, gender, restMs) {
             const [nameInput, setNameInput] = useState('');
             const [genderInput, setGenderInput] = useState('');
             const [showSuggestions, setShowSuggestions] = useState(false);
+            const [sugIdx, setSugIdx] = useState(0);                 // welke suggestie oplicht (pijltjes ↑↓, Enter kiest)
+            const searchRef = useRef(null), lastNameRef = useRef(null), genderRef = useRef(null);
+            const focusSearch = () => setTimeout(() => { if (searchRef.current) searchRef.current.focus(); }, 0);
             const [showAllLaps, setShowAllLaps] = useState(false);
             const [lapSearchQuery, setLapSearchQuery] = useState('');
             const [showAllRunners, setShowAllRunners] = useState(false);
@@ -2450,12 +2453,12 @@ function predictNext(times, gender, restMs) {
             // Resultaat van een toevoeg-actie tonen als melding onder het formulier (zonder popup)
             const handleAddResult = (res) => {
                 if (res.ok) {
-                    setFirstName(''); setLastName(''); setGenderInput(''); setNameInput(''); setShowSuggestions(false);
+                    setFirstName(''); setLastName(''); setGenderInput(''); setNameInput(''); setShowSuggestions(false); focusSearch();
                     setQueueNotice({ type: 'ok', text: `${res.name} staat in de wachtrij`, detail: `Plek ${res.position} · ${res.waitMs <= 5000 ? 'zo meteen aan de beurt' : res.waitMs < 90000 ? `wachttijd ± ${Math.max(10, Math.round(res.waitMs / 10000) * 10)} s` : `wachttijd ± ${Math.max(1, Math.round(res.waitMs / 60000))} min`}` });
                 } else if (res.reason === 'similar') {
                     setQueueNotice({ type: 'ask', matches: res.matches });
                 } else if (res.reason === 'queued') {
-                    setFirstName(''); setLastName(''); setGenderInput(''); setNameInput(''); setShowSuggestions(false);
+                    setFirstName(''); setLastName(''); setGenderInput(''); setNameInput(''); setShowSuggestions(false); focusSearch();
                     setQueueNotice({ type: 'dup', runner: res.runner, text: `${res.name} staat al in de wachtrij (plek ${res.position}).` });
                 } else if (res.reason === 'running') {
                     setNameInput(''); setShowSuggestions(false);
@@ -2473,37 +2476,37 @@ function predictNext(times, gender, restMs) {
 
             const renderQueueNotice = () => {
                 if (!queueNotice) return null;
+                const box = (bg) => ({ className: 'keep-light mb-4 rounded-xl p-3 text-sm', style: { background: bg, color: '#17120d', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d' } });
+                const btn = (bg) => ({ className: 'px-3 py-1.5 rounded-lg font-extrabold', style: { background: bg, color: '#17120d', border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d' } });
                 if (queueNotice.type === 'ask') {
-                    return h('div', { className: 'mb-4 rounded-lg border-2 border-yellow-400 bg-yellow-50 p-3 text-sm' },
-                        h('div', { className: 'font-semibold text-yellow-800 mb-2' }, 'Bestaat deze loper al? Bedoel je:'),
+                    return h('div', box('#ffe9a8'),
+                        h('div', { className: 'font-extrabold mb-2' }, 'Bestaat deze loper al? Bedoel je:'),
                         queueNotice.matches.map(m => h('button', {
                             key: m.runner.id,
                             onClick: async () => handleAddResult(await enqueueRunner(m.runner)),
-                            className: 'block w-full text-left px-3 py-2 mb-1 rounded bg-white border border-yellow-400 hover:bg-yellow-100 text-gray-800'
+                            className: 'block w-full text-left px-3 py-2 mb-1.5 rounded-lg font-bold', style: { background: '#fff', border: '2px solid #17120d' }
                         }, `${m.runner.name} (${m.runner.totalLaps || 0} ${(m.runner.totalLaps || 0) === 1 ? 'ronde' : 'rondes'})`)),
-                        h('div', { className: 'flex gap-3 mt-1' },
-                            h('button', { onClick: () => addRunner(true), className: 'text-yellow-800 underline' }, 'Nee, andere persoon: nieuwe loper aanmaken'),
-                            h('button', { onClick: () => setQueueNotice(null), className: 'text-gray-500 underline' }, 'Annuleren')
+                        h('div', { className: 'flex flex-wrap gap-2 mt-2' },
+                            h('button', { onClick: () => addRunner(true), ...btn('#f2a342') }, 'Nee, nieuwe loper aanmaken'),
+                            h('button', { onClick: () => setQueueNotice(null), ...btn('#fff') }, 'Annuleren')
                         )
                     );
                 }
                 if (queueNotice.type === 'dup') {
-                    return h('div', { className: 'mb-4 rounded-lg border-2 border-blue-400 bg-blue-50 p-3 text-sm text-blue-900' },
-                        h('div', { className: 'font-semibold' }, queueNotice.text),
-                        queueNotice.runner && h('div', { className: 'mt-1' }, 'Wil je deze loper toch nog eens achteraan toevoegen?'),
+                    return h('div', box('#dbeafe'),
+                        h('div', { className: 'font-extrabold' }, queueNotice.text),
+                        queueNotice.runner && h('div', { className: 'mt-1 font-medium' }, 'Toch nog eens achteraan toevoegen?'),
                         h('div', { className: 'flex gap-2 mt-2' },
-                            queueNotice.runner && h('button', { onClick: async () => handleAddResult(await enqueueRunner(queueNotice.runner, true)), className: 'px-3 py-1.5 rounded-lg font-bold bg-humasol-orange text-white' }, 'Ja, nog een keer'),
-                            h('button', { onClick: () => setQueueNotice(null), className: 'px-3 py-1.5 rounded-lg font-bold bg-white border-2 border-blue-400 text-blue-900' }, queueNotice.runner ? 'Nee, laat maar' : 'Oké')
+                            queueNotice.runner && h('button', { onClick: async () => handleAddResult(await enqueueRunner(queueNotice.runner, true)), ...btn('#f2a342') }, 'Ja, nog een keer'),
+                            h('button', { onClick: () => setQueueNotice(null), ...btn('#fff') }, queueNotice.runner ? 'Nee, laat maar' : 'Oké')
                         )
                     );
                 }
-                const cls = queueNotice.type === 'ok' ? 'bg-green-50 border-green-500 text-green-800'
-                    : queueNotice.type === 'info' ? 'bg-blue-50 border-blue-400 text-blue-800'
-                    : 'bg-red-50 border-red-400 text-red-700';
+                const bg = queueNotice.type === 'ok' ? '#d9f7d0' : queueNotice.type === 'info' ? '#dbeafe' : '#ffd0c2';
                 if (queueNotice.type === 'ok' && queueNotice.detail) return h('div', { className: 'mb-4 rounded-lg px-4 py-3', style: { border: '3px solid #17120d', background: '#d9f7d0', boxShadow: '4px 4px 0 #17120d' } },
                     h('div', { className: 'text-sm font-bold text-gray-800' }, queueNotice.text),
                     h('div', { className: 'text-2xl font-extrabold text-gray-900' }, queueNotice.detail));
-                return h('div', { className: `mb-4 rounded-lg border-2 px-3 py-2 text-sm font-medium ${cls}` }, queueNotice.text);
+                return h('div', { className: 'keep-light mb-4 rounded-xl px-3 py-2 text-sm font-bold', style: { background: bg, color: '#17120d', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d' } }, queueNotice.text);
             };
 
             // Actieve loper: één document met vaste id ("current"); geen leesactie, werkt dus ook offline
@@ -3455,13 +3458,14 @@ function predictNext(times, gender, restMs) {
             const getNameSuggestions = () => {
                 if (!nameInput.trim()) return [];
                 
-                const input = nameInput.toLowerCase();
+                // zonder accenten en in eender welke volgorde: "zoe" vindt "Zoë", "dumoulin kasper" vindt "Kasper Dumoulin"
+                const input = nameKey(nameInput), words = input.split(' ').filter(Boolean);
                 return runners
-                    .filter(r => r.name.toLowerCase().includes(input))
+                    .filter(r => { const k = nameKey(r.name); return words.every(w => k.includes(w)); })
                     .sort((a, b) => {
-                        // Prioritize names that start with the input
-                        const aStarts = a.name.toLowerCase().startsWith(input);
-                        const bStarts = b.name.toLowerCase().startsWith(input);
+                        // namen die met de invoer beginnen eerst
+                        const aStarts = nameKey(a.name).startsWith(input);
+                        const bStarts = nameKey(b.name).startsWith(input);
                         if (aStarts && !bStarts) return -1;
                         if (!aStarts && bStarts) return 1;
                         return a.name.localeCompare(b.name);
@@ -3478,9 +3482,32 @@ function predictNext(times, gender, restMs) {
             const handleNameInputChange = (value) => {
                 setNameInput(value);
                 setShowSuggestions(value.trim().length > 0);
+                setSugIdx(0);
+            };
+            // "Nieuwe loper: Kasper Dumoulin": eerste woord wordt de voornaam, de rest de achternaam; daarna enkel nog het gender
+            const prefillNewRunner = () => {
+                const parts = tidyName(nameInput).split(' ').filter(Boolean);
+                if (!parts.length) return;
+                setFirstName(parts[0]); setLastName(parts.slice(1).join(' '));
+                setNameInput(''); setShowSuggestions(false); setQueueNotice(null);
+                setTimeout(() => { const el = parts.length > 1 ? genderRef.current : lastNameRef.current; if (el) el.focus(); }, 0);
+            };
+            const onSearchKey = (e) => {
+                const n = nameSuggestions.length + (offerNew ? 1 : 0);
+                if (e.key === 'ArrowDown') { e.preventDefault(); setShowSuggestions(true); setSugIdx(i => n ? (i + 1) % n : 0); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setSugIdx(i => n ? (i - 1 + n) % n : 0); }
+                else if (e.key === 'Escape') setShowSuggestions(false);
+                else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (sugIdx < nameSuggestions.length) selectSuggestion(nameSuggestions[sugIdx]);
+                    else if (offerNew) prefillNewRunner();
+                }
             };
 
             const nameSuggestions = getNameSuggestions();
+            // Nieuwe loper voorstellen zodra er een voor- en achternaam getypt is en die naam nog niet exact bestaat
+            const wordsKey = (x) => nameKey(x).split(' ').sort().join(' ');   // "Winters Julie" = "Julie Winters"
+            const offerNew = nameInput.trim().split(/\s+/).length >= 2 && !runners.some(r => wordsKey(r.name) === wordsKey(nameInput));
 
             const selectQuickRunner = async (runner) => {
                 handleAddResult(await enqueueRunner({ id: runner.runnerId, name: runner.runnerName }));
@@ -3934,11 +3961,13 @@ function predictNext(times, gender, restMs) {
                                     onChange: e => handleNameInputChange(e.target.value),
                                     onBlur: () => setTimeout(() => setShowSuggestions(false), 200),
                                     onFocus: () => nameInput.trim() && setShowSuggestions(true),
-                                    className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none'
+                                    onKeyDown: onSearchKey,
+                                    ref: searchRef, autoFocus: IS_SIGNUP,
+                                    className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none'
                                 }),
                                 // Autocomplete suggestions dropdown
-                                showSuggestions && nameSuggestions.length > 0 && h('div', { 
-                                    className: 'absolute z-10 w-full mt-1 bg-white border-2 border-humasol-orange rounded-lg shadow-lg max-h-60 overflow-auto'
+                                showSuggestions && (nameSuggestions.length > 0 || offerNew) && h('div', { 
+                                    className: 'keep-light absolute z-10 w-full mt-1 rounded-xl max-h-72 overflow-auto', style: { background: '#fff', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d' }
                                 },
                                     nameSuggestions.map((runner, idx) =>
                                         h('button', {
@@ -3955,17 +3984,23 @@ function predictNext(times, gender, restMs) {
                                                 e.preventDefault();
                                                 selectSuggestion(runner);
                                             },
-                                            className: 'w-full px-4 py-3 text-left hover:bg-orange-50 border-b border-gray-200 last:border-b-0 transition-colors cursor-pointer'
+                                            onMouseEnter: () => setSugIdx(idx),
+                                            className: 'w-full px-4 py-3 text-left cursor-pointer', style: { background: idx === sugIdx ? '#ffd58a' : '#fff', borderBottom: '2px solid #f1e3c4', color: '#17120d' }
                                         },
                                             h('div', { className: 'flex items-center justify-between' },
-                                                h('span', { className: 'font-semibold text-humasol-brown' }, runner.name),
+                                                h('span', { className: 'font-bold' }, runner.name),
                                                 h('span', { className: 'text-xs text-gray-500' }, (() => {
                                                     const runnerLaps = laps.filter(l => l.runnerId === runner.id);
                                                     return `${runnerLaps.length} ${runnerLaps.length === 1 ? 'ronde' : 'rondes'}`;
                                                 })())
                                             )
                                         )
-                                    )
+                                    ),
+                                    offerNew && h('button', {
+                                        onMouseDown: (e) => { e.preventDefault(); prefillNewRunner(); },
+                                        onMouseEnter: () => setSugIdx(nameSuggestions.length),
+                                        className: 'w-full px-4 py-3 text-left font-extrabold flex items-center gap-2', style: { background: sugIdx === nameSuggestions.length ? '#ffd58a' : '#fff6df', color: '#17120d' }
+                                    }, h(Icon, { name: 'plus', className: 'w-4 h-4' }), `Nieuwe loper: ${tidyName(nameInput)}`)
                                 )
                             ),
 
@@ -3980,15 +4015,18 @@ function predictNext(times, gender, restMs) {
                             ),
 
                             // Add new runner form
-                            h('div', { className: 'grid grid-cols-3 gap-3 mb-4' },
-                                h('input', { type: 'text', placeholder: 'Voornaam', value: firstName, onChange: e => setFirstName(e.target.value), className: 'px-4 py-3 border rounded-lg' }),
-                                h('input', { type: 'text', placeholder: 'Achternaam', value: lastName, onChange: e => setLastName(e.target.value), className: 'px-4 py-3 border rounded-lg' }),
-                                h('select', { value: genderInput, onChange: e => setGenderInput(e.target.value), className: 'px-4 py-3 border rounded-lg focus:border-indigo-500 focus:outline-none bg-white' },
-                                    h('option', { value: '' }, 'Gender...'),
-                                    h('option', { value: 'M' }, 'Man'),
-                                    h('option', { value: 'V' }, 'Vrouw'),
-                                    h('option', { value: 'X' }, 'X')
-                                )
+                            h('div', { className: 'grid grid-cols-2 gap-3 mb-3' },
+                                h('input', { type: 'text', placeholder: 'Voornaam', value: firstName, onChange: e => setFirstName(e.target.value), onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addRunner(); } }, className: 'min-w-0 px-4 py-3 border rounded-lg' }),
+                                h('input', { type: 'text', placeholder: 'Achternaam', value: lastName, ref: lastNameRef, onChange: e => setLastName(e.target.value), onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); addRunner(); } }, className: 'min-w-0 px-4 py-3 border rounded-lg' })
+                            ),
+                            // gender: één klik (of Tab + Enter); M, V of X typen kiest ook
+                            h('div', { className: 'grid grid-cols-3 gap-3 mb-4', role: 'radiogroup', 'aria-label': 'Gender', onKeyDown: e => { const k = e.key.toUpperCase(); if (k === 'M' || k === 'V' || k === 'X') { e.preventDefault(); setGenderInput(k); } else if (e.key === 'Enter' && genderInput) { e.preventDefault(); addRunner(); } } },
+                                [['M', 'Man'], ['V', 'Vrouw'], ['X', 'X']].map(([g, l], i) => h('button', {
+                                    key: g, type: 'button', role: 'radio', 'aria-checked': genderInput === g, ref: i === 0 ? genderRef : null,
+                                    onClick: () => setGenderInput(g),
+                                    className: 'keep-light py-2.5 rounded-lg font-extrabold',
+                                    style: { background: genderInput === g ? '#f2a342' : '#fff', color: '#17120d', border: '2px solid #17120d', boxShadow: genderInput === g ? 'inset 2px 2px 0 rgba(23,18,13,.25)' : '2px 2px 0 #17120d' }
+                                }, l))
                             ),
                             h('button', {
                                 onClick: addRunner,
