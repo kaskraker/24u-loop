@@ -87,6 +87,15 @@
   .modal h3 { font-size: 22px; font-weight: 800; margin-bottom: 6px; } .modal p { white-space: pre-line; font-weight: 500; }
   .toast { position: fixed; left: 14px; right: 14px; bottom: 86px; z-index: 90; background: var(--ink); color: #fff; border-radius: 14px; padding: 12px 14px; font-weight: 700; text-align: center; max-width: 520px; margin: 0 auto; animation: pop .25s ease-out; }
   @keyframes pop { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile { background: var(--cream); border: 2px solid var(--ink); border-radius: 12px; padding: 8px 10px; }
+  .tile .tk { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .tile .tv { font-size: 26px; font-weight: 800; line-height: 1.1; } .tile .tv small { display: block; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 10px; }
+  .seg button { font: inherit; font-weight: 800; font-size: 15px; border: 2px solid var(--ink); border-radius: 12px; background: #fff; color: var(--ink); padding: 10px 4px; box-shadow: 2px 2px 0 var(--ink); }
+  .seg button.on { background: var(--orange); box-shadow: inset 2px 2px 0 rgba(23,18,13,.25); }
+  .lbl2 { font-size: 13px; font-weight: 700; color: var(--muted); }
+  .sres .row { cursor: pointer; }
   .sec { margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 </style>
 </head>
@@ -172,6 +181,7 @@ try { lastAction = JSON.parse(localStorage.getItem('lastAction_' + NS) || 'null'
 
 // ===== helpers =====
 const ICO = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I_USER = ICO('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>');
 const I_TRASH = ICO('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/>'), I_EDIT = ICO('<path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 7l3 3"/>'), I_UP = ICO('<path d="M6 15l6-6 6 6"/>'), I_DOWN = ICO('<path d="M6 9l6 6 6-6"/>');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
@@ -392,7 +402,7 @@ async function resetAll() {
   if (!(await ask('Alles wissen?', `Dit verwijdert ALLE rondes, lopers en de wachtrij${NS ? ` van de oefenomgeving "${NS}"` : ' van het ECHTE event'}. Dit kan niet ongedaan gemaakt worden.`, { ok: 'Verder', danger: true }))) return;
   const w = await ask('Laatste controle', 'Typ WISSEN om te bevestigen:', { input: 'WISSEN', ok: 'Alles wissen', danger: true });
   if (w === null || w.trim().toUpperCase() !== 'WISSEN') { toast('Niet gewist', 2500); return; }
-  const names = ['laps', 'runners', 'queue', 'activeRunner'].concat(NS ? ['replay'] : []);
+  const names = ['laps', 'runners', 'queue', 'activeRunner', 'meta'].concat(NS ? ['replay'] : []);
   let n = 0;
   for (const name of names) {
     const snap = await db.collection(col(name)).get({ source: 'server' }).catch(() => null); if (!snap) continue;
@@ -450,6 +460,113 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 document.addEventListener('click', () => { if (!wl || wl.released) keepAwake(); }, { once: false });
 keepAwake();
 
+// ===== beheer: inschrijven, lopers en rondes (zelfde werking als het Beheer-tabblad op de laptop) =====
+const EUR_PER_LAP = 5, LAP_KM = 0.515;
+const KL = { M: 'Mannen', V: 'Vrouwen', X: 'Geen' };   // klassement (intern M / V / X)
+const nameKey = (str) => String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+const wordsKey = (x) => nameKey(x).split(' ').sort().join(' ');   // "Winters Julie" = "Julie Winters"
+const tidyName = (str) => String(str || '').trim().replace(/\s+/g, ' ').split(' ').map((w) => (w !== w.toLowerCase() && w !== w.toUpperCase()) ? w : w.toLowerCase().replace(/(^|[-'’])(\p{L})/gu, (m, a, b) => a + b.toUpperCase())).join(' ');
+function findRunners(q, n) {   // zonder accenten en in eender welke volgorde
+  const k = nameKey(q), words = k.split(' ').filter(Boolean); if (!words.length) return [];
+  return runners.filter((r) => { const rk = nameKey(r.name); return words.every((w) => rk.includes(w)); })
+    .sort((a, b) => (nameKey(b.name).startsWith(k) ? 1 : 0) - (nameKey(a.name).startsWith(k) ? 1 : 0) || a.name.localeCompare(b.name)).slice(0, n);
+}
+const lapsOf = (rid) => laps.filter((l) => l.runnerId === rid).length;
+const rondes = (n) => `${n} ${n === 1 ? 'ronde' : 'rondes'}`;
+const parseTime = (v) => { const m = /^\s*(\d+):(\d{1,2})(?:[.,](\d{1,2}))?\s*$/.exec(v || ''); return m ? (+m[1] * 60 + +m[2]) * 1000 + (m[3] ? Math.round(parseFloat('0.' + m[3]) * 1000) : 0) : null; };
+let sq = '', nr = null, lq = '', rq = '';
+const unfocus = () => { const el = document.activeElement; if (el && el.blur) el.blur(); };   // anders blijft het scherm 'aan het typen' en wordt het niet vernieuwd   // zoektekst rij, formulier nieuwe loper, zoektekst rondes, zoektekst lopers
+
+function enqueue(r) {
+  if (isRunning() && activeData().runner.runnerId === r.id) { toast(`${r.name} loopt nu`, 3000); return; }
+  const w = waiting(), i = w.findIndex((q) => q.runnerId === r.id);
+  if (i >= 0) { toast(`${r.name} staat al in de rij (plek ${i + 1})`, 3000); return; }
+  const b = db.batch();
+  b.set(ref('queue').doc(), { runnerId: r.id, runnerName: r.name, addedAt: new Date(tnow()).toISOString(), order: Math.max(0, ...queue.map((q) => q.order || 0)) + 1 });
+  commit(b); buzz('tick'); toast(`${r.name} staat in de rij (plek ${w.length + 1})`, 3500);
+  sq = ''; nr = null; unfocus(); render();
+}
+async function addNewRunner() {
+  const f = tidyName(nr && nr.first), l = tidyName(nr && nr.last), g = nr && nr.g;
+  if (!f || !l) { toast('Vul voornaam en achternaam in', 3000); return; }
+  if (!g) { toast('Kies een klassement', 3000); return; }
+  const name = `${f} ${l}`, same = runners.find((r) => wordsKey(r.name) === wordsKey(name));
+  if (same) {
+    if (await ask('Bestaat al', `${same.name} (${rondes(lapsOf(same.id))}) bestaat al.\nDie in de rij zetten?`, { ok: 'Ja, in de rij', cancel: 'Nee, nieuwe loper' })) { enqueue(same); return; }
+  }
+  const b = db.batch(), rr = ref('runners').doc();
+  b.set(rr, { name, firstName: f, lastName: l, gender: g, totalLaps: 0, totalTime: 0, addedAt: new Date(tnow()).toISOString() });
+  b.set(ref('queue').doc(), { runnerId: rr.id, runnerName: name, addedAt: new Date(tnow()).toISOString(), order: Math.max(0, ...queue.map((q) => q.order || 0)) + 1 });
+  commit(b); buzz('tick'); toast(`${name} staat in de rij (plek ${waiting().length + 1})`, 3500);
+  sq = ''; nr = null; unfocus(); render();
+}
+// een loper kiezen in een venster (voor 'ronde toevoegen' en 'andere loper')
+function pickRunner(title, text) {
+  return new Promise((resolve) => {
+    const draw = (q) => findRunners(q, 8).map((r) => `<button class="btn pick" data-pick="${esc(r.id)}">${esc(r.name)} <small style="font-weight:600;color:var(--muted)">· ${rondes(lapsOf(r.id))}</small></button>`).join('') || (q.trim() ? '<div class="empty">Niemand gevonden</div>' : '');
+    $('overlay').innerHTML = `<div class="modal"><div class="box"><h3>${esc(title)}</h3><p>${esc(text)}</p><input class="in" id="pkIn" placeholder="Zoek een naam…" autocomplete="off"><div id="pkRes" style="max-height:46vh;overflow:auto"></div><button class="btn" id="pkNo" style="width:100%;margin-top:6px">Annuleren</button></div></div>`;
+    const close = (v) => { $('overlay').innerHTML = ''; resolve(v); render(); };
+    $('pkIn').oninput = (e) => { $('pkRes').innerHTML = draw(e.target.value); };
+    $('pkRes').onclick = (e) => { const bt = e.target.closest('[data-pick]'); if (bt) close(runners.find((r) => r.id === bt.dataset.pick) || null); };
+    $('pkNo').onclick = () => close(null);
+    setTimeout(() => $('pkIn') && $('pkIn').focus(), 50);
+  });
+}
+async function addLapManual() {   // gemiste ronde toevoegen
+  const r = await pickRunner('Ronde toevoegen', 'Voor welke loper?'); if (!r) return;
+  const v = await ask('Ronde toevoegen', `Rondetijd van ${r.name}, bijvoorbeeld 1:35 of 1:35.4`, { input: 'm:ss', ok: 'Opslaan' });
+  if (v === null) return;
+  const ms = parseTime(v); if (!ms || ms < 20000) { toast('Ongeldige tijd. Gebruik m:ss', 3500); return; }
+  const mine = laps.filter((l) => l.runnerId === r.id), prevBest = mine.length ? Math.min(...mine.map((l) => l.time)) : Infinity, now = new Date(tnow());
+  const b = db.batch();
+  b.set(ref('laps').doc(), { runnerId: r.id, runnerName: r.name, time: ms, distance: 515, timestamp: now.toISOString(), startTime: new Date(now.getTime() - ms).toISOString(), isPersonalRecord: ms < prevBest, lapNumber: mine.length + 1, manual: true });
+  b.update(ref('runners', r.id), { totalLaps: FV.increment(1), totalTime: FV.increment(ms) });
+  commit(b); toast(`Ronde toegevoegd: ${r.name} ${mmssc(ms)}`, 3500);
+}
+async function lapOtherRunner(id) {   // ronde stond op de verkeerde naam
+  const l = laps.find((x) => x.id === id); if (!l) return;
+  const r = await pickRunner('Andere loper', `Wie liep de ronde van ${mmssc(l.time)} (${clock(l.timestamp)}) echt? Nu staat ze op ${l.runnerName}.`); if (!r || r.id === l.runnerId) return;
+  const b = db.batch();
+  b.update(ref('laps', id), { runnerId: r.id, runnerName: r.name });
+  if (runners.some((x) => x.id === l.runnerId)) b.update(ref('runners', l.runnerId), { totalLaps: FV.increment(-1), totalTime: FV.increment(-l.time) });
+  b.update(ref('runners', r.id), { totalLaps: FV.increment(1), totalTime: FV.increment(l.time) });
+  commit(b); toast(`Ronde staat nu op ${r.name}`, 3500);
+}
+function editRunner(id) {   // naam en klassement aanpassen
+  const r = runners.find((x) => x.id === id); if (!r) return;
+  let g = r.gender || 'X';
+  const draw = () => {
+    $('overlay').innerHTML = `<div class="modal"><div class="box"><h3>Loper aanpassen</h3><input class="in" id="erName" value="${esc(r.name)}" autocomplete="off"><div class="lbl2">Klassement</div>
+      <div class="seg">${Object.entries(KL).map(([k, v]) => `<button data-erg="${k}" class="${g === k ? 'on' : ''}">${v}</button>`).join('')}</div>
+      <div class="row2"><button class="btn" id="erNo">Annuleren</button><button class="btn primary" id="erOk">Opslaan</button></div></div></div>`;
+    $('overlay').querySelectorAll('[data-erg]').forEach((bt) => { bt.onclick = () => { const v = $('erName').value; g = bt.dataset.erg; draw(); $('erName').value = v; }; });
+    $('erNo').onclick = () => { $('overlay').innerHTML = ''; render(); };
+    $('erOk').onclick = () => {
+      const nm = tidyName($('erName').value); $('overlay').innerHTML = '';
+      if (!nm) { render(); return; }
+      const b = db.batch(), parts = nm.split(' ');
+      b.update(ref('runners', r.id), { name: nm, firstName: parts[0], lastName: parts.slice(1).join(' '), gender: g });
+      if (nm !== r.name) {   // naam ook in de rondes, de wachtrij en bij de lopende loper
+        laps.filter((l) => l.runnerId === r.id).forEach((l) => b.update(ref('laps', l.id), { runnerName: nm }));
+        queue.filter((q) => q.runnerId === r.id).forEach((q) => b.update(ref('queue', q.id), { runnerName: nm }));
+        if (isRunning() && activeData().runner.runnerId === r.id) b.update(ref('activeRunner', 'current'), { 'runner.runnerName': nm });
+      }
+      commit(b); toast(`${nm} · ${KL[g]}`, 3000); render();
+    };
+  };
+  draw();
+}
+async function removeRunner(id) {
+  const r = runners.find((x) => x.id === id); if (!r) return;
+  if (isRunning() && activeData().runner.runnerId === r.id) { toast(`${r.name} loopt nu: wacht tot de ronde klaar is`, 3500); return; }
+  const lids = laps.filter((l) => l.runnerId === r.id).map((l) => l.id), qids = queue.filter((q) => q.runnerId === r.id).map((q) => q.id);
+  if (!(await ask('Loper verwijderen?', `${r.name}${lids.length ? ` samen met ${lids.length} ${lids.length === 1 ? 'ronde' : 'rondes'}` : ''}. Dit kan niet ongedaan gemaakt worden.`, { ok: 'Ja, verwijderen', danger: true }))) return;
+  const refs = lids.map((x) => ref('laps', x)).concat(qids.map((x) => ref('queue', x)), [ref('runners', r.id)]);
+  for (let i = 0; i < refs.length; i += 400) { const b = db.batch(); refs.slice(i, i + 400).forEach((rf) => b.delete(rf)); commit(b); }
+  toast(`${r.name} is verwijderd`, 3000);
+}
+const publicUrl = () => new URL('loper.html' + (NS ? '?ns=' + encodeURIComponent(NS) : ''), location.href).href;
+
 // ===== weergave =====
 function connState() {
   const off = navigator.onLine === false || (lastCacheFalse && Date.now() - lastCacheFalse > 15000 && loaded.queue && offlineSince && Date.now() - offlineSince > 10000);
@@ -467,7 +584,7 @@ function renderChrome() {
   else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
   else if (loaded.queue && isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand meer na deze loper.</div>`;
   $('banner').innerHTML = ban;
-  $('nav').innerHTML = [['chrono', 'Chrono'], ['queue', 'Rij'], ['laps', 'Rondes'], ['more', 'Meer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
+  $('nav').innerHTML = [['chrono', 'Chrono'], ['queue', 'Rij'], ['laps', 'Rondes'], ['runners', 'Lopers'], ['more', 'Beheer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
 }
 // korte info over een loper (voor wie nu loopt of als volgende komt)
 function runnerFacts(rid) {
@@ -503,21 +620,56 @@ function viewChrono() {
     <div class="card"><h2>Daarna <small>${w.length} wachtend</small></h2>${next || '<div class="empty">Niemand</div>'}</div>
     <div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>${recentLaps || '<div class="empty">Nog geen rondes</div>'}</div>`;
 }
+function sresHtml() {   // zoekresultaten bij 'Inschrijven'
+  const q = sq.trim(); if (!q) return '';
+  const res = findRunners(q, 6), inQ = new Set(queue.map((x) => x.runnerId));
+  const offerNew = q.split(/\s+/).length >= 2 && !runners.some((r) => wordsKey(r.name) === wordsKey(q));
+  return res.map((r) => `<div class="row" data-act="enq" data-id="${esc(r.id)}"><div class="nm">${esc(r.name)}<small>${rondes(lapsOf(r.id))}${inQ.has(r.id) ? ' · staat al in de rij' : ''}</small></div><span class="btn small primary">In de rij</span></div>`).join('')
+    + (offerNew ? `<div class="row" data-act="newr" style="background:#fff;border:2px dashed var(--ink)"><div class="nm">Nieuwe loper: ${esc(tidyName(q))}</div><span class="btn small">Aanmaken</span></div>` : '')
+    + (!res.length && !offerNew ? '<div class="empty">Niemand gevonden. Typ voor- en achternaam voor een nieuwe loper.</div>' : '');
+}
 function viewQueue() {
   const w = waiting(), r = runItem(), a = activeData();
-  return `<div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
+  const form = nr ? `<div style="margin-top:8px"><div class="row2"><input class="in" id="nrF" placeholder="Voornaam" value="${esc(nr.first)}" autocomplete="off" style="margin:0"><input class="in" id="nrL" placeholder="Achternaam" value="${esc(nr.last)}" autocomplete="off" style="margin:0"></div>
+    <div class="lbl2" style="margin-top:8px">Klassement</div><div class="seg">${Object.entries(KL).map(([k, v]) => `<button data-act="nrg" data-g="${k}" class="${nr.g === k ? 'on' : ''}">${v}</button>`).join('')}</div>
+    <div class="row2"><button class="btn" data-act="nrcancel">Annuleren</button><button class="btn primary" data-act="nradd">In de rij</button></div></div>` : '';
+  return `<div class="card"><h2>Inschrijven</h2>
+    ${nr ? '' : `<input class="in" id="sq" placeholder="Zoek een naam…" value="${esc(sq)}" autocomplete="off" style="margin-top:0"><div class="sres" id="sres">${sresHtml()}</div>`}${form}</div>
+    <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
     ${isRunning() ? `<div class="row run"><div class="no">&gt;</div><div class="nm">${esc(a.runner.runnerName)}<small>loopt nu</small></div><div class="w" data-live="${startMs() || ''}">${mmssc(startMs() ? tnow() - startMs() : 0)}</div></div>` : ''}
     ${w.length === 0 ? '<div class="empty">Geen lopers in de wachtrij</div>' : w.map((q, i) => `<div class="row"><div class="no">${i + 1}</div><div class="nm">${esc(q.runnerName)}<small>${waitText(waitMs(i), i)} · rond ${clock(tnow() + waitMs(i))}</small></div>
       <button class="ib" aria-label="Omhoog" data-act="up" data-id="${esc(q.id)}" ${i === 0 ? 'disabled' : ''}>${I_UP}</button><button class="ib" aria-label="Omlaag" data-act="down" data-id="${esc(q.id)}" ${i === w.length - 1 ? 'disabled' : ''}>${I_DOWN}</button><button class="ib red" aria-label="Verwijderen" data-act="rm" data-id="${esc(q.id)}">${I_TRASH}</button></div>`).join('')}</div>`;
 }
+function lresHtml() {   // rondes: de laatste 40, of alle rondes van wie je zoekt
+  const q = lq.trim(), ids = q ? new Set(findRunners(q, 50).map((r) => r.id)) : null;
+  const list = [...laps].filter((l) => !ids || ids.has(l.runnerId)).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, q ? 80 : 40);
+  return list.length === 0 ? `<div class="empty">${q ? 'Geen rondes gevonden' : 'Nog geen rondes'}</div>` : list.map((l) => `<div class="lrow"><div class="main"><b>${esc(l.runnerName)}</b><span class="t">${mmssc(l.time)}</span> <small>${clock(l.timestamp)} · ronde ${l.lapNumber || '?'}${l.manual ? ' · ingetikt' : ''}</small></div>
+      <button class="ib" aria-label="Tijd aanpassen" data-act="edit" data-id="${esc(l.id)}">${I_EDIT}</button><button class="ib" aria-label="Andere loper" data-act="lapwho" data-id="${esc(l.id)}">${I_USER}</button><button class="ib red" aria-label="Verwijderen" data-act="del" data-id="${esc(l.id)}">${I_TRASH}</button></div>`).join('');
+}
 function viewLaps() {
-  const list = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 40);
-  return `<div class="card"><h2>Laatste rondes <small>${laps.length} in totaal</small></h2>
-    ${list.length === 0 ? '<div class="empty">Nog geen rondes</div>' : list.map((l) => `<div class="lrow"><div class="main"><b>${esc(l.runnerName)}</b><span class="t">${mmssc(l.time)}</span> <small>${clock(l.timestamp)} · ronde ${l.lapNumber || '?'}</small></div>
-      <button class="ib" aria-label="Tijd aanpassen" data-act="edit" data-id="${esc(l.id)}">${I_EDIT}</button><button class="ib red" aria-label="Verwijderen" data-act="del" data-id="${esc(l.id)}">${I_TRASH}</button></div>`).join('')}</div>`;
+  return `<div class="card"><h2>Rondes <small>${laps.length} in totaal</small></h2>
+    <div class="row2" style="grid-template-columns:1fr auto;align-items:center"><input class="in" id="lq" placeholder="Zoek een loper…" value="${esc(lq)}" autocomplete="off" style="margin:0"><button class="btn primary" data-act="addlap">+ Ronde</button></div>
+    <div id="lres" style="margin-top:10px">${lresHtml()}</div></div>`;
+}
+function rresHtml() {   // lopers: alfabetisch, of wie je zoekt
+  const q = rq.trim(), list = q ? findRunners(q, 60) : [...runners].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 60);
+  return list.length === 0 ? `<div class="empty">${q ? 'Niemand gevonden' : 'Nog geen lopers'}</div>` : list.map((r) => `<div class="lrow"><div class="main"><b>${esc(r.name)}</b><small style="margin-left:0">${KL[r.gender] || 'Geen'} · ${rondes(lapsOf(r.id))}</small></div>
+      <button class="ib" aria-label="Aanpassen" data-act="redit" data-id="${esc(r.id)}">${I_EDIT}</button><button class="ib red" aria-label="Verwijderen" data-act="rdel" data-id="${esc(r.id)}">${I_TRASH}</button></div>`).join('')
+    + (!q && runners.length > 60 ? `<div class="empty" style="font-size:13px">${runners.length - 60} lopers meer: zoek op naam</div>` : '');
+}
+function viewRunners() {
+  return `<div class="card"><h2>Lopers <small>${runners.length} in totaal</small></h2>
+    <input class="in" id="rq" placeholder="Zoek een loper…" value="${esc(rq)}" autocomplete="off" style="margin-top:0"><div id="rres">${rresHtml()}</div></div>`;
 }
 function viewMore() {
-  return `<div class="card"><h2>Dit toestel</h2>
+  const eur = laps.length * EUR_PER_LAP;
+  return `<div class="card"><h2>Overzicht</h2><div class="tiles">
+      <div class="tile"><div class="tk">Lopers</div><div class="tv">${runners.length}</div></div>
+      <div class="tile"><div class="tk">Rondes</div><div class="tv">${laps.length}<small>${(laps.length * LAP_KM).toFixed(1).replace('.', ',')} km</small></div></div>
+      <div class="tile"><div class="tk">In de rij</div><div class="tv">${waiting().length}</div></div>
+      <div class="tile"><div class="tk">Opgehaald</div><div class="tv">€ ${eur.toLocaleString('nl-BE')}</div></div></div></div>
+    <div class="card"><h2>Lopers-app</h2><div class="lbl2" style="word-break:break-all;margin-bottom:8px">${esc(publicUrl())}</div><button class="btn" data-act="copyurl" style="width:100%">Kopieer link</button></div>
+    <div class="card"><h2>Dit toestel</h2>
     <div class="row"><div class="nm">Scherm wakker houden<small>${wlOK ? 'actief: het scherm gaat niet uit' : 'niet actief: tik hieronder'}</small></div><button class="btn small ${wlOK ? 'ok' : 'primary'}" data-act="awake">${wlOK ? 'Aan' : 'Zet aan'}</button></div>
     <div class="row"><div class="nm">Ronde klaar<small>${holdMode ? 'ingedrukt houden (veilig tegen aanrakingen)' : 'één tik (sneller, maar gevoeliger)'}</small></div><button class="btn small ${holdMode ? 'ok' : ''}" data-act="holdmode">${holdMode ? 'Veilig' : 'Snel'}</button></div>
     <div class="row"><div class="nm">Haptiek<small>${canVibrate ? 'trillen wordt ondersteund' : 'iPhone: via de schakelaar-truc (iOS 17.4+); zet Instellingen → Geluid en haptiek → Systeemhaptiek aan'}</small></div><button class="btn small primary" data-act="hapTest">Test</button></div>
@@ -525,7 +677,6 @@ function viewMore() {
     <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
     <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
     <div class="card"><h2>Gegevens</h2><div class="row2"><button class="btn" data-act="csvLaps">Rondes (CSV)</button><button class="btn" data-act="csvRunners">Lopers (CSV)</button></div></div>
-    <div class="card"><h2>Medewerkers</h2><div class="row"><div class="nm">Pincode<small>${STAFF_LOGIN_REQUIRED ? (firebase.auth().currentUser ? 'ontgrendeld op dit toestel' : 'niet ontgrendeld') : 'staat uit (alles is open)'}</small></div>${STAFF_LOGIN_REQUIRED && firebase.auth().currentUser ? '<button class="btn small" data-act="logout">Vergrendel</button>' : ''}</div></div>
     <div class="card"><h2>Gevaarlijke zone</h2><div class="sec" style="margin-bottom:8px">${NS ? `Wist enkel de oefenomgeving "${esc(NS)}"` : 'Wist het ECHTE event'}</div><button class="btn danger" style="width:100%" data-act="reset">Alle data wissen…</button></div>
     <div class="empty" style="font-size:12px">Chronometer · Humasol vzw</div>`;
 }
@@ -534,7 +685,7 @@ function render() {
   renderChrome();
   const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
   if (typing || holdState) return;
-  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'laps' ? viewLaps() : tab === 'more' ? viewMore() : viewChrono();
+  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'laps' ? viewLaps() : tab === 'runners' ? viewRunners() : tab === 'more' ? viewMore() : viewChrono();
 }
 // ===== ingedrukt houden =====
 const HOLD_MS = 450;
@@ -569,12 +720,32 @@ setInterval(() => {   // laat de wachtrij-laptop weten dat de chronometer actief
 document.addEventListener('click', (e) => {
   const adj = e.target.closest('[data-adj]'); if (adj) { adjustLast(Number(adj.dataset.adj)); return; }
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
-  if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
+  if (t.dataset.tab) { tab = t.dataset.tab; unfocus(); render(); window.scrollTo(0, 0); return; }
   const a = t.dataset.act, id = t.dataset.id;
   if (a === 'moreacts') { moreOpen = !moreOpen; render(); return; }
   if (['manual', 'stop', 'swap', 'skip', 'cancel'].includes(a)) moreOpen = false;
   ({ main: pressMain, undo, manual: manualTime, stop: stopAfterThis, cancel: cancelRun, awake: () => { keepAwake().then(render); }, csvLaps: () => exportCsv('laps'), csvRunners: () => exportCsv('runners'), reset: resetAll, hapTest: () => { const m = buzz('lap'); toast('Test: ' + (m === 'vibrate' ? 'trillen' : m === 'switch' ? 'schakelaar-haptiek' : 'niet beschikbaar') + ' (voel je iets?)', 4000); }, swap: swapActive, skip: skipNext, holdmode: () => { holdMode = !holdMode; try { localStorage.setItem('holdMode', holdMode ? 'on' : 'off'); } catch (e) {} buzz('tick'); render(); }, logout: () => { firebase.auth().signOut().then(() => location.reload()); },
-     up: () => moveQueued(id, -1), down: () => moveQueued(id, 1), rm: () => removeQueued(id), del: () => deleteLap(id), edit: () => editLap(id) })[a]?.();
+     up: () => moveQueued(id, -1), down: () => moveQueued(id, 1), rm: () => removeQueued(id), del: () => deleteLap(id), edit: () => editLap(id),
+     enq: () => { const r = runners.find((x) => x.id === id); if (r) enqueue(r); },
+     newr: () => { const parts = tidyName(sq).split(' '); nr = { first: parts[0] || '', last: parts.slice(1).join(' '), g: '' }; unfocus(); render(); },
+     nrg: () => { nr.g = t.dataset.g; unfocus(); render(); }, nradd: addNewRunner, nrcancel: () => { nr = null; render(); },
+     addlap: addLapManual, lapwho: () => lapOtherRunner(id), redit: () => editRunner(id), rdel: () => removeRunner(id),
+     copyurl: () => { try { navigator.clipboard.writeText(publicUrl()).then(() => toast('Link gekopieerd', 2500)); } catch (e) { toast(publicUrl(), 6000); } } })[a]?.();
+});
+
+// typen in een zoekveld: enkel de resultaten vernieuwen (de rest van het scherm blijft staan zolang je typt)
+document.addEventListener('input', (e) => {
+  const id = e.target.id, v = e.target.value;
+  if (id === 'sq') { sq = v; $('sres').innerHTML = sresHtml(); }
+  else if (id === 'lq') { lq = v; $('lres').innerHTML = lresHtml(); }
+  else if (id === 'rq') { rq = v; $('rres').innerHTML = rresHtml(); }
+  else if (id === 'nrF' && nr) nr.first = v;
+  else if (id === 'nrL' && nr) nr.last = v;
+});
+document.addEventListener('keydown', (e) => {   // Enter in het zoekveld: eerste resultaat in de rij (of nieuwe loper)
+  if (e.key !== 'Enter') return;
+  if (e.target.id === 'sq') { const first = $('sres') && $('sres').querySelector('[data-act]'); if (first) first.click(); }
+  else if ((e.target.id === 'nrF' || e.target.id === 'nrL') && nr) addNewRunner();
 });
 
 // ===== data =====
