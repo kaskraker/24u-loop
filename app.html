@@ -59,6 +59,7 @@
         @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
         @keyframes tierGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(232,89,12,.0), 5px 5px 0 #17120d; } 50% { box-shadow: 0 0 0 10px rgba(232,89,12,.28), 5px 5px 0 #17120d; } }
         @keyframes tierRays { to { transform: rotate(360deg); } }
+        @keyframes washIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes popTop { 0% { opacity: 0; transform: translateY(-24px) scale(.96); } 100% { opacity: 1; transform: none; } }
         @keyframes arrowBob { 0%, 100% { transform: translateY(-3px); } 50% { transform: translateY(4px); } }
         @keyframes qrGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(232, 89, 12, 0); } 50% { box-shadow: 0 0 0 6px rgba(232, 89, 12, .55); } }
@@ -2574,11 +2575,14 @@ function predictNext(times, gender, restMs) {
                 if (!inner) return null;
                 const sticky = queueNotice.type === 'ask' || queueNotice.type === 'dup';
                 const ok = queueNotice.type === 'ok';
-                return h('div', { onClick: sticky ? undefined : () => setQueueNotice(null), style: { position: 'fixed', left: 0, right: 0, margin: '0 auto', top: '14px', width: 'min(560px, calc(100vw - 24px))', zIndex: 500, animation: 'popTop .4s cubic-bezier(.2,.9,.3,1.2) both', cursor: sticky ? 'default' : 'pointer' } },
-                    h('div', { style: { marginBottom: '-1rem' } }, inner),
-                    ok && h('div', { className: 'keep-light', style: { display: 'flex', alignItems: 'center', gap: 10, background: '#17120d', color: '#fff', border: '3px solid #17120d', borderRadius: 12, boxShadow: '3px 3px 0 #17120d', padding: '8px 12px', fontWeight: 800, fontSize: 14, marginTop: 4 } },
-                        h('svg', { viewBox: '0 0 24 24', width: 26, height: 26, style: { flexShrink: 0, animation: 'arrowBob 0.8s ease-in-out infinite' }, fill: 'none', stroke: '#ffd23f', strokeWidth: 3.2, strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M12 3v15M5 12l7 7 7-7' })),
-                        h('span', null, 'Scan de QR-code om je beurt op je gsm te volgen')));
+                // Een zachte crème waas achter de popup verbergt wat eronder staat (zoals het knipperende rode lampje van 'Nu aan het lopen'), zodat niets doorschemert.
+                // Via een portal rechtstreeks onder <body>: binnen de (sticky) linkerkolom viel de popup onder widgets uit de rechterkolom
+                return ReactDOM.createPortal(h('div', { style: { position: 'fixed', left: 0, right: 0, top: 0, zIndex: 100000, padding: '14px 12px 44px', pointerEvents: 'none', background: 'linear-gradient(to bottom, rgba(255,241,207,.98) 0%, rgba(255,241,207,.98) 62%, rgba(255,241,207,0) 100%)', animation: 'washIn .3s ease-out both' } },
+                    h('div', { onClick: sticky ? undefined : () => setQueueNotice(null), style: { margin: '0 auto', width: 'min(560px, calc(100vw - 24px))', pointerEvents: 'auto', animation: 'popTop .4s cubic-bezier(.2,.9,.3,1.2) both', cursor: sticky ? 'default' : 'pointer' } },
+                        h('div', { style: { marginBottom: '-1rem' } }, inner),
+                        ok && h('div', { className: 'keep-light', style: { display: 'flex', alignItems: 'center', gap: 10, background: '#17120d', color: '#fff', border: '3px solid #17120d', borderRadius: 12, boxShadow: '3px 3px 0 #17120d', padding: '8px 12px', fontWeight: 800, fontSize: 14, marginTop: 4 } },
+                            h('svg', { viewBox: '0 0 24 24', width: 26, height: 26, style: { flexShrink: 0, animation: 'arrowBob 0.8s ease-in-out infinite' }, fill: 'none', stroke: '#ffd23f', strokeWidth: 3.2, strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M12 3v15M5 12l7 7 7-7' })),
+                            h('span', null, 'Scan de QR-code om je beurt op je gsm te volgen')))), document.body);
             };
 
             // Actieve loper: één document met vaste id ("current"); geen leesactie, werkt dus ook offline
