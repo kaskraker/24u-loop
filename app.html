@@ -50,12 +50,13 @@
     <style>
         /* ===== Dark mode: Slate palette, volledig en consistent =====
            Pagina #0b1220 -> kaarten #1e293b -> rijen/vlakken #273449 -> invoer #0f172a */
-        @keyframes lapPulse { 0%, 100% { background-color: rgba(251,146,60,.10); box-shadow: inset 4px 0 0 #fb923c; } 50% { background-color: rgba(251,146,60,.30); box-shadow: inset 4px 0 0 #f97316, 0 0 14px rgba(251,146,60,.5); } }
-        @keyframes lapGold { 0%, 100% { background-color: rgba(250,204,21,.25); box-shadow: inset 5px 0 0 #eab308, 0 0 10px rgba(234,179,8,.5); } 50% { background-color: rgba(250,204,21,.6); box-shadow: inset 5px 0 0 #ca8a04, 0 0 28px rgba(234,179,8,.95); } }
-        @keyframes lapFade { 0% { background-color: rgba(253,224,71,.55); box-shadow: inset 4px 0 0 #eab308; } 60% { background-color: rgba(253,224,71,.22); box-shadow: inset 4px 0 0 rgba(234,179,8,.7); } 100% { background-color: rgba(253,224,71,0); box-shadow: inset 4px 0 0 rgba(234,179,8,0); } }
+        /* Uitlichten van nieuwe/gewijzigde rijen in de stijl van de app: een oranje kader (outline) dat langzaam vervaagt; geen gele waas of balkje links meer */
+        @keyframes lapPulse { 0%, 100% { outline: 4px solid rgba(232,89,12,.25); outline-offset: 1px; } 50% { outline: 4px solid #e8590c; outline-offset: 2px; } }
+        @keyframes lapGold { 0%, 100% { outline: 4px solid #17120d; outline-offset: 2px; filter: brightness(1); } 50% { outline: 4px solid #e8590c; outline-offset: 4px; filter: brightness(1.12); } }
+        @keyframes lapFade { 0% { outline: 4px solid #e8590c; outline-offset: 1px; filter: brightness(1.1); } 18% { outline: 4px solid #e8590c; outline-offset: 1px; filter: brightness(1.06); } 100% { outline: 4px solid rgba(232,89,12,0); outline-offset: 1px; filter: none; } }
         .lap-fresh { animation: lapFade 56s ease-out forwards; }
         .lap-record { animation: lapGold 0.9s ease-in-out infinite; }
-        @keyframes rowFlash { 0%, 100% { box-shadow: 0 0 0 0 rgba(251,146,60,0); } 15%, 55% { box-shadow: 0 0 0 3px rgba(251,146,60,.95), 0 0 22px rgba(251,146,60,.85); } 35%, 75% { box-shadow: 0 0 0 1px rgba(251,146,60,.35), 0 0 6px rgba(251,146,60,.35); } }
+        @keyframes rowFlash { 0%, 100% { outline: 4px solid rgba(232,89,12,0); outline-offset: 1px; } 15%, 55% { outline: 4px solid #e8590c; outline-offset: 2px; } 35%, 75% { outline: 4px solid rgba(232,89,12,.3); outline-offset: 1px; } }
         @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
         @keyframes tierGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(232,89,12,.0), 5px 5px 0 #17120d; } 50% { box-shadow: 0 0 0 10px rgba(232,89,12,.28), 5px 5px 0 #17120d; } }
         @keyframes tierRays { to { transform: rotate(360deg); } }
@@ -109,6 +110,25 @@
         body .qr-promo { background: #ffd58a !important; }
         /* knoppen */
         body button.bg-humasol-orange, body .bg-humasol-orange.rounded-lg { border: 3px solid #17120d; box-shadow: 3px 3px 0 #17120d; color: #17120d; }
+        /* resterende standaardkleuren (beheer- en ranglijstschermen) in dezelfde stijl: crème vlakken, zwarte randen, harde schaduw */
+        body .bg-gray-50, body .bg-blue-50 { background-color: #fff6df !important; }
+        body .bg-gray-100 { background-color: #ffe9bf !important; }
+        body .bg-green-50 { background-color: #d9f7d0 !important; }
+        body .bg-yellow-50, body .bg-yellow-100 { background-color: #ffe9a8 !important; }
+        body .bg-red-100 { background-color: #fecaca !important; }
+        /* rijen en kaartjes in de beheer-ranglijsten: zwarte rand zoals de rest */
+        body .bg-gray-50.rounded-lg, body .bg-blue-50.rounded-lg, body .bg-yellow-50.rounded-lg, body .bg-green-50.rounded-lg { border: 2px solid #17120d; }
+        body .bg-gray-100.rounded-full { border: 2px solid #17120d; }
+        body .border-blue-500, body .border-blue-200, body .border-green-300, body .border-red-500, body .border-gray-200, body .border-gray-300 { border-color: #17120d !important; }
+        body .text-blue-600 { color: #e8590c !important; }
+        body .text-green-600 { color: #1f7a33 !important; }
+        body .text-red-600, body .text-red-700 { color: #b42318 !important; }
+        body button.bg-green-600, body button.bg-green-700, body button.bg-blue-500, body button.bg-red-600, body button.bg-red-700, body button.bg-gray-300, body button.bg-gray-400, body button.bg-gray-500 { border: 3px solid #17120d !important; box-shadow: 3px 3px 0 #17120d; color: #17120d !important; }
+        body button.bg-green-600, body button.bg-green-700 { background-color: #2fb344 !important; }
+        body button.bg-blue-500 { background-color: #f2a342 !important; }
+        body button.bg-red-600, body button.bg-red-700 { background-color: #f87171 !important; }
+        body button.bg-gray-300, body button.bg-gray-400, body button.bg-gray-500 { background-color: #e5e7eb !important; }
+        body button.bg-green-600:active, body button.bg-blue-500:active, body button.bg-red-600:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #17120d; }
     </style>
 </head>
 <body>
@@ -3576,11 +3596,12 @@ function predictNext(times, gender, restMs) {
                 const age = Date.now() - m.at;
                 if (age > RANK_BADGE_MS) return null;
                 const fade = 1 - 0.55 * (age / RANK_BADGE_MS);
-                if (m.isNew) return h('span', { style: { opacity: fade }, className: 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500 text-white' }, 'NIEUW');
+                // badges in de stijl van de app: kleurvlak, zwarte rand, zwarte tekst
+                if (m.isNew) return h('span', { style: { opacity: fade, background: '#fff', color: '#17120d', border: '2px solid #17120d', borderRadius: 999 }, className: 'text-[10px] font-extrabold px-2 py-0.5 tracking-wide' }, 'NIEUW');
                 const up = m.delta > 0;
                 return h('span', {
-                    style: { opacity: fade },
-                    className: `inline-flex items-center gap-0.5 text-[11px] font-extrabold whitespace-nowrap px-1 rounded ${up ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`
+                    style: { opacity: fade, background: up ? '#d9f7d0' : '#fecaca', color: '#17120d', border: '2px solid #17120d', borderRadius: 999 },
+                    className: 'inline-flex items-center gap-0.5 text-[11px] font-extrabold whitespace-nowrap px-1.5'
                 }, `${up ? '▲' : '▼'}${Math.abs(m.delta)}`);
             };
             trackRanks('fastestOverall', fastestLaps);
@@ -3654,12 +3675,10 @@ function predictNext(times, gender, restMs) {
             // Build UI
             const navButton = (viewName, icon, label) => h('button', {
                 onClick: () => setView(viewName),
-                className: `flex items-center space-x-2 px-4 py-3 font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    view === viewName 
-                        ? `border-humasol-orange ${darkMode ? 'text-humasol-orange' : 'text-humasol-brown'}` 
-                        : `border-transparent ${darkMode ? 'text-gray-400 hover:text-humasol-orange' : 'text-humasol-gray hover:text-humasol-brown'}`
-                }`
-            }, h(Icon, { name: icon }), h('span', null, label));
+                // knoppen als pillen in de stijl van de app: dikke zwarte rand, actieve oranje en ingedrukt
+                className: 'flex items-center gap-2 px-4 py-2 font-extrabold text-sm rounded-full whitespace-nowrap flex-shrink-0',
+                style: { background: view === viewName ? '#f2a342' : '#fff', border: '3px solid #17120d', color: '#17120d', margin: '8px 4px 8px 0', boxShadow: view === viewName ? 'inset 2px 2px 0 rgba(23,18,13,.25)' : '3px 3px 0 #17120d' }
+            }, h(Icon, { name: icon, className: 'w-5 h-5' }), h('span', null, label));
 
             // Helper function for dark mode classes
             const cardBg = darkMode ? 'bg-gray-800' : 'bg-white';
@@ -3720,24 +3739,21 @@ function predictNext(times, gender, restMs) {
                 ),
 
                 // Header (verberg in display fullscreen mode en op de inschrijflaptop, die heeft een eigen balk)
-                showChrome && !IS_SIGNUP && h('div', { 
-                    className: `shadow-md border-b-4 border-humasol-orange transition-colors ${
-                        darkMode ? 'bg-slate-800' : 'bg-white'
-                    }` 
+                showChrome && !IS_SIGNUP && h('div', {
+                    className: 'transition-colors',
+                    style: { background: '#f2a342', borderBottom: '3px solid #17120d' }
                 },
                     h('div', { className: 'max-w-7xl mx-auto px-4 py-3 sm:py-4' },
                         h('div', { className: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-2' },
                             h('div', { className: 'flex flex-wrap items-center gap-x-4 gap-y-2' },
                                 h('div', null,
-                                    h('h1', { 
-                                        className: `text-xl sm:text-2xl font-bold whitespace-nowrap transition-colors ${
-                                            darkMode ? 'text-humasol-orange' : 'text-humasol-brown'
-                                        }` 
+                                    h('h1', {
+                                        className: 'text-xl sm:text-2xl font-extrabold whitespace-nowrap',
+                                        style: { color: '#17120d' }
                                     }, '24u Loop Leuven'),
-                                    h('p', { 
-                                        className: `text-xs sm:text-sm transition-colors ${
-                                            darkMode ? 'text-gray-400' : 'text-humasol-gray'
-                                        }` 
+                                    h('p', {
+                                        className: 'text-xs sm:text-sm font-semibold',
+                                        style: { color: '#17120d', opacity: .75 }
                                     }, 'Dinsdag 20:00 - Woensdag 20:00')
                                 ),
                                 // Connection status indicator
@@ -3746,23 +3762,16 @@ function predictNext(times, gender, restMs) {
                                 )
                             ),
                             h('div', { className: 'flex items-center gap-3 sm:gap-4 flex-shrink-0' },
-                                h('img', { 
-                                    src: 'humasol_logo.png', 
+                                h('img', {
+                                    src: 'humasol_logo.png',
                                     alt: 'Humasol Logo',
-                                    className: 'h-9 sm:h-20 w-auto object-contain flex-shrink-0'
+                                    className: 'h-9 sm:h-14 w-auto object-contain flex-shrink-0 rounded-xl px-2 py-1',
+                                    style: { background: '#fff', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d' }
                                 }),
-                            h('div', { className: 'text-center' },
-                                h('div', { className: 'text-3xl sm:text-5xl font-bold text-humasol-orange' }, totalLaps),
-                                h('div', { 
-                                    className: `text-sm sm:text-lg font-semibold transition-colors ${
-                                        darkMode ? 'text-humasol-orange' : 'text-humasol-brown'
-                                    }` 
-                                }, 'Totaal Rondes'),
-                                h('div', { 
-                                    className: `text-sm transition-colors ${
-                                        darkMode ? 'text-gray-400' : 'text-humasol-gray'
-                                    }` 
-                                }, `${totalDistance.toFixed(2).replace('.', ',')} km`)
+                            h('div', { className: 'text-center rounded-2xl px-4 py-1', style: { background: '#fff', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d', color: '#17120d' } },
+                                h('div', { className: 'text-3xl sm:text-4xl font-extrabold leading-none', style: { fontVariantNumeric: 'tabular-nums' } }, totalLaps),
+                                h('div', { className: 'text-xs font-extrabold uppercase tracking-wider' }, 'Totaal rondes'),
+                                h('div', { className: 'text-xs font-semibold', style: { opacity: .7 } }, `${totalDistance.toFixed(2).replace('.', ',')} km`)
                             )
                             )
                         )
@@ -3770,13 +3779,12 @@ function predictNext(times, gender, restMs) {
                 ),
 
                 // Navigation (verberg in display fullscreen mode)
-                showChrome && !IS_SIGNUP && h('div', { 
-                    className: `border-b sticky top-0 z-10 shadow-sm transition-colors ${
-                        darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'
-                    }` 
+                showChrome && !IS_SIGNUP && h('div', {
+                    className: 'sticky top-0 z-10',
+                    style: { background: '#fff1cf', borderBottom: '3px solid #17120d' }
                 },
                     h('div', { className: 'max-w-7xl mx-auto px-4' },
-                        h('div', { className: 'flex items-center space-x-1 overflow-x-auto' },
+                        h('div', { className: 'flex items-center overflow-x-auto', style: { paddingRight: 4 } },
                             ...(IS_SIGNUP ? [
                                 navButton('queue', 'users', `Wachtrij (${activeRunner && isRunning ? queue.length - 1 : queue.length})`)
                             ] : publicView ? [
@@ -3798,7 +3806,8 @@ function predictNext(times, gender, restMs) {
                             (view === 'display' || IS_SIGNUP) && h('button', {
                                 onClick: toggleDisplayFullscreen,
                                 title: 'Zet dit scherm op volledig scherm (Esc om te sluiten)',
-                                className: 'ml-auto flex-shrink-0 flex items-center gap-2 px-5 py-2 my-1.5 rounded-full bg-humasol-orange hover:bg-humasol-brown text-white font-bold text-sm shadow-md ring-2 ring-orange-200'
+                                className: 'ml-auto flex-shrink-0 flex items-center gap-2 px-4 py-2 my-2 rounded-full font-extrabold text-sm',
+                                style: { background: '#fff', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' }
                             },
                                 h(Icon, { name: 'expand', className: 'w-5 h-5' }),
                                 h('span', null, 'Volledig scherm')

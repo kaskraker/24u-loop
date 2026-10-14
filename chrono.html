@@ -148,9 +148,9 @@
   .hand .feat small { display: block; font-size: 12px; font-weight: 600; color: var(--brown); }
   @keyframes featIn { from { transform: scale(.6) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes spin { to { transform: rotate(360deg) scale(1.2); } }
-  .hand .armL { animation: armL 2.6s ease-in-out both; } .hand .armR { animation: armR 2.6s ease-in-out both; }
-  .hand .stick { animation: stick 2.6s ease-in-out both; }
-  .hand .spark { transform-box: fill-box; transform-origin: center; animation: spark 2.6s ease-out both; }
+  .hand .armL { animation: armL 1.7s ease-in-out both; } .hand .armR { animation: armR 1.7s ease-in-out both; }
+  .hand .stick { animation: stick 1.7s ease-in-out both; }
+  .hand .spark { transform-box: fill-box; transform-origin: center; animation: spark 1.7s ease-out both; }
   @keyframes handIn { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes handOut { to { transform: translateY(-8px); opacity: 0; } }
   @keyframes armL { 0% { transform: translateX(-70px); } 22% { transform: translateX(0); } 55% { transform: translateX(14px); } 78% { transform: translateX(-4px); } 100% { transform: translateX(-70px); } }
@@ -439,7 +439,7 @@ function achievements(rid, rn, time, mine, exId) {
 function handoff(fromName, time, toName, feats) {
   $('toastBox').innerHTML = '';
   feats = feats || [];
-  const dur = feats.length ? 5.5 : 3;   // met iets straf's blijft het kaartje langer staan, zodat de tijdnemer het kan melden
+  const dur = feats.length ? 5 : 2.1;   // met iets straf's blijft het kaartje langer staan, zodat de tijdnemer het kan melden
   const skin = '#ffcf9e', fist = (x) => `<rect x="${x}" y="36" width="46" height="34" rx="14" fill="${skin}" stroke="#17120d" stroke-width="3"/><path d="M${x + 12} 44v18M${x + 23} 42v22M${x + 34} 44v18" stroke="#17120d" stroke-width="2.5" stroke-linecap="round" fill="none"/>`;
   const svg = `<svg viewBox="0 0 240 90" aria-hidden="true">
     <g class="stick"><rect x="52" y="47" width="62" height="12" rx="6" fill="#e8590c" stroke="#17120d" stroke-width="3"/><rect x="74" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/><rect x="92" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/></g>
