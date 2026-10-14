@@ -314,7 +314,9 @@ function ask(title, text, { ok = 'Ja, doorgaan', danger = false, input = null, c
 }
 
 // ===== schrijfacties (één atomaire batch; wacht niet op de server: werkt ook offline) =====
+let localChangeAt = 0, stopNote = null;   // laatste eigen schrijfactie; melding als de lopende loper door iemand anders gestopt wordt
 function commit(batch) {
+  localChangeAt = Date.now();
   pending++; render();
   return batch.commit().then(() => { pending = Math.max(0, pending - 1); render(); }, (err) => { pending = Math.max(0, pending - 1); toast('Opslaan mislukt: ' + (err.message || err.code), 8000); render(); });
 }
@@ -748,6 +750,8 @@ function renderChrome() {
   $('env').innerHTML = NS ? `<span class="envpill" title="Oefenmodus: de echte data blijft ongemoeid">OEFEN · ${esc(NS)}</span>` : '';
   let ban = '';
   if (st === 'off') ban = `<div class="banner red">Geen verbinding. Je kan gewoon doorgaan: alles wordt bewaard op dit toestel en automatisch verstuurd zodra het internet terug is. Sluit of herlaad deze pagina niet.</div>`;
+  else if (stopNote && Date.now() - stopNote.at < 90000) ban = `<div class="banner red"><b>${esc(stopNote.who)} is gestopt, maar niet door deze chronometer.</b> ${stopNote.replay ? 'Er draait een autoplay-simulatie op een scherm (oefenscherm): die overschrijft de chronometer. Sluit dat scherm.' : 'Een ander toestel (of een andere chronometer) heeft de loper gestopt. Controleer wie nog de chronometer open heeft.'} Start opnieuw als dat nodig is.</div>`;
+  else if (loaded.queue && queue.some((q) => String(q.id).startsWith('replay_q_'))) ban = `<div class="banner red">Er draait een autoplay-simulatie op een scherm en die overschrijft de chronometer. Sluit het oefenscherm met autoplay.</div>`;
   else if (batt && batt.level <= 0.2 && !batt.charging) ban = `<div class="banner red">Batterij bijna leeg (${Math.round(batt.level * 100)}%). Sluit de lader aan.</div>`;
   else if (nagUntil > Date.now()) ban = `<div class="banner">Even controleren: hangt de gsm aan de lader en staat het scherm aan?</div>`;
   else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
@@ -755,7 +759,7 @@ function renderChrome() {
   $('banner').innerHTML = ban;
   document.body.classList.toggle('focus', focusMode);
   // tijdnemer-modus: enkel geen verbinding of lege batterij, als smalle balk die niets verschuift
-  const crit = st === 'off' ? 'Geen verbinding: alles wordt bewaard en later verstuurd' : (batt && batt.level <= 0.2 && !batt.charging) ? `Batterij ${Math.round(batt.level * 100)}%: sluit de lader aan` : '';
+  const crit = st === 'off' ? 'Geen verbinding: alles wordt bewaard en later verstuurd' : (stopNote && Date.now() - stopNote.at < 90000) ? `${stopNote.who} is gestopt door een ander toestel${stopNote.replay ? ' (autoplay)' : ''}` : (batt && batt.level <= 0.2 && !batt.charging) ? `Batterij ${Math.round(batt.level * 100)}%: sluit de lader aan` : '';
   $('fxBox').innerHTML = focusMode ? `${crit ? `<div class="slim">${crit}</div>` : ''}<button class="fx more" data-act="reload" aria-label="Vernieuwen">↻</button><button class="fx" data-act="unfocus" aria-label="Tijdnemer-modus verlaten">✕</button>` : '';
   $('nav').innerHTML = [['chrono', 'Chrono'], ['queue', 'Rij'], ['laps', 'Rondes'], ['runners', 'Lopers'], ['more', 'Beheer']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('');
 }
@@ -961,7 +965,17 @@ const listen = (name, fn) => db.collection(col(name)).onSnapshot({ includeMetada
 listen('runners', (s) => { runners = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
 listen('laps', (s) => { laps = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
 listen('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
-listen('activeRunner', (s) => { activeDocs = s.docs.map((d) => ({ id: d.id, data: d.data() })); });
+listen('activeRunner', (s) => {
+  const was = loaded.active && isRunning(), who = was ? activeData().runner.runnerName : '';
+  activeDocs = s.docs.map((d) => ({ id: d.id, data: d.data() }));
+  // De loper stopte zonder dat deze chronometer iets deed (en niet door een lokale schrijfactie die nog onderweg is): een ander toestel of de autoplay van een scherm?
+  if (was && !isRunning() && Date.now() - localChangeAt > 5000 && !s.metadata.hasPendingWrites) {
+    const replay = queue.some((q) => String(q.id).startsWith('replay_q_'));
+    stopNote = { at: Date.now(), who, replay };
+    try { const log = JSON.parse(localStorage.getItem('stoplog_' + NS) || '[]'); log.push({ at: new Date().toISOString(), who, replay }); localStorage.setItem('stoplog_' + NS, JSON.stringify(log.slice(-20))); } catch (e) {}
+    buzz('warn');
+  }
+});
 }
 staffGate(startData);
 
