@@ -873,8 +873,18 @@ function render() {
   renderChrome();
   const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
   if (typing || holdState) return;
-  $('view').innerHTML = tab === 'queue' ? viewQueue() : tab === 'laps' ? viewLaps() : tab === 'runners' ? viewRunners() : tab === 'more' ? viewMore() : viewChrono();
+  const html = tab === 'queue' ? viewQueue() : tab === 'laps' ? viewLaps() : tab === 'runners' ? viewRunners() : tab === 'more' ? viewMore() : viewChrono();
+  // Enkel opnieuw opbouwen als er echt iets veranderd is: zo herstart de wisselbalk (en haar animatie) niet bij elke vernieuwing
+  const key = html.replace(/(data-live="\d*">)[^<]*/g, '$1');   // de lopende klokken tellen zelf door
+  if (key !== lastViewHtml || !$('view').firstChild) {
+    const old = $('view').querySelector('.pace');
+    $('view').innerHTML = html; lastViewHtml = key;
+    const nw = $('view').querySelector('.pace');   // de balk zelf blijft staan (geen schokje) zolang het dezelfde loper en dezelfde verwachting is
+    if (old && nw && old.dataset.st === nw.dataset.st && old.dataset.exp === nw.dataset.exp && old.querySelector('.pace-next').textContent === nw.querySelector('.pace-next').textContent) nw.replaceWith(old);
+  }
+  paceTick();   // meteen op de juiste stand, zonder tussenstap
 }
+let lastViewHtml = '';
 // ===== ingedrukt houden =====
 const HOLD_MS = 450;
 let holdState = null;

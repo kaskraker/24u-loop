@@ -59,6 +59,9 @@
         @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
         @keyframes tierGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(232,89,12,.0), 5px 5px 0 #17120d; } 50% { box-shadow: 0 0 0 10px rgba(232,89,12,.28), 5px 5px 0 #17120d; } }
         @keyframes tierRays { to { transform: rotate(360deg); } }
+        @keyframes popTop { 0% { opacity: 0; transform: translateY(-24px) scale(.96); } 100% { opacity: 1; transform: none; } }
+        @keyframes arrowBob { 0%, 100% { transform: translateY(-3px); } 50% { transform: translateY(4px); } }
+        @keyframes qrGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(232, 89, 12, 0); } 50% { box-shadow: 0 0 0 6px rgba(232, 89, 12, .55); } }
         @keyframes crownBob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-4px) rotate(4deg); } }
         body .display-root .now-t2 { background: #ffc566 !important; border-width: 5px !important; }
         body .display-root .now-t3 { background: #ffb347 !important; border-width: 5px !important; animation: tierGlow 2.4s ease-in-out infinite; }
@@ -2564,13 +2567,18 @@ function predictNext(times, gender, restMs) {
                     h('div', { className: 'text-2xl font-extrabold text-gray-900' }, queueNotice.detail));
                 return h('div', { className: 'keep-light mb-4 rounded-xl px-3 py-2 text-sm font-bold', style: { background: bg, color: '#17120d', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d' } }, queueNotice.text);
             };
-            // De melding zweeft onderaan het scherm, zodat het formulier niet naar beneden schuift (tik op een gewone melding om hem te sluiten).
+            // De melding verschijnt als popup bovenaan het scherm, boven alle widgets, zodat het formulier niet verschuift (tik op een gewone melding om hem te sluiten).
+            // Na een geslaagde inschrijving wijst een pijl naar de QR-code om de beurt te volgen; de QR-kaart licht tegelijk op.
             const renderQueueNotice = () => {
                 const inner = renderQueueNoticeInner();
                 if (!inner) return null;
                 const sticky = queueNotice.type === 'ask' || queueNotice.type === 'dup';
-                return h('div', { onClick: sticky ? undefined : () => setQueueNotice(null), style: { position: 'fixed', left: 0, right: 0, margin: '0 auto', bottom: '20px', width: 'min(560px, calc(100vw - 24px))', zIndex: 60, animation: 'swapIn .35s cubic-bezier(.2,.8,.2,1) both', cursor: sticky ? 'default' : 'pointer' } },
-                    h('div', { style: { marginBottom: '-1rem' } }, inner));
+                const ok = queueNotice.type === 'ok';
+                return h('div', { onClick: sticky ? undefined : () => setQueueNotice(null), style: { position: 'fixed', left: 0, right: 0, margin: '0 auto', top: '14px', width: 'min(560px, calc(100vw - 24px))', zIndex: 500, animation: 'popTop .4s cubic-bezier(.2,.9,.3,1.2) both', cursor: sticky ? 'default' : 'pointer' } },
+                    h('div', { style: { marginBottom: '-1rem' } }, inner),
+                    ok && h('div', { className: 'keep-light', style: { display: 'flex', alignItems: 'center', gap: 10, background: '#17120d', color: '#fff', border: '3px solid #17120d', borderRadius: 12, boxShadow: '3px 3px 0 #17120d', padding: '8px 12px', fontWeight: 800, fontSize: 14, marginTop: 4 } },
+                        h('svg', { viewBox: '0 0 24 24', width: 26, height: 26, style: { flexShrink: 0, animation: 'arrowBob 0.8s ease-in-out infinite' }, fill: 'none', stroke: '#ffd23f', strokeWidth: 3.2, strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M12 3v15M5 12l7 7 7-7' })),
+                        h('span', null, 'Scan de QR-code om je beurt op je gsm te volgen')));
             };
 
             // Actieve loper: één document met vaste id ("current"); geen leesactie, werkt dus ook offline
@@ -4100,7 +4108,7 @@ function predictNext(times, gender, restMs) {
                             ),
 
                             // Algemene QR-code naar de lopers-app (wachtplaats, wachttijd en eigen tijden)
-                            h('div', { className: 'keep-light flex items-center gap-4 mb-4 p-3 rounded-lg', style: { background: '#ffd58a', border: '3px solid #17120d' } },
+                            h('div', { className: 'keep-light flex items-center gap-4 mb-4 p-3 rounded-lg', style: { background: '#ffd58a', border: '3px solid #17120d', animation: queueNotice && queueNotice.type === 'ok' ? 'qrGlow 1s ease-in-out infinite' : undefined } },
                                 h('div', { style: { flexShrink: 0, border: '3px solid #17120d', borderRadius: 8, overflow: 'hidden' } }, h(QrCode, { url: getPublicUrl(), size: 104 })),
                                 h('div', null,
                                     h('div', { className: 'font-extrabold text-gray-900 leading-tight' }, 'Volg je beurt op je gsm'),
@@ -4830,10 +4838,7 @@ function predictNext(times, gender, restMs) {
                     // Display View - For second screen/projector
                     view === 'display' && h('div', { className: 'display-root min-h-screen bg-white', ref: displayRootRef },
                         // Groot scherm (?mode=display): duidelijke knop tot je op volledig scherm staat, verdwijnt na 3 s
-                        IS_DISPLAY_ONLY && !isDisplayFullscreen && h('button', {
-                            onClick: toggleDisplayFullscreen,
-                            className: `fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-8 py-4 rounded-full bg-humasol-orange hover:bg-humasol-brown text-white text-lg font-bold shadow-2xl ring-4 ring-orange-200 transition-opacity duration-500 ${fsButtonVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`
-                        }, h(Icon, { name: 'expand', className: 'w-6 h-6' }), 'Klik voor volledig scherm'),
+                        // (de knop zit nu als witte pil in de oranje balk, net als bij de wachtrij)
 
                         // Compact header bar
                         h('div', { className: 'display-hdr bg-gradient-to-r from-humasol-orange to-humasol-brown text-white px-8 py-3 shadow-lg' },
@@ -4871,7 +4876,8 @@ function predictNext(times, gender, restMs) {
                                 h('div', { className: 'lg:justify-self-center' },
                                     h(DonationBanner, { laps: laps.length, variant: 'header' })
                                 ),
-                                h('div', { className: 'relative lg:justify-self-end' },
+                                h('div', { className: 'relative lg:justify-self-end flex items-center gap-4' },
+                                    IS_DISPLAY_ONLY && !isDisplayFullscreen && h('button', { onClick: toggleDisplayFullscreen, className: 'flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm', style: { background: '#fff', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' } }, h(Icon, { name: 'expand', className: 'w-5 h-5' }), h('span', null, 'Volledig scherm')),
                                     h('div', { className: 'text-right', style: { background: '#fff', color: '#17120d', border: '3px solid #17120d', borderRadius: 16, boxShadow: '4px 4px 0 #17120d', padding: '6px 18px', marginRight: isDisplayFullscreen ? 26 : 0 } },
                                         h('div', { style: { fontSize: 12, letterSpacing: '.14em', fontWeight: 800, textTransform: 'uppercase' } }, 'Totaal aantal rondes'),
                                         h('div', { style: { fontSize: 44, fontWeight: 800, lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' } }, totalLaps)
