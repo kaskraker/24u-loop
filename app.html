@@ -724,9 +724,9 @@
         // de tiende kleiner, zoals in uitslagen van sporttijden: 1:21,1
         const lapTenthsEl = (ms) => { const t = lapTenths(ms), i = t.lastIndexOf(','); return h('span', null, t.slice(0, i), h('span', { style: { fontSize: '0.68em' } }, t.slice(i))); };
         const tieRank = (arr, i, f) => { let j = i; while (j > 0 && f(arr[j - 1]) === f(arr[i])) j--; return j + 1; };
-        const lbRow = ({ idx, rank, id, val, name, sub, recent, value, badge }) => { idx = (rank || idx + 1) - 1; return h('div', { key: id, 'data-flip': id, 'data-val': val, className: 'flex items-center justify-between gap-2 px-2.5 rounded-lg', style: { ...lbRowStyle(idx), paddingTop: 7, paddingBottom: 7, color: '#17120d' } },
+        const lbRow = ({ idx, rank, id, val, name, sub, recent, value, badge, noCrown }) => { idx = (rank || idx + 1) - 1; return h('div', { key: id, 'data-flip': id, 'data-val': val, className: 'flex items-center justify-between gap-2 px-2.5 rounded-lg', style: { ...lbRowStyle(idx), paddingTop: 7, paddingBottom: 7, color: '#17120d' } },
             h('div', { className: 'flex items-center gap-2 flex-1 min-w-0' },
-                idx === 0 ? h('svg', { viewBox: '0 0 24 24', width: 26, height: 26, style: { flexShrink: 0 }, 'aria-label': '#1' }, h('path', { d: LB_CROWN, fill: '#fff', stroke: '#17120d', strokeWidth: 1.8, strokeLinejoin: 'round' }))
+                idx === 0 && !noCrown ? h('svg', { viewBox: '0 0 24 24', width: 26, height: 26, style: { flexShrink: 0 }, 'aria-label': '#1' }, h('path', { d: LB_CROWN, fill: '#fff', stroke: '#17120d', strokeWidth: 1.8, strokeLinejoin: 'round' }))
                     : h('span', { className: 'font-extrabold flex-shrink-0 text-center', style: { width: 26, fontSize: idx < 3 ? 16 : 14, color: idx < 3 ? '#17120d' : '#8b7a63' } }, `#${idx + 1}`),
                 badge,
                 h('div', { className: 'min-w-0 flex-1' },
@@ -4939,7 +4939,7 @@ function predictNext(times, gender, restMs) {
                                                     ? [...runnerLaps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]
                                                     : null;
                                                 
-                                                return lbRow({ idx, rank: tieRank(lapsByRunner, idx, x => x.laps), id: runner.id, val: runner.laps, name: runner.name, sub: lastLap ? `Laatste om ${clockOf(lastLap.timestamp)}` : '', recent: lastLap && isRecent(lastLap.timestamp), value: runner.laps, badge: rankBadge('mostLapsOverall', runner.id) });
+                                                return lbRow({ idx, rank: tieRank(lapsByRunner, idx, x => x.laps), id: runner.id, val: runner.laps, name: runner.name, sub: lastLap ? `Laatste om ${clockOf(lastLap.timestamp)}` : '', recent: lastLap && isRecent(lastLap.timestamp), value: runner.laps, noCrown: runner.laps < 2, badge: rankBadge('mostLapsOverall', runner.id) });
                                             })
                                         )
                                     ),
