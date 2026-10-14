@@ -404,21 +404,32 @@ function finishLap(time, startNext, atISO) {
   if (feats.length) buzz([60, 50, 60, 50, 60, 50, 200]);
   const prevLap = [...mine].sort((x, y) => new Date(y.timestamp) - new Date(x.timestamp))[0];
   // Het resultaat neemt ± 30 s de plaats in van het 'Hierna'-blokje (de volgende loper is dan toch net gestart)
-  lastResult = { at: Date.now(), name: run.runnerName, time, n: mine.length + 1, prev: prevLap ? prevLap.time : null, best: isFinite(prevBest) ? prevBest : null, feats };
+  lastResult = { at: Date.now(), lapId, name: run.runnerName, time, n: mine.length + 1, prev: prevLap ? prevLap.time : null, best: isFinite(prevBest) ? prevBest : null, feats };
   resOverride = null; clearTimeout(window._resT); window._resT = setTimeout(render, RES_MAX + 800);
   handoff(run.runnerName, time, startNext && nxt ? nxt.runnerName : null, []);
 }
+// 'Ronde klaar' blijft in de pas met de echte ronde: bijgesteld (hier of elders) of ongedaan gemaakt (ook op een ander toestel)
+function syncResult() {
+  if (!lastResult || !lastResult.lapId) return;
+  const cur = laps.find((l) => l.id === lastResult.lapId);
+  if (!cur) { if (Date.now() - lastResult.at > 4000 && loaded.laps) { lastResult = null; resOverride = null; } return; }
+  if (cur.time !== lastResult.time) {
+    const rn = runners.find((r) => r.id === cur.runnerId), mine = laps.filter((l) => l.runnerId === cur.runnerId && l.id !== cur.id);
+    lastResult.time = cur.time; lastResult.feats = achievements(cur.runnerId, rn, cur.time, mine, cur.id);
+  }
+}
 // Wat is er straf aan deze ronde? De tijdnemer kan het meteen aan de loper melden. Pas vanaf genoeg rondes in de dataset, anders is 'record' niets waard.
-function achievements(rid, rn, time, mine) {
+function achievements(rid, rn, time, mine, exId) {
+  const L = exId ? laps.filter((l) => l.id !== exId) : laps;   // bij een bijstelling: de ronde zelf telt niet mee in de vergelijking
   const out = [], n = mine.length + 1, gOf = (id) => { const r = runners.find((x) => x.id === id); return r && r.gender; }, g = rn && rn.gender;
   const best = (arr) => arr.length ? Math.min(...arr.map((l) => l.time)) : Infinity;
-  if (laps.length >= 5 && time < best(laps)) out.push({ t: 'Nieuw record!', s: 'Snelste ronde tot nu toe' });
+  if (L.length >= 5 && time < best(L)) out.push({ t: 'Nieuw record!', s: 'Snelste ronde tot nu toe' });
   else {
-    const grp = g === 'M' || g === 'V' ? laps.filter((l) => gOf(l.runnerId) === g) : [];
+    const grp = g === 'M' || g === 'V' ? L.filter((l) => gOf(l.runnerId) === g) : [];
     if (grp.length >= 3 && time < best(grp)) out.push({ t: g === 'V' ? 'Record bij de vrouwen' : 'Record bij de mannen', s: 'Snelste ronde van de groep' });
   }
   if (mine.length >= 2 && time < best(mine)) out.push({ t: 'Persoonlijk record', s: `${((best(mine) - time) / 1000).toFixed(1)} s sneller dan zijn/haar beste` });
-  const cnt = {}; laps.forEach((l) => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
+  const cnt = {}; L.forEach((l) => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
   const others = Math.max(0, ...Object.entries(cnt).filter(([id]) => id !== rid).map(([, c]) => c));
   if (n >= 4 && n > others && mine.length <= others) out.push({ t: 'Nu aan de leiding', s: `Meeste rondes: ${n}` });
   else if (n >= 5 && n % 5 === 0) out.push({ t: `${n}e ronde`, s: 'Een mijlpaal!' });
@@ -469,6 +480,7 @@ async function undo(given) {
   activeDocs.filter((d) => d.id !== 'current').forEach((d) => b.delete(ref('activeRunner', d.id)));
   b.set(ref('activeRunner', 'current'), la.prevActive);
   lastAction = null; try { localStorage.removeItem('lastAction_' + NS); } catch (e) {}
+  lastResult = null; resOverride = null; clearTimeout(window._resT); if (window._handEl) window._handEl.remove();   // de foute tijd verdwijnt ook uit 'Ronde klaar'
   commit(b); lockButtons(800); toast('Ongedaan gemaakt: de timer loopt weer', 3500);
 }
 function adjustLast(d, given) {
@@ -831,6 +843,7 @@ function runnerFacts(rid, next) {
 const khead = (pill) => focusMode ? `<div class="khead">${pill}</div>` : `<div class="khead split">${pill}<button class="focusin" data-act="focus" aria-label="Tijdnemer-modus">⤢ Tijdnemer</button></div>`;
 function viewChrono() {
   if (!loaded.queue || !loaded.active) return `<div class="card now" style="background:#fff"><div class="nm" style="color:var(--muted)">Laden…</div><div class="sub">Even geduld, de wachtrij wordt opgehaald</div></div><button class="big wait" disabled>EVEN GEDULD</button>`;
+  syncResult();
   const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
   let top = '', button = '';
   // Vlak na een ronde (± 20 s) neemt een rij van drie knoppen (te vroeg / te laat / foutje) de plaats in van de groene knop; een ronde duurt minstens een minuut, dus er valt dan niets te missen.
