@@ -170,6 +170,15 @@
   .res .rfeat { display: flex; align-items: center; gap: 10px; background: #ffd23f; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 3px 3px 0 var(--ink); padding: 5px 10px; text-align: left; }
   .res .rfeat .st { font-size: 22px; line-height: 1; } .res .rfeat b { display: block; font-size: 16px; font-weight: 800; line-height: 1.1; } .res .rfeat small { display: block; font-size: 12px; font-weight: 600; color: var(--brown); }
   .res .tell { margin-top: 6px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  /* mini-knoppen in de klokkaart: vaste plaats, verschijnen/verdwijnen enkel met doorzichtigheid (verschuiven niets). Klok en naam zijn daarvoor iets kleiner. */
+  .now .nm { font-size: 26px; transition: font-size .35s ease; }
+  .now .clk { font-size: 62px; height: 70px; display: flex; align-items: center; justify-content: center; margin: 0; transition: font-size .35s ease; }
+  .mini { display: flex; justify-content: center; gap: 8px; margin-top: 10px; min-height: 36px; }
+  .mbtn { font: inherit; font-weight: 800; font-size: 13px; line-height: 1; color: var(--ink); background: #fff; border: 2.5px solid var(--ink); border-radius: 999px; box-shadow: 2px 2px 0 var(--ink); padding: 8px 12px; min-height: 36px; transition: opacity .4s ease, transform .4s ease; }
+  .mbtn:active { transform: translate(2px, 2px); box-shadow: none; }
+  .mbtn.err { background: #fecaca; }
+  .mbtn.off { opacity: 0; transform: scale(.85); pointer-events: none; }
+  .sheet .big-adj { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 8px 0 4px; } .sheet .big-adj .btn { text-align: center; margin: 0; font-size: 26px; padding: 18px 8px; }
   .slot > .card[data-act] { cursor: pointer; }
   .swaphint { margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--muted); }
   /* 'Laatste / Ongedaan' en de tijdknoppen zweven boven de knoppen: ze schuiven niets meer naar beneden */
@@ -741,8 +750,22 @@ async function reloadApp() {
   if (pending > 0 && persistence !== 'on' && !(await ask('Vernieuwen?', `${pending} ${pending === 1 ? 'wijziging is' : 'wijzigingen zijn'} nog niet verstuurd en offline-opslag werkt niet in deze browser. Die gaan verloren als je nu vernieuwt.`, { ok: 'Toch vernieuwen', danger: true }))) return;
   location.reload();
 }
+// 'Te vroeg' / 'te laat gedrukt': grote knoppen om de laatste ronde met 1, 3, 5 of 10 s bij te stellen
+let sheetKind = null;
+function adjSheet(kind) {
+  const la = lastLapAction(); sheetKind = kind;
+  if (!la) { $('overlay').innerHTML = ''; sheetKind = null; toast('Geen recente ronde om bij te stellen', 2500); return; }
+  const late = kind === 'late';
+  $('overlay').innerHTML = `<div class="modal" data-act="closeov"><div class="box sheet" style="position:relative"><button class="fx" data-act="closeov" aria-label="Sluiten" style="position:absolute;top:12px;right:12px">✕</button>
+    <h3>${late ? 'Te laat gedrukt' : 'Te vroeg gedrukt'}</h3>
+    <div class="lbl2" style="margin:0 0 4px">${esc(la.lapData.runnerName)} · nu <b>${mmssc(la.time)}</b></div>
+    <div class="lbl2">${late ? 'De ronde was korter: haal er tijd af.' : 'De ronde was langer: voeg er tijd aan toe.'}</div>
+    <div class="big-adj">${adjBtns(late ? [1, 3, 5, 10] : [-1, -3, -5, -10], true)}</div>
+    <button class="btn" data-act="closeov" style="text-align:center;margin-top:8px">Klaar</button></div></div>`;
+}
 // 'Foutje?': alle correcties per situatie, enkel wat op dit moment kan
 function oopsSheet() {
+  sheetKind = null;
   const running = isRunning(), w = waiting(), la = lastLapAction(), b = (act, txt, sub, cls = '') => `<button class="btn ${cls}" data-act="${act}">${txt}${sub ? `<small>${sub}</small>` : ''}</button>`;
   let h = '';
   if (la) {
@@ -809,21 +832,20 @@ function viewChrono() {
   if (!loaded.queue || !loaded.active) return `<div class="card now" style="background:#fff"><div class="nm" style="color:var(--muted)">Laden…</div><div class="sub">Even geduld, de wachtrij wordt opgehaald</div></div><button class="big wait" disabled>EVEN GEDULD</button>`;
   const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
   let top = '', button = '';
+  // mini-knoppen onderaan de kaart (vaste plaats, dus niets verschuift): te vroeg / te laat voor de laatste ronde (90 s), en een foutje
+  const laMini = lastLapAction(), adjOK = !!laMini && Date.now() - laMini.at < 90000, showFix = running || w.length || laMini;
+  const miniRow = `<div class="mini"><button class="mbtn${adjOK ? '' : ' off'}" data-act="early" ${adjOK ? `data-until="${laMini.at + 90000}"` : 'data-until="0"'}>‹ te vroeg</button><button class="mbtn${adjOK ? '' : ' off'}" data-act="late" ${adjOK ? `data-until="${laMini.at + 90000}"` : 'data-until="0"'}>te laat ›</button><button class="mbtn err${showFix ? '' : ' off'}" data-act="oops">foutje?</button></div>`;
   if (running) {
     const run = a.runner, ex = expected(run.runnerId);
-    top = `<div class="card now">${khead('<div class="k"><span class="dot"></span>Nu aan het lopen</div>')}<div class="nm" style="margin-top:6px">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div>${runnerFacts(run.runnerId)}</div>`;
+    top = `<div class="card now">${khead('<div class="k"><span class="dot"></span>Nu aan het lopen</div>')}<div class="nm" style="margin-top:6px">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div>${runnerFacts(run.runnerId)}${miniRow}</div>`;
     const hint = holdMode ? '<span class="hint">houd ingedrukt</span>' : '';
     button = w.length ? `<button class="big hold" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>daarna loopt: ${esc(w[0].runnerName)}</small>${hint}</button>` : `<button class="big hold stop" data-hold="main" ${busy ? 'disabled' : ''}>RONDE KLAAR<small>niemand meer in de rij: de timer stopt</small>${hint}</button>`;
   } else {
-    top = `<div class="card now" style="background:#fff">${khead('<div class="k" style="color:var(--muted)">Klaar om te starten</div>')}<div class="nm" style="margin-top:6px">${w.length ? esc(w[0].runnerName) : '—'}</div>${w.length ? runnerFacts(w[0].runnerId, true) : '<div class="sub">Wachtrij is leeg</div>'}</div>`;
+    top = `<div class="card now" style="background:#fff">${khead('<div class="k" style="color:var(--muted)">Klaar om te starten</div>')}<div class="nm" style="margin-top:6px">${w.length ? esc(w[0].runnerName) : '—'}</div>${w.length ? runnerFacts(w[0].runnerId, true) : '<div class="sub">Wachtrij is leeg</div>'}${miniRow}</div>`;
     button = `<button class="big hold ${w.length ? '' : 'wait'}" data-hold="main" ${(!w.length || busy) ? 'disabled' : ''}>START<small>${w.length ? esc(w[0].runnerName) : 'wacht op een loper'}</small>${holdMode && w.length ? '<span class="hint">houd ingedrukt</span>' : ''}</button>`;
   }
   const recentLaps = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
-  const recentAdj = lastAction && Date.now() - lastAction.at < 90000;
-  const undoLeft = lastAction ? 10000 - (Date.now() - (lastAction.at || 0)) : 0;   // het blokje blijft 10 s staan
-  clearTimeout(window._undoT); if (undoLeft > 0) window._undoT = setTimeout(render, undoLeft + 150);
-  const undoCard = undoLeft > 0 ? `<div class="undo float${undoLeft < 500 ? ' fade' : ''}" data-hideat="${(lastAction.at || 0) + 10000}" style="flex-wrap:wrap"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button>
-    ${recentAdj ? `<div class="corr" style="width:100%"><b>Tijd</b>${adjBtns([5, 1], false, 'small')}${adjBtns([-1, -5], false, 'small')}</div><div style="width:100%;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--muted);padding:0 4px"><span>← te laat gedrukt</span><span>te vroeg gedrukt →</span></div>` : ''}</div>` : '';
+  const undoCard = '';   // het 'Laatste / Ongedaan'-blokje is vervangen door de mini-knoppen in de kaart bovenaan
   const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   // wanneer de volgende loper start (zoals op het grote scherm): de tijdnemer staat het dichtst bij die loper en kan hem verwittigen
   const startIn = (i) => { const ms = waitMs(i); return ms <= 5000 && i === 0 ? 'Start elk moment' : `Start ${waitText(ms, i)} · rond ${clock(tnow() + ms)}`; };
@@ -964,7 +986,7 @@ try { const w = new Worker(URL.createObjectURL(new Blob(['setInterval(function()
 document.addEventListener('visibilitychange', () => { if (!document.hidden) beat(); });
 
 document.addEventListener('click', (e) => {
-  const adj = e.target.closest('[data-adj]'); if (adj) { const inSheet = !!$('overlay').querySelector('.sheet'); adjustLast(Number(adj.dataset.adj), adj.dataset.last ? lastLapAction() : null); if (inSheet) oopsSheet(); return; }
+  const adj = e.target.closest('[data-adj]'); if (adj) { const inSheet = !!$('overlay').querySelector('.sheet'); adjustLast(Number(adj.dataset.adj), adj.dataset.last ? lastLapAction() : null); if (inSheet) { if (sheetKind) adjSheet(sheetKind); else oopsSheet(); } return; }
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
   if (t.dataset.tab) { tab = t.dataset.tab; unfocus(); render(); window.scrollTo(0, 0); return; }
   const a = t.dataset.act, id = t.dataset.id;
@@ -972,6 +994,7 @@ document.addEventListener('click', (e) => {
   if (a === 'nooffer') { offerDone(); render(); return; }
   if (a === 'restoggle') { if (lastResult && Date.now() - lastResult.at < RES_MAX) { resOverride = resShown() ? 'next' : 'result'; buzz('tick'); } return; }
   if (a === 'oops') { oopsSheet(); return; }
+  if (a === 'early' || a === 'late') { adjSheet(a); return; }
   if (a === 'closeov') { if (t.classList.contains('modal') && e.target !== t) return; $('overlay').innerHTML = ''; return; }   // achtergrond of kruisje
   if (a === 'reload') { $('overlay').innerHTML = ''; reloadApp(); return; }
   if (['manual', 'stop', 'swap', 'skip', 'cancel', 'unfocus', 'undo', 'undolast'].includes(a) && $('overlay').querySelector('[data-act=closeov]')) $('overlay').innerHTML = '';
@@ -1041,7 +1064,7 @@ setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
   paceTick();
   const t = Date.now();   // 'Ronde klaar' maakt zacht plaats voor 'Hierna' (en omgekeerd) zodra de 30 s om zijn
-  document.querySelectorAll('[data-hideat]').forEach((el) => el.classList.toggle('fade', t > Number(el.dataset.hideat) - 450));   // het zwevende 'Ongedaan'-blokje vervaagt in de laatste 0,45 s
+  document.querySelectorAll('.mbtn[data-until]').forEach((el) => { if (t > Number(el.dataset.until)) el.classList.add('off'); });   // te vroeg / te laat vervagen na 90 s
   const showRes = resShown();
   document.querySelectorAll('[data-slot=res]').forEach((el) => el.classList.toggle('off', !showRes));
   document.querySelectorAll('[data-slot=next]').forEach((el) => el.classList.toggle('off', showRes));
