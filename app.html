@@ -2630,9 +2630,8 @@ function predictNext(times, gender, restMs) {
                 if (!inner) return null;
                 const sticky = n.type === 'ask' || n.type === 'dup';
                 const ok = n.type === 'ok';
-                // Een zachte crème waas achter de popup verbergt wat eronder staat (zoals het knipperende rode lampje van 'Nu aan het lopen'), zodat niets doorschemert.
                 // Via een portal rechtstreeks onder <body>: binnen de (sticky) linkerkolom viel de popup onder widgets uit de rechterkolom
-                return ReactDOM.createPortal(h('div', { style: { position: 'fixed', left: 0, right: 0, top: 0, zIndex: 100000, padding: '14px 12px 44px', pointerEvents: 'none', background: 'linear-gradient(to bottom, rgba(255,241,207,.98) 0%, rgba(255,241,207,.98) 62%, rgba(255,241,207,0) 100%)', animation: leaving ? 'washOut .45s ease-in both' : 'washIn .3s ease-out both' } },
+                return ReactDOM.createPortal(h('div', { style: { position: 'fixed', left: 0, right: 0, top: 0, zIndex: 100000, padding: '14px 12px 0', pointerEvents: 'none' } },
                     h('div', { onClick: sticky || leaving ? undefined : () => setQueueNotice(null), style: { margin: '0 auto', width: 'min(560px, calc(100vw - 24px))', pointerEvents: leaving ? 'none' : 'auto', animation: leaving ? 'popOut .45s cubic-bezier(.5,0,.8,.4) both' : 'popTop .4s cubic-bezier(.2,.9,.3,1.2) both', cursor: sticky ? 'default' : 'pointer' } },
                         h('div', { style: { marginBottom: '-1rem' } }, inner),
                         ok && h('div', { className: 'keep-light', style: { display: 'flex', alignItems: 'center', gap: 10, background: '#17120d', color: '#fff', border: '3px solid #17120d', borderRadius: 12, boxShadow: '3px 3px 0 #17120d', padding: '8px 12px', fontWeight: 800, fontSize: 14, marginTop: 4 } },
