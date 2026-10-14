@@ -1,7 +1,8 @@
 // Service Worker for 24u Loop Leuven PWA
-const CACHE_NAME = '24u-loop-v10';
+const CACHE_NAME = '24u-loop-v11';
 const urlsToCache = [
   './index.html',
+  './app.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -71,10 +72,10 @@ self.addEventListener('fetch', (event) => {
   // De app-pagina zelf: netwerk eerst (je krijgt altijd de nieuwste versie), met de bewaarde versie als
   // terugval wanneer je offline bent of de verbinding te traag is (4 s). Werkt voor elke ?mode=... variant.
   const reqUrl = new URL(event.request.url);
-  const isLoper = /\/(loper|chrono)(\.html)?$/.test(reqUrl.pathname);   // lopers-app en chronometer: altijd de nieuwste versie
-  const pageKey = './' + (reqUrl.pathname.match(/(loper|chrono)(\.html)?$/) || ['', 'index'])[1] + '.html';
+  const isLoper = true;   // alle app-pagina's (menu, app, lopers-app, chronometer): altijd de nieuwste versie
+  const pageKey = './' + (reqUrl.pathname.match(/\/(index|app|loper|chrono)(\.html)?$/) || ['', 'index'])[1] + '.html';
   const isAppPage = event.request.mode === 'navigate' &&
-    (reqUrl.pathname.endsWith('/') || reqUrl.pathname.endsWith('/index.html') || isLoper);
+    (reqUrl.pathname.endsWith('/') || /\/(index|app|loper|chrono)(\.html)?$/.test(reqUrl.pathname));
   if (isAppPage) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
