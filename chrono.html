@@ -449,7 +449,7 @@ function handoff(fromName, time, toName, feats) {
   const el = document.createElement('div'); el.className = 'hand';
   el.style.animation = `handIn .25s ease-out, handOut .35s ease-in ${dur - 0.45}s forwards`;
   const cap = toName ? `<div class="cap"><div><b>${esc(fromName)}</b><small>${mmssc(time)}</small></div><div><b>${esc(toName)}</b><small>loopt nu</small></div></div>`
-    : `<div class="cap"><div><b>${esc(fromName)}</b><small>ronde klaar: ${mmssc(time)}</small></div><div><b>Timer gestopt</b><small>niemand meer in de rij</small></div></div>`;
+    : `<div class="cap"><div><b>${esc(fromName)}</b><small>net binnen: ${mmssc(time)}</small></div><div><b>Timer gestopt</b><small>niemand meer in de rij</small></div></div>`;
   const badges = feats.length ? `<div class="feats"><div class="tell">Meld aan ${esc(fromName)}:</div>${feats.map((f, i) => `<div class="feat" style="animation-delay:${0.9 + i * 0.25}s"><span class="st">★</span><div><b>${esc(f.t)}</b><small>${esc(f.s)}</small></div></div>`).join('')}</div>` : '';
   el.innerHTML = `${toName ? svg : ''}${cap}${badges}`;
   if (window._handEl) window._handEl.remove();
@@ -871,7 +871,7 @@ function viewChrono() {
   const resCard = (lastResult && resHere) ? (() => { const L = lastResult, d = L.prev != null ? L.time - L.prev : null;
     const facts = `<span><small>Rondje</small>${L.n}</span>${d != null ? `<span class="${d < 0 ? 'good' : 'bad'}"><small>Vorige</small>${d < 0 ? '−' : '+'}${(Math.abs(d) / 1000).toFixed(1)} s</span>` : ''}${L.best != null ? `<span><small>Beste</small>${mmss(L.best)}</span>` : ''}`;
     const feats = L.feats.length ? `<div class="rfeats">${L.feats.map((f) => `<div class="rfeat"><span class="st">★</span><div><b>${esc(f.t)}</b><small>${esc(f.s)}</small></div></div>`).join('')}</div><div class="tell">Meld dit aan ${esc(L.name)}</div>` : '';
-    return `<div class="card nextc res${resLive ? '' : ' off'}${resAge < 800 ? ' fresh' : ''}" data-slot="res"${resTap}><div class="lbl">Ronde klaar</div><div class="nm2">${esc(L.name)}</div><div class="rtime">${mmssc(L.time)}</div><div class="facts">${facts}</div>${feats}${resTap && w.length ? '<div class="swaphint">tik om de volgende loper te zien</div>' : ''}</div>`; })() : '';
+    return `<div class="card nextc res${resLive ? '' : ' off'}${resAge < 800 ? ' fresh' : ''}" data-slot="res"${resTap}><div class="lbl">Net binnen</div><div class="nm2">${esc(L.name)}</div><div class="rtime">${mmssc(L.time)}</div><div class="facts">${facts}</div>${feats}${resTap && w.length ? '<div class="swaphint">tik om de volgende loper te zien</div>' : ''}</div>`; })() : '';
   const nextCard0 = running && w.length ? `<div class="card nextc${resLive ? ' off' : ''}" data-slot="next"${resCard ? resTap : ''}><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${paceBar(w[0].runnerName)}${runnerFacts(w[0].runnerId, true)}${resCard && resTap ? '<div class="swaphint">tik om de laatste ronde te zien</div>' : ''}</div>` : '';
   const nextCard = resCard ? `<div class="slot">${resCard}${nextCard0}</div>` : nextCard0;
   const showOops = running || w.length || lastLapAction();
