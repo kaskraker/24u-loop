@@ -712,8 +712,9 @@
             }, []);
             return chronoOfflineNow();
         };
-        // Duidelijk label bij de lopende loper: rood zolang de chronometer offline is, daarna even groen
-        const ChronoOfflineTag = ({ big }) => {
+        // De 'Nu aan het lopen'-pil zelf verandert mee: wit met rood lampje -> rood met pauze-icoon als de chronometer offline is -> kort groen bij herstel -> weer wit.
+        // Kleur, icoon, tekst en breedte lopen zacht in elkaar over.
+        const LivePill = ({ label, big }) => {
             const off = useChronoOffline(), state = chronoState();
             const prev = React.useRef('ok'), [back, setBack] = React.useState(false);
             React.useEffect(() => {
@@ -721,11 +722,26 @@
                 if (prev.current === 'offline' && state === 'ok') { setBack(true); const t = setTimeout(() => setBack(false), 6000); prev.current = state; return () => clearTimeout(t); }
                 if (state !== 'unknown') prev.current = state;
             }, [state]);
-            if (!off && !back) return null;
-            const fs = big ? 'clamp(12px, 1vw, 22px)' : 12;
-            return h('span', { className: 'inline-flex items-center gap-2 rounded-full px-3 py-0.5 font-extrabold uppercase tracking-wider', style: { background: off ? '#e03131' : '#2fb344', color: '#fff', border: '3px solid #17120d', boxShadow: '2px 2px 0 #17120d', fontSize: fs, animation: 'washIn .35s ease-out both' }, role: 'status' },
-                off ? h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: '#fff', stroke: '#17120d', strokeWidth: 1.5 }, h('rect', { x: 5, y: 4, width: 5, height: 16, rx: 1.5 }), h('rect', { x: 14, y: 4, width: 5, height: 16, rx: 1.5 })) : null,
-                off ? `Chronometer offline · tijd gepauzeerd (laatst ${fmtClock(chronoLink.t)})` : 'Chronometer weer verbonden');
+            const mode = off ? 'off' : back ? 'back' : 'live', KEYS = ['live', 'off', 'back'];
+            const hhmm = chronoLink.t ? new Date(chronoLink.t).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) : '';
+            const T = { live: label, off: `Chronometer offline · tijd gepauzeerd${hhmm ? ` (laatst ${hhmm})` : ''}`, back: 'Chronometer weer verbonden' };
+            const refs = { live: React.useRef(null), off: React.useRef(null), back: React.useRef(null) };
+            const [w, setW] = React.useState({});
+            React.useLayoutEffect(() => {   // breedte van elke tekst meten, zodat de pil zacht kan groeien en krimpen
+                const nw = {}; KEYS.forEach(k => { const el = refs[k].current; nw[k] = el ? Math.ceil(el.offsetWidth) + 1 : 0; });   // offsetWidth: het groot scherm schaalt zichzelf, getBoundingClientRect zou dan een te kleine breedte geven
+                if (KEYS.some(k => nw[k] !== w[k])) setW(nw);
+            });
+            const bg = { live: '#fff', off: '#e03131', back: '#2fb344' }[mode], fg = mode === 'live' ? '#17120d' : '#fff';
+            const lamp = (k, child) => h('span', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', opacity: mode === k ? 1 : 0, transform: mode === k ? 'scale(1)' : 'scale(.4)', transition: 'opacity .35s ease, transform .35s ease' } }, child);
+            return h('div', { className: 'relative inline-flex items-center rounded-full font-extrabold uppercase', role: 'status',
+                style: { background: bg, color: fg, border: '3px solid #17120d', fontSize: big ? 'clamp(12px, 1vw, 22px)' : 12, letterSpacing: '.08em', padding: big ? '1px 12px' : '1px 11px', gap: 8, maxWidth: '100%', transition: 'background-color .5s ease, color .5s ease' } },
+                h('span', { style: { position: 'relative', width: '1.15em', height: '1.15em', flexShrink: 0 } },
+                    lamp('live', h('span', { className: 'relative flex h-2.5 w-2.5' }, h('span', { className: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75' }), h('span', { className: 'relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500' }))),
+                    lamp('off', h('svg', { viewBox: '0 0 24 24', width: '100%', height: '100%', fill: '#fff' }, h('rect', { x: 5, y: 4, width: 5, height: 16, rx: 1.5 }), h('rect', { x: 14, y: 4, width: 5, height: 16, rx: 1.5 }))),
+                    lamp('back', h('svg', { viewBox: '0 0 24 24', width: '100%', height: '100%', fill: 'none', stroke: '#fff', strokeWidth: 3.5, strokeLinecap: 'round', strokeLinejoin: 'round' }, h('path', { d: 'M5 12.5l4.5 4.5L19 7' })))),
+                h('span', { style: { position: 'relative', display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', height: '1.35em', lineHeight: '1.35em', width: w[mode] || 'auto', transition: 'width .55s cubic-bezier(.4, 0, .2, 1)' } },
+                    KEYS.map(k => h('span', { key: k, style: { position: 'absolute', left: 0, top: 0, opacity: mode === k ? 1 : 0, transition: 'opacity .35s ease', pointerEvents: 'none' } }, T[k]))),
+                KEYS.map(k => h('span', { key: 'm' + k, ref: refs[k], 'aria-hidden': true, style: { position: 'absolute', visibility: 'hidden', whiteSpace: 'nowrap', left: 0, top: 0, pointerEvents: 'none' } }, T[k])));
         };
 
         // ===== Klok die vloeiend oploopt zonder de hele app te herrenderen =====
@@ -927,10 +943,7 @@ function lapTileStyle(n) {
                 h('style', null, '@keyframes swapGlow { 0% { box-shadow: 0 0 0 0 rgba(234,88,12,.5); } 100% { box-shadow: 0 0 0 26px rgba(234,88,12,0); } }'),
                 // zachte lichtpuls rond de kaart bij elke nieuwe loper
                 h('div', { key: 'glow' + swapKey, style: { position: 'absolute', inset: -4, borderRadius: 8, pointerEvents: 'none', animation: 'swapGlow .9s ease-out 1' } }),
-                h('div', { className: 'relative inline-flex items-center gap-2 rounded-full px-3 py-0.5 font-extrabold tracking-wider uppercase', style: { background: '#fff', border: '3px solid #17120d', color: '#17120d', fontSize: 'clamp(12px, 1vw, 22px)' } },
-                    h('span', { className: 'relative flex h-2.5 w-2.5' }, h('span', { className: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75' }), h('span', { className: 'relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500' })),
-                    crown ? `Nu aan het lopen · ${crown}` : 'Nu aan het lopen'),
-                h('span', { className: 'ml-3 align-middle' }, h(ChronoOfflineTag, { big: true })),
+                h(LivePill, { label: crown ? `Nu aan het lopen · ${crown}` : 'Nu aan het lopen', big: true }),
                 h('div', { className: 'relative flex items-center gap-3 mt-1' },
                     h('div', { key: swapKey, className: 'flex-1 min-w-0', style: { animation: 'swapIn .5s cubic-bezier(.2,.8,.2,1) 1' } },
                         h('div', { className: 'flex items-center gap-2 min-w-0' },
@@ -4199,9 +4212,7 @@ function predictNext(times, gender, restMs) {
                         activeRunner && isRunning && h('div', { className: 'keep-light', style: { background: '#ffd58a', border: '3px solid #17120d', borderRadius: 16, boxShadow: '5px 5px 0 #17120d', padding: '14px 20px', color: '#17120d' } },
                             h('div', { className: 'flex items-center justify-between gap-4' },
                                 h('div', { className: 'min-w-0' },
-                                    h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', background: '#fff', border: '3px solid #17120d', borderRadius: 999, padding: '1px 11px' } },
-                                        h('span', { style: { width: 9, height: 9, borderRadius: 999, background: '#e24b4a', animation: 'livePulse 1.4s ease-in-out infinite' } }), 'Nu aan het lopen'),
-                                    h('span', { style: { marginLeft: 8 } }, h(ChronoOfflineTag, null)),
+                                    h(LivePill, { label: 'Nu aan het lopen' }),
                                     h('div', { className: 'truncate', style: { fontSize: 28, fontWeight: 800, lineHeight: 1.15, marginTop: 6 } }, activeRunner.runnerName)
                                 ),
                                 h(LiveClock, { startTime, running: isRunning, format: formatTime, className: 'font-extrabold', style: { fontSize: 44, lineHeight: 1, fontVariantNumeric: 'tabular-nums' } })
