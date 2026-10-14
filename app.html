@@ -660,22 +660,54 @@
             label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
+        // ===== Chronometer offline: de chronometer schrijft elke 15 s een levensteken. Blijft dat weg (45 s tot 20 min), dan bevriest de klok op het laatst bekende moment =====
+        // (niet tijdens autoplay, en niet als dit scherm zelf offline is: dan weten we het niet)
+        const chronoLink = { t: null, sub: null };
+        const chronoOfflineNow = () => {
+            if (AUTOPLAY || chronoLink.t == null) return false;
+            try { if (typeof computeConnection === 'function' && computeConnection() === 'offline') return false; } catch (e) {}
+            const age = tnow() - chronoLink.t;
+            return age > 45000 && age < 20 * 60e3;
+        };
+        const effNow = () => chronoOfflineNow() ? chronoLink.t : tnow();   // 'nu' voor alle lopende klokken en pistes
+        const useChronoOffline = () => {
+            const [, tick] = React.useState(0);
+            React.useEffect(() => {
+                if (!chronoLink.sub) { try { if (typeof db !== 'undefined' && db) chronoLink.sub = db.collection(colName('meta')).doc('chrono').onSnapshot((snap) => { const d = snap.exists ? snap.data() : null; chronoLink.t = d && d.t ? d.t : null; }, () => {}); } catch (e) {} }
+                const iv = setInterval(() => tick(n => n + 1), 1500);
+                return () => clearInterval(iv);
+            }, []);
+            return chronoOfflineNow();
+        };
+        // Duidelijk label bij de lopende loper: rood zolang de chronometer offline is, daarna even groen
+        const ChronoOfflineTag = ({ big }) => {
+            const off = useChronoOffline();
+            const prev = React.useRef(false), [back, setBack] = React.useState(false);
+            React.useEffect(() => {
+                if (prev.current && !off) { setBack(true); const t = setTimeout(() => setBack(false), 7000); prev.current = off; return () => clearTimeout(t); }
+                prev.current = off;
+            }, [off]);
+            if (!off && !back) return null;
+            const fs = big ? 'clamp(12px, 1vw, 22px)' : 12;
+            return h('span', { className: 'inline-flex items-center gap-2 rounded-full px-3 py-0.5 font-extrabold uppercase tracking-wider', style: { background: off ? '#e03131' : '#2fb344', color: '#fff', border: '3px solid #17120d', boxShadow: '2px 2px 0 #17120d', fontSize: fs, animation: 'washIn .35s ease-out both' }, role: 'status' },
+                off ? h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: '#fff', stroke: '#17120d', strokeWidth: 1.5 }, h('rect', { x: 5, y: 4, width: 5, height: 16, rx: 1.5 }), h('rect', { x: 14, y: 4, width: 5, height: 16, rx: 1.5 })) : null,
+                off ? `Chronometer offline · tijd gepauzeerd (laatst ${fmtClock(chronoLink.t)})` : 'Chronometer weer verbonden');
+        };
+
         // ===== Klok die vloeiend oploopt zonder de hele app te herrenderen =====
         const LiveClock = ({ startTime, running, format, className, style }) => {
             const ref = React.useRef(null);
+            useChronoOffline();
             React.useEffect(() => {
                 const el = ref.current;
                 if (!el) return;
                 if (!running || !startTime) { el.textContent = format(0); return; }
                 const t0 = +startTime;
-                let raf, last = '';
-                const tick = () => {
-                    const txt = format(Math.max(0, tnow() - t0));
-                    if (txt !== last) { el.textContent = txt; last = txt; }
-                    raf = requestAnimationFrame(tick);
-                };
+                let raf, last = '', dim = false;
+                const upd = () => { const txt = format(Math.max(0, effNow() - t0)); if (txt !== last) { el.textContent = txt; last = txt; } const d = chronoOfflineNow(); if (d !== dim) { dim = d; el.style.transition = 'opacity .4s'; el.style.opacity = d ? 0.4 : 1; } };
+                const tick = () => { upd(); raf = requestAnimationFrame(tick); };
                 tick();
-                const iv = setInterval(() => { const txt = format(Math.max(0, tnow() - t0)); if (txt !== last) { el.textContent = txt; last = txt; } }, 100);   // vangnet als het venster op de achtergrond staat
+                const iv = setInterval(upd, 100);   // vangnet als het venster op de achtergrond staat
                 return () => { cancelAnimationFrame(raf); clearInterval(iv); };
             }, [startTime, running]);
             return h('div', { ref, className, style: { fontVariantNumeric: 'tabular-nums', ...style } }, format(0));
@@ -783,7 +815,7 @@
                 let raf, lastT0 = null, sw = null;
                 const draw = (now) => {
                     const { fastMs: fm, slowMs: sm, t0 } = par.current;
-                    const el = Math.max(0, tnow() - t0);
+                    const el = Math.max(0, effNow() - t0);
                     const thi = Math.min(1, el / fm);
                     const tlo = Math.max(0, Math.min(thi - 0.05, el / sm));
                     // Nieuwe loper: het oude bereik vervaagt (0,25 s), het nieuwe verschijnt vanaf de start (0,25 s)
@@ -843,7 +875,7 @@ function lapTileStyle(n) {
             const best = n ? Math.min(...mine.map(l => l.time)) : null;
             const fastMs = best ? Math.max(expected * (1 - rel), best * 0.99) : expected * 0.82;   // nog nooit gelopen: brede marge
             const slowMs = best ? Math.max(expected * (1 + rel), fastMs * 1.08) : expected * 1.12;
-            const el = startTime ? Math.max(0, tnow() - startTime) : elapsedTime;   // elapsedTime loopt op het scherm maar elke 30 s bij (en is bij een wissel nog die van de vorige loper)
+            const el = startTime ? Math.max(0, effNow() - startTime) : elapsedTime;   // elapsedTime loopt op het scherm maar elke 30 s bij (en is bij een wissel nog die van de vorige loper)
             const hi = Math.min(1, el / fastMs);
             const lo = Math.max(0, Math.min(hi - 0.05, el / slowMs));
             const metersMid = Math.round(((lo + hi) / 2) * 515 / 10) * 10;
@@ -864,6 +896,7 @@ function lapTileStyle(n) {
                 h('div', { className: 'relative inline-flex items-center gap-2 rounded-full px-3 py-0.5 font-extrabold tracking-wider uppercase', style: { background: '#fff', border: '3px solid #17120d', color: '#17120d', fontSize: 'clamp(12px, 1vw, 22px)' } },
                     h('span', { className: 'relative flex h-2.5 w-2.5' }, h('span', { className: 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75' }), h('span', { className: 'relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500' })),
                     crown ? `Nu aan het lopen · ${crown}` : 'Nu aan het lopen'),
+                h('span', { className: 'ml-3 align-middle' }, h(ChronoOfflineTag, { big: true })),
                 h('div', { className: 'relative flex items-center gap-3 mt-1' },
                     h('div', { key: swapKey, className: 'flex-1 min-w-0', style: { animation: 'swapIn .5s cubic-bezier(.2,.8,.2,1) 1' } },
                         h('div', { className: 'flex items-center gap-2 min-w-0' },
@@ -4129,6 +4162,7 @@ function predictNext(times, gender, restMs) {
                                 h('div', { className: 'min-w-0' },
                                     h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', background: '#fff', border: '3px solid #17120d', borderRadius: 999, padding: '1px 11px' } },
                                         h('span', { style: { width: 9, height: 9, borderRadius: 999, background: '#e24b4a', animation: 'livePulse 1.4s ease-in-out infinite' } }), 'Nu aan het lopen'),
+                                    h('span', { style: { marginLeft: 8 } }, h(ChronoOfflineTag, null)),
                                     h('div', { className: 'truncate', style: { fontSize: 28, fontWeight: 800, lineHeight: 1.15, marginTop: 6 } }, activeRunner.runnerName)
                                 ),
                                 h(LiveClock, { startTime, running: isRunning, format: formatTime, className: 'font-extrabold', style: { fontSize: 44, lineHeight: 1, fontVariantNumeric: 'tabular-nums' } })
