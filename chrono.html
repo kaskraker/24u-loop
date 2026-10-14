@@ -137,6 +137,8 @@
   /* estafette-animatie bij een wissel van loper (vervangt de zwarte balk) */
   .hand { position: fixed; left: 14px; right: 14px; top: calc(70px + env(safe-area-inset-top)); z-index: 90; max-width: 420px; margin: 0 auto; pointer-events: none; background: var(--cream); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 5px 5px 0 var(--ink); padding: 8px 12px 10px; animation: handIn .25s ease-out, handOut .35s ease-in 2.55s forwards; }
   .hand svg { display: block; width: 100%; height: auto; }
+  .hand.bare { background: none; border: 0; box-shadow: none; padding: 0; max-width: 560px; }
+  .hand.bare svg { overflow: visible; filter: drop-shadow(0 5px 0 rgba(23, 18, 13, .28)); }
   .hand .cap { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; line-height: 1.2; }
   .hand .cap div:last-child { text-align: right; }
   .hand .cap small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); }
@@ -443,15 +445,18 @@ function handoff(fromName, time, toName, feats) {
   const skin = '#ffcf9e', fist = (x) => `<rect x="${x}" y="36" width="46" height="34" rx="14" fill="${skin}" stroke="#17120d" stroke-width="3"/><path d="M${x + 12} 44v18M${x + 23} 42v22M${x + 34} 44v18" stroke="#17120d" stroke-width="2.5" stroke-linecap="round" fill="none"/>`;
   const svg = `<svg viewBox="0 0 240 90" aria-hidden="true">
     <g class="stick"><rect x="52" y="47" width="62" height="12" rx="6" fill="#e8590c" stroke="#17120d" stroke-width="3"/><rect x="74" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/><rect x="92" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/></g>
-    <g class="armL"><rect x="-40" y="40" width="82" height="26" rx="6" fill="#f2a342" stroke="#17120d" stroke-width="3"/>${fist(40)}</g>
-    <g class="armR"><rect x="198" y="40" width="82" height="26" rx="6" fill="#f2a342" stroke="#17120d" stroke-width="3"/>${fist(154)}</g>
+    <g class="armL"><rect x="-700" y="40" width="742" height="26" rx="6" fill="#f2a342" stroke="#17120d" stroke-width="3"/>${fist(40)}</g>
+    <g class="armR"><rect x="198" y="40" width="742" height="26" rx="6" fill="#f2a342" stroke="#17120d" stroke-width="3"/>${fist(154)}</g>
     <g class="spark" stroke="#17120d" stroke-width="3" stroke-linecap="round"><path d="M120 12v10M104 18l7 7M136 18l-7 7"/></g></svg>`;
   const el = document.createElement('div'); el.className = 'hand';
   el.style.animation = `handIn .25s ease-out, handOut .35s ease-in ${dur - 0.45}s forwards`;
   const cap = toName ? `<div class="cap"><div><b>${esc(fromName)}</b><small>${mmssc(time)}</small></div><div><b>${esc(toName)}</b><small>loopt nu</small></div></div>`
     : `<div class="cap"><div><b>${esc(fromName)}</b><small>net binnen: ${mmssc(time)}</small></div><div><b>Timer gestopt</b><small>niemand meer in de rij</small></div></div>`;
   const badges = feats.length ? `<div class="feats"><div class="tell">Meld aan ${esc(fromName)}:</div>${feats.map((f, i) => `<div class="feat" style="animation-delay:${0.9 + i * 0.25}s"><span class="st">★</span><div><b>${esc(f.t)}</b><small>${esc(f.s)}</small></div></div>`).join('')}</div>` : '';
-  el.innerHTML = `${toName ? svg : ''}${cap}${badges}`;
+  // met een volgende loper: enkel de armen met het stokje, zonder vak of achtergrond; zonder volgende loper (timer stopt) blijft het kaartje met tekst
+  const bare = !!toName && !feats.length;
+  if (bare) el.classList.add('bare');
+  el.innerHTML = bare ? svg : `${toName ? svg : ''}${cap}${badges}`;
   if (window._handEl) window._handEl.remove();
   window._handEl = el; document.body.appendChild(el); setTimeout(() => { if (el.parentNode) el.remove(); }, dur * 1000);
 }
