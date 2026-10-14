@@ -668,7 +668,8 @@
         // 'ok' | 'offline' | 'unknown'. Offline pas na 75 s zonder levensteken (de chronometer tikt elke 15 s; een achtergrond-tab kan tot een minuut vertragen)
         // en weer 'ok' pas als er een vers teken van de server is binnengekomen (niet uit de cache), zodat het niet heen en weer flikkert.
         const chronoState = () => {
-            if (AUTOPLAY || chronoLink.t == null) return 'unknown';
+            // Autoplay (oefenscherm) speelt zelf een loop af: dan tellen we een chronometer pas mee als we hem in deze sessie echt hebben zien leven
+            if (chronoLink.t == null || (AUTOPLAY && !chronoLink.seenLive)) return 'unknown';
             try { if (typeof computeConnection === 'function' && computeConnection() === 'offline') return 'unknown'; } catch (e) {}   // dit scherm zelf is offline: we weten het niet
             const age = tnow() - chronoLink.t;
             if (age > 20 * 60e3) { chronoLink.latched = false; return 'unknown'; }   // al heel lang stil: waarschijnlijk is er geen chronometer in gebruik
@@ -681,7 +682,7 @@
         const useChronoOffline = () => {
             const [, tick] = React.useState(0);
             React.useEffect(() => {
-                if (!chronoLink.sub) { try { if (typeof db !== 'undefined' && db) chronoLink.sub = db.collection(colName('meta')).doc('chrono').onSnapshot({ includeMetadataChanges: true }, (snap) => { const d = snap.exists ? snap.data() : null; chronoLink.t = d && d.t ? d.t : null; chronoLink.fresh = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites; }, () => {}); } catch (e) {} }
+                if (!chronoLink.sub) { try { if (typeof db !== 'undefined' && db) chronoLink.sub = db.collection(colName('meta')).doc('chrono').onSnapshot({ includeMetadataChanges: true }, (snap) => { const d = snap.exists ? snap.data() : null; chronoLink.t = d && d.t ? d.t : null; chronoLink.fresh = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites; if (chronoLink.fresh && chronoLink.t && tnow() - chronoLink.t < 30000) chronoLink.seenLive = true; }, () => {}); } catch (e) {} }
                 const iv = setInterval(() => tick(n => n + 1), 1500);
                 return () => clearInterval(iv);
             }, []);
