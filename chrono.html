@@ -140,6 +140,14 @@
   .hand .cap { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; line-height: 1.2; }
   .hand .cap div:last-child { text-align: right; }
   .hand .cap small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); }
+  .hand .feats { margin-top: 8px; border-top: 3px dashed var(--ink); padding-top: 8px; display: grid; gap: 6px; }
+  .hand .tell { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .hand .feat { display: flex; align-items: center; gap: 10px; background: #ffd23f; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 3px 3px 0 var(--ink); padding: 6px 10px; animation: featIn .45s cubic-bezier(.2,.9,.3,1.4) both; }
+  .hand .feat .st { font-size: 24px; line-height: 1; animation: spin 1.6s ease-in-out .3s 1; }
+  .hand .feat b { display: block; font-size: 18px; font-weight: 800; line-height: 1.1; }
+  .hand .feat small { display: block; font-size: 12px; font-weight: 600; color: var(--brown); }
+  @keyframes featIn { from { transform: scale(.6) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg) scale(1.2); } }
   .hand .armL { animation: armL 2.6s ease-in-out both; } .hand .armR { animation: armR 2.6s ease-in-out both; }
   .hand .stick { animation: stick 2.6s ease-in-out both; }
   .hand .spark { transform-box: fill-box; transform-origin: center; animation: spark 2.6s ease-out both; }
@@ -352,11 +360,31 @@ function finishLap(time, startNext, atISO) {
   lastAction = { lapId: lapRef.id, nextStartISO: (startNext && nxt) ? now : null, lapData, runnerDocId: rn ? rn.id : null, time, queueItem: qi ? { id: qi.id, data: { runnerId: qi.runnerId, runnerName: qi.runnerName, addedAt: qi.addedAt, order: qi.order || 0 } } : null, prevActive: a, at: Date.now(), nextName: nxt ? nxt.runnerName : null };
   try { localStorage.setItem('lastAction_' + NS, JSON.stringify(lastAction)); } catch (e) {}
   commit(b); lockButtons(1500); buzz('lap');
-  if (startNext && nxt) handoff(run.runnerName, time, nxt.runnerName); else toast(`Opgeslagen: ${run.runnerName} ${mmssc(time)}`, 5000);
+  const feats = achievements(run.runnerId, rn, time, mine);
+  if (feats.length) buzz([60, 50, 60, 50, 60, 50, 200]);
+  handoff(run.runnerName, time, startNext && nxt ? nxt.runnerName : null, feats);
+}
+// Wat is er straf aan deze ronde? De tijdnemer kan het meteen aan de loper melden. Pas vanaf genoeg rondes in de dataset, anders is 'record' niets waard.
+function achievements(rid, rn, time, mine) {
+  const out = [], n = mine.length + 1, gOf = (id) => { const r = runners.find((x) => x.id === id); return r && r.gender; }, g = rn && rn.gender;
+  const best = (arr) => arr.length ? Math.min(...arr.map((l) => l.time)) : Infinity;
+  if (laps.length >= 5 && time < best(laps)) out.push({ t: 'Nieuw record!', s: 'Snelste ronde tot nu toe' });
+  else {
+    const grp = g === 'M' || g === 'V' ? laps.filter((l) => gOf(l.runnerId) === g) : [];
+    if (grp.length >= 3 && time < best(grp)) out.push({ t: g === 'V' ? 'Record bij de vrouwen' : 'Record bij de mannen', s: 'Snelste ronde van de groep' });
+  }
+  if (mine.length >= 1 && time < best(mine)) out.push({ t: 'Persoonlijk record', s: `${((best(mine) - time) / 1000).toFixed(1)} s sneller dan zijn/haar beste` });
+  const cnt = {}; laps.forEach((l) => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
+  const others = Math.max(0, ...Object.entries(cnt).filter(([id]) => id !== rid).map(([, c]) => c));
+  if (n >= 4 && n > others && mine.length <= others) out.push({ t: 'Nu aan de leiding', s: `Meeste rondes: ${n}` });
+  else if (n >= 5 && n % 5 === 0) out.push({ t: `${n}e ronde`, s: 'Een mijlpaal!' });
+  return out.slice(0, 3);
 }
 // Estafette-animatie: de ene hand geeft het stokje door aan de volgende. Blokkeert niets (geen aanrakingen), verdwijnt na ± 3 s.
-function handoff(fromName, time, toName) {
+function handoff(fromName, time, toName, feats) {
   $('toastBox').innerHTML = '';
+  feats = feats || [];
+  const dur = feats.length ? 5.5 : 3;   // met iets straf's blijft het kaartje langer staan, zodat de tijdnemer het kan melden
   const skin = '#ffcf9e', fist = (x) => `<rect x="${x}" y="36" width="46" height="34" rx="14" fill="${skin}" stroke="#17120d" stroke-width="3"/><path d="M${x + 12} 44v18M${x + 23} 42v22M${x + 34} 44v18" stroke="#17120d" stroke-width="2.5" stroke-linecap="round" fill="none"/>`;
   const svg = `<svg viewBox="0 0 240 90" aria-hidden="true">
     <g class="stick"><rect x="52" y="47" width="62" height="12" rx="6" fill="#e8590c" stroke="#17120d" stroke-width="3"/><rect x="74" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/><rect x="92" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/></g>
@@ -364,9 +392,13 @@ function handoff(fromName, time, toName) {
     <g class="armR"><rect x="198" y="40" width="82" height="26" rx="6" fill="#f2a342" stroke="#17120d" stroke-width="3"/>${fist(154)}</g>
     <g class="spark" stroke="#17120d" stroke-width="3" stroke-linecap="round"><path d="M120 12v10M104 18l7 7M136 18l-7 7"/></g></svg>`;
   const el = document.createElement('div'); el.className = 'hand';
-  el.innerHTML = `${svg}<div class="cap"><div><b>${esc(fromName)}</b><small>${mmssc(time)}</small></div><div><b>${esc(toName)}</b><small>loopt nu</small></div></div>`;
+  el.style.animation = `handIn .25s ease-out, handOut .35s ease-in ${dur - 0.45}s forwards`;
+  const cap = toName ? `<div class="cap"><div><b>${esc(fromName)}</b><small>${mmssc(time)}</small></div><div><b>${esc(toName)}</b><small>loopt nu</small></div></div>`
+    : `<div class="cap"><div><b>${esc(fromName)}</b><small>ronde klaar: ${mmssc(time)}</small></div><div><b>Timer gestopt</b><small>niemand meer in de rij</small></div></div>`;
+  const badges = feats.length ? `<div class="feats"><div class="tell">Meld aan ${esc(fromName)}:</div>${feats.map((f, i) => `<div class="feat" style="animation-delay:${0.9 + i * 0.25}s"><span class="st">★</span><div><b>${esc(f.t)}</b><small>${esc(f.s)}</small></div></div>`).join('')}</div>` : '';
+  el.innerHTML = `${toName ? svg : ''}${cap}${badges}`;
   if (window._handEl) window._handEl.remove();
-  window._handEl = el; document.body.appendChild(el); setTimeout(() => { if (el.parentNode) el.remove(); }, 3000);
+  window._handEl = el; document.body.appendChild(el); setTimeout(() => { if (el.parentNode) el.remove(); }, dur * 1000);
 }
 // De laatst opgeslagen ronde, ook als een ander toestel (of autoplay) ze opsloeg: zelf opbouwen wat 'ongedaan maken' nodig heeft.
 function lastLapAction() {
