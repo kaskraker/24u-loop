@@ -121,6 +121,34 @@
   .fx.more { right: 58px; }
   .slim { position: fixed; top: env(safe-area-inset-top); left: 0; right: 106px; z-index: 35; background: #fecaca; border-bottom: 3px solid var(--ink); font-size: 13px; font-weight: 800; padding: 6px 12px; }
   .inst { font-size: 14px; font-weight: 600; line-height: 1.5; } .inst b { font-weight: 800; }
+  /* wisselbalk: hoe ver de huidige loper is tegenover zijn verwachte ronde, en wanneer de volgende moet klaarstaan */
+  .pace { margin-top: 8px; }
+  .pace-row { display: flex; align-items: center; gap: 8px; }
+  .pace-track { position: relative; flex: 1; height: 22px; border: 3px solid var(--ink); border-radius: 999px; background: #fff; overflow: hidden; }
+  .pace-zone { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, #b7e4a3 0 6px, #d9f7d0 6px 12px); border-left: 2px solid var(--ink); border-right: 2px solid var(--ink); }
+  .pace-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--orange); border-right: 3px solid var(--ink); }
+  .pace-next { flex: none; width: 34px; height: 34px; border: 3px solid var(--ink); border-radius: 50%; background: #ffd58a; box-shadow: 2px 2px 0 var(--ink); display: grid; place-items: center; font-size: 14px; font-weight: 800; }
+  .pace-txt { margin-top: 6px; font-size: 16px; font-weight: 800; }
+  .pace.soon .pace-next { background: #d9f7d0; animation: nudge .7s ease-in-out infinite; }
+  .pace.soon .pace-txt { color: #1f7a31; }
+  .pace.over .pace-next { background: #fca5a5; animation: nudge .45s ease-in-out infinite; }
+  .pace.over .pace-txt { color: #b42318; }
+  @keyframes nudge { 50% { transform: scale(1.14) rotate(-6deg); } }
+  /* estafette-animatie bij een wissel van loper (vervangt de zwarte balk) */
+  .hand { position: fixed; left: 14px; right: 14px; top: calc(70px + env(safe-area-inset-top)); z-index: 90; max-width: 420px; margin: 0 auto; pointer-events: none; background: var(--cream); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 5px 5px 0 var(--ink); padding: 8px 12px 10px; animation: handIn .25s ease-out, handOut .35s ease-in 2.55s forwards; }
+  .hand svg { display: block; width: 100%; height: auto; }
+  .hand .cap { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; line-height: 1.2; }
+  .hand .cap div:last-child { text-align: right; }
+  .hand .cap small { display: block; font-weight: 500; font-size: 12px; color: var(--muted); }
+  .hand .armL { animation: armL 2.6s ease-in-out both; } .hand .armR { animation: armR 2.6s ease-in-out both; }
+  .hand .stick { animation: stick 2.6s ease-in-out both; }
+  .hand .spark { transform-box: fill-box; transform-origin: center; animation: spark 2.6s ease-out both; }
+  @keyframes handIn { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes handOut { to { transform: translateY(-8px); opacity: 0; } }
+  @keyframes armL { 0% { transform: translateX(-70px); } 22% { transform: translateX(0); } 55% { transform: translateX(14px); } 78% { transform: translateX(-4px); } 100% { transform: translateX(-70px); } }
+  @keyframes armR { 0% { transform: translateX(70px); } 22% { transform: translateX(0); } 55% { transform: translateX(-4px); } 78% { transform: translateX(0); } 100% { transform: translateX(0); } }
+  @keyframes stick { 0% { transform: translateX(-70px); } 22%, 36% { transform: translateX(0); } 58%, 100% { transform: translateX(62px); } }
+  @keyframes spark { 0%, 58% { opacity: 0; transform: scale(.3); } 68% { opacity: 1; transform: scale(1.2); } 90%, 100% { opacity: 0; transform: scale(1.5); } }
   .sec { margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 </style>
 </head>
@@ -324,7 +352,21 @@ function finishLap(time, startNext, atISO) {
   lastAction = { lapId: lapRef.id, nextStartISO: (startNext && nxt) ? now : null, lapData, runnerDocId: rn ? rn.id : null, time, queueItem: qi ? { id: qi.id, data: { runnerId: qi.runnerId, runnerName: qi.runnerName, addedAt: qi.addedAt, order: qi.order || 0 } } : null, prevActive: a, at: Date.now(), nextName: nxt ? nxt.runnerName : null };
   try { localStorage.setItem('lastAction_' + NS, JSON.stringify(lastAction)); } catch (e) {}
   commit(b); lockButtons(1500); buzz('lap');
-  toast(`Opgeslagen: ${run.runnerName} ${mmssc(time)}${startNext && nxt ? `  →  ${nxt.runnerName} loopt` : ''}`, 5000);
+  if (startNext && nxt) handoff(run.runnerName, time, nxt.runnerName); else toast(`Opgeslagen: ${run.runnerName} ${mmssc(time)}`, 5000);
+}
+// Estafette-animatie: de ene hand geeft het stokje door aan de volgende. Blokkeert niets (geen aanrakingen), verdwijnt na ± 3 s.
+function handoff(fromName, time, toName) {
+  $('toastBox').innerHTML = '';
+  const skin = '#ffcf9e', fist = (x) => `<rect x="${x}" y="36" width="46" height="34" rx="14" fill="${skin}" stroke="#17120d" stroke-width="3"/><path d="M${x + 12} 44v18M${x + 23} 42v22M${x + 34} 44v18" stroke="#17120d" stroke-width="2.5" stroke-linecap="round" fill="none"/>`;
+  const svg = `<svg viewBox="0 0 240 90" aria-hidden="true">
+    <g class="stick"><rect x="52" y="47" width="62" height="12" rx="6" fill="#e8590c" stroke="#17120d" stroke-width="3"/><rect x="74" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/><rect x="92" y="47" width="8" height="12" fill="#fff" stroke="#17120d" stroke-width="2"/></g>
+    <g class="armL"><rect x="-40" y="40" width="82" height="26" rx="6" fill="#f2a342" stroke="#17120d" stroke-width="3"/>${fist(40)}</g>
+    <g class="armR"><rect x="198" y="40" width="82" height="26" rx="6" fill="#f2a342" stroke="#17120d" stroke-width="3"/>${fist(154)}</g>
+    <g class="spark" stroke="#17120d" stroke-width="3" stroke-linecap="round"><path d="M120 12v10M104 18l7 7M136 18l-7 7"/></g></svg>`;
+  const el = document.createElement('div'); el.className = 'hand';
+  el.innerHTML = `${svg}<div class="cap"><div><b>${esc(fromName)}</b><small>${mmssc(time)}</small></div><div><b>${esc(toName)}</b><small>loopt nu</small></div></div>`;
+  if (window._handEl) window._handEl.remove();
+  window._handEl = el; document.body.appendChild(el); setTimeout(() => { if (el.parentNode) el.remove(); }, 3000);
 }
 // De laatst opgeslagen ronde, ook als een ander toestel (of autoplay) ze opsloeg: zelf opbouwen wat 'ongedaan maken' nodig heeft.
 function lastLapAction() {
@@ -717,7 +759,9 @@ function viewChrono() {
   const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   // wanneer de volgende loper start (zoals op het grote scherm): de tijdnemer staat het dichtst bij die loper en kan hem verwittigen
   const startIn = (i) => { const ms = waitMs(i); return ms <= 5000 && i === 0 ? 'Start elk moment' : `Start ${waitText(ms, i)} · rond ${clock(tnow() + ms)}`; };
-  const nextCard = running && w.length ? `<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div><div style="font-size:15px;font-weight:800;margin-top:2px">${startIn(0)}</div>${runnerFacts(w[0].runnerId, true)}</div>` : '';
+  // wisselbalk: voortgang van de lopende loper tegenover zijn verwachte ronde; de groene zone is het moment waarop de volgende moet klaarstaan
+  const paceBar = (nm) => `<div class="pace" data-st="${st || ''}" data-exp="${Math.round(expected(a.runner.runnerId))}"><div class="pace-row"><div class="pace-track"><div class="pace-zone"></div><div class="pace-fill"></div></div><div class="pace-next">${esc((nm || '?').trim().charAt(0).toUpperCase())}</div></div><div class="pace-txt">&nbsp;</div></div>`;
+  const nextCard = running && w.length ? `<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${paceBar(w[0].runnerName)}${runnerFacts(w[0].runnerId, true)}</div>` : '';
   const showOops = running || w.length || lastLapAction();
   const bigRow = (fixed) => `<div class="bigrow${fixed ? ' fixed' : ''}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>`;
   if (focusMode) {   // tijdnemer-modus: ook de drie lopers daarna, compact
@@ -879,8 +923,22 @@ listen('activeRunner', (s) => { activeDocs = s.docs.map((d) => ({ id: d.id, data
 }
 staffGate(startData);
 
+function paceTick() {
+  document.querySelectorAll('.pace').forEach((el) => {
+    const st = Number(el.dataset.st), exp = Number(el.dataset.exp); if (!st || !exp) return;
+    const el_ = tnow() - st, total = exp + 20000, rem = exp - el_, ZONE = 12000;
+    const fill = el.querySelector('.pace-fill'), zone = el.querySelector('.pace-zone'), txt = el.querySelector('.pace-txt');
+    fill.style.width = Math.min(100, Math.max(0, el_ / total * 100)) + '%';
+    zone.style.left = ((exp - ZONE) / total * 100) + '%'; zone.style.width = (2 * ZONE / total * 100) + '%';
+    const soon = rem <= 15000 && rem > -ZONE, over = rem <= -ZONE;
+    el.classList.toggle('soon', soon); el.classList.toggle('over', over);
+    const t = over ? 'Kan elk moment: hou je klaar' : soon ? 'Maak je klaar! Wissel nu' : rem < 90000 ? `Wissel over ± ${Math.max(10, Math.round(rem / 10000) * 10)} s` : `Wissel over ± ${Math.round(rem / 60000)} min`;
+    if (txt.textContent !== t) txt.textContent = t;
+  });
+}
 setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
+  paceTick();
 }, 50);
 setInterval(render, 5000);
 window.addEventListener('online', render); window.addEventListener('offline', render);

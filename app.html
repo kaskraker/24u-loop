@@ -2530,7 +2530,7 @@ function predictNext(times, gender, restMs) {
                 handleAddResult(await addNewRunnerCore({ first: firstName, last: lastName, gender: genderInput }, forceNew === true));
             };
 
-            const renderQueueNotice = () => {
+            const renderQueueNoticeInner = () => {
                 if (!queueNotice) return null;
                 const box = (bg) => ({ className: 'keep-light mb-4 rounded-xl p-3 text-sm', style: { background: bg, color: '#17120d', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d' } });
                 const btn = (bg) => ({ className: 'px-3 py-1.5 rounded-lg font-extrabold', style: { background: bg, color: '#17120d', border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d' } });
@@ -2563,6 +2563,14 @@ function predictNext(times, gender, restMs) {
                     h('div', { className: 'text-sm font-bold text-gray-800' }, queueNotice.text),
                     h('div', { className: 'text-2xl font-extrabold text-gray-900' }, queueNotice.detail));
                 return h('div', { className: 'keep-light mb-4 rounded-xl px-3 py-2 text-sm font-bold', style: { background: bg, color: '#17120d', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d' } }, queueNotice.text);
+            };
+            // De melding zweeft onderaan het scherm, zodat het formulier niet naar beneden schuift (tik op een gewone melding om hem te sluiten).
+            const renderQueueNotice = () => {
+                const inner = renderQueueNoticeInner();
+                if (!inner) return null;
+                const sticky = queueNotice.type === 'ask' || queueNotice.type === 'dup';
+                return h('div', { onClick: sticky ? undefined : () => setQueueNotice(null), style: { position: 'fixed', left: 0, right: 0, margin: '0 auto', bottom: '20px', width: 'min(560px, calc(100vw - 24px))', zIndex: 60, animation: 'swapIn .35s cubic-bezier(.2,.8,.2,1) both', cursor: sticky ? 'default' : 'pointer' } },
+                    h('div', { style: { marginBottom: '-1rem' } }, inner));
             };
 
             // Actieve loper: één document met vaste id ("current"); geen leesactie, werkt dus ook offline
