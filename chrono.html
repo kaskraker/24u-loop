@@ -170,7 +170,12 @@
   .res .rfeat { display: flex; align-items: center; gap: 10px; background: #ffd23f; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 3px 3px 0 var(--ink); padding: 5px 10px; text-align: left; }
   .res .rfeat .st { font-size: 22px; line-height: 1; } .res .rfeat b { display: block; font-size: 16px; font-weight: 800; line-height: 1.1; } .res .rfeat small { display: block; font-size: 12px; font-weight: 600; color: var(--brown); }
   .res .tell { margin-top: 6px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  .undo { animation: slotIn .4s ease-out both; }
+  .slot > .card[data-act] { cursor: pointer; }
+  .swaphint { margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--muted); }
+  /* 'Laatste / Ongedaan' en de tijdknoppen zweven boven de knoppen: ze schuiven niets meer naar beneden */
+  .undo.float { position: fixed; left: 14px; right: 14px; bottom: calc(86px + env(safe-area-inset-bottom)); max-width: 532px; margin: 0 auto; z-index: 60; box-shadow: 4px 4px 0 var(--ink); background: var(--cream); animation: slotIn .4s ease-out both; transition: opacity .45s ease, transform .45s ease; }
+  body.focus .undo.float { bottom: calc(142px + env(safe-area-inset-bottom)); }
+  .undo.float.fade { opacity: 0; transform: translateY(10px); pointer-events: none; }
   .sec { margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 </style>
 </head>
@@ -328,7 +333,15 @@ function ask(title, text, { ok = 'Ja, doorgaan', danger = false, input = null, c
 }
 
 // ===== schrijfacties (één atomaire batch; wacht niet op de server: werkt ook offline) =====
-let lastResult = null; const RES_MS = 30000;
+let lastResult = null, resOverride = null; const RES_AUTO = 30000, RES_MAX = 50000;
+// Welk blokje staat er in de gedeelde plaats? Standaard 'Ronde klaar' tot 30 s; een tik wisselt naar 'Hierna' en weer terug; na 50 s definitief 'Hierna'.
+function resShown() {
+  if (!lastResult) return false;
+  const age = Date.now() - lastResult.at;
+  if (age >= RES_MAX) return false;
+  if (resOverride) return resOverride === 'result';
+  return age < RES_AUTO;
+}
 let localChangeAt = 0, stopNote = null;   // laatste eigen schrijfactie; melding als de lopende loper door iemand anders gestopt wordt
 function commit(batch) {
   localChangeAt = Date.now();
@@ -382,7 +395,7 @@ function finishLap(time, startNext, atISO) {
   const prevLap = [...mine].sort((x, y) => new Date(y.timestamp) - new Date(x.timestamp))[0];
   // Het resultaat neemt ± 30 s de plaats in van het 'Hierna'-blokje (de volgende loper is dan toch net gestart)
   lastResult = { at: Date.now(), name: run.runnerName, time, n: mine.length + 1, prev: prevLap ? prevLap.time : null, best: isFinite(prevBest) ? prevBest : null, feats };
-  clearTimeout(window._resT); window._resT = setTimeout(render, RES_MS + 800);
+  resOverride = null; clearTimeout(window._resT); window._resT = setTimeout(render, RES_MAX + 800);
   handoff(run.runnerName, time, startNext && nxt ? nxt.runnerName : null, []);
 }
 // Wat is er straf aan deze ronde? De tijdnemer kan het meteen aan de loper melden. Pas vanaf genoeg rondes in de dataset, anders is 'record' niets waard.
@@ -809,7 +822,7 @@ function viewChrono() {
   const recentAdj = lastAction && Date.now() - lastAction.at < 90000;
   const undoLeft = lastAction ? 10000 - (Date.now() - (lastAction.at || 0)) : 0;   // het blokje blijft 10 s staan
   clearTimeout(window._undoT); if (undoLeft > 0) window._undoT = setTimeout(render, undoLeft + 150);
-  const undoCard = undoLeft > 0 ? `<div class="undo" style="flex-wrap:wrap"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button>
+  const undoCard = undoLeft > 0 ? `<div class="undo float${undoLeft < 500 ? ' fade' : ''}" data-hideat="${(lastAction.at || 0) + 10000}" style="flex-wrap:wrap"><b>Laatste: ${esc(lastAction.lapData.runnerName)} ${mmssc(lastAction.time)}</b><button class="btn small danger" data-act="undo">Ongedaan</button>
     ${recentAdj ? `<div class="corr" style="width:100%"><b>Tijd</b>${adjBtns([5, 1], false, 'small')}${adjBtns([-1, -5], false, 'small')}</div><div style="width:100%;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--muted);padding:0 4px"><span>← te laat gedrukt</span><span>te vroeg gedrukt →</span></div>` : ''}</div>` : '';
   const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   // wanneer de volgende loper start (zoals op het grote scherm): de tijdnemer staat het dichtst bij die loper en kan hem verwittigen
@@ -817,13 +830,12 @@ function viewChrono() {
   // wisselbalk: voortgang van de lopende loper tegenover zijn verwachte ronde; de groene zone is het moment waarop de volgende moet klaarstaan
   const paceBar = (nm) => `<div class="pace" data-st="${st || ''}" data-exp="${Math.round(expected(a.runner.runnerId))}"><div class="pace-row"><div class="pace-track"><div class="pace-zone"></div><div class="pace-fill"></div></div><div class="pace-next">${esc((nm || '?').trim().charAt(0).toUpperCase())}</div></div><div class="pace-txt">&nbsp;</div></div>`;
   // resultaat van de laatste ronde: ± 30 s op dezelfde plaats als 'Hierna', met een zachte overgang (beide staan op elkaar in één cel)
-  const resAge = lastResult ? Date.now() - lastResult.at : Infinity, resLive = resAge < RES_MS, resHere = resAge < RES_MS + 1500;
-  const resUntil = lastResult ? lastResult.at + RES_MS : 0;
+  const resAge = lastResult ? Date.now() - lastResult.at : Infinity, resLive = resShown(), resHere = resAge < RES_MAX + 1500, resTap = resAge < RES_MAX ? ' data-act="restoggle"' : '';
   const resCard = (lastResult && resHere) ? (() => { const L = lastResult, d = L.prev != null ? L.time - L.prev : null;
     const facts = `<span><small>Rondje</small>${L.n}</span>${d != null ? `<span class="${d < 0 ? 'good' : 'bad'}"><small>Vorige</small>${d < 0 ? '−' : '+'}${(Math.abs(d) / 1000).toFixed(1)} s</span>` : ''}${L.best != null ? `<span><small>Beste</small>${mmss(L.best)}</span>` : ''}`;
     const feats = L.feats.length ? `<div class="rfeats">${L.feats.map((f) => `<div class="rfeat"><span class="st">★</span><div><b>${esc(f.t)}</b><small>${esc(f.s)}</small></div></div>`).join('')}</div><div class="tell">Meld dit aan ${esc(L.name)}</div>` : '';
-    return `<div class="card nextc res${resLive ? '' : ' off'}${resAge < 800 ? ' fresh' : ''}" data-showuntil="${resUntil}"><div class="lbl">Ronde klaar</div><div class="nm2">${esc(L.name)}</div><div class="rtime">${mmssc(L.time)}</div><div class="facts">${facts}</div>${feats}</div>`; })() : '';
-  const nextCard0 = running && w.length ? `<div class="card nextc${resLive ? ' off' : ''}" data-hideuntil="${resUntil}"><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${paceBar(w[0].runnerName)}${runnerFacts(w[0].runnerId, true)}</div>` : '';
+    return `<div class="card nextc res${resLive ? '' : ' off'}${resAge < 800 ? ' fresh' : ''}" data-slot="res"${resTap}><div class="lbl">Ronde klaar</div><div class="nm2">${esc(L.name)}</div><div class="rtime">${mmssc(L.time)}</div><div class="facts">${facts}</div>${feats}${resTap && w.length ? '<div class="swaphint">tik om de volgende loper te zien</div>' : ''}</div>`; })() : '';
+  const nextCard0 = running && w.length ? `<div class="card nextc${resLive ? ' off' : ''}" data-slot="next"${resCard ? resTap : ''}><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${paceBar(w[0].runnerName)}${runnerFacts(w[0].runnerId, true)}${resCard && resTap ? '<div class="swaphint">tik om de laatste ronde te zien</div>' : ''}</div>` : '';
   const nextCard = resCard ? `<div class="slot">${resCard}${nextCard0}</div>` : nextCard0;
   const showOops = running || w.length || lastLapAction();
   const bigRow = (fixed) => `<div class="bigrow${fixed ? ' fixed' : ''}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>`;
@@ -953,6 +965,7 @@ document.addEventListener('click', (e) => {
   const a = t.dataset.act, id = t.dataset.id;
   if (a === 'focus') { setFocus(true); return; }
   if (a === 'nooffer') { offerDone(); render(); return; }
+  if (a === 'restoggle') { if (lastResult && Date.now() - lastResult.at < RES_MAX) { resOverride = resShown() ? 'next' : 'result'; buzz('tick'); } return; }
   if (a === 'oops') { oopsSheet(); return; }
   if (a === 'closeov') { if (t.classList.contains('modal') && e.target !== t) return; $('overlay').innerHTML = ''; return; }   // achtergrond of kruisje
   if (a === 'reload') { $('overlay').innerHTML = ''; reloadApp(); return; }
@@ -1023,8 +1036,10 @@ setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
   paceTick();
   const t = Date.now();   // 'Ronde klaar' maakt zacht plaats voor 'Hierna' (en omgekeerd) zodra de 30 s om zijn
-  document.querySelectorAll('[data-showuntil]').forEach((el) => el.classList.toggle('off', t > Number(el.dataset.showuntil)));
-  document.querySelectorAll('[data-hideuntil]').forEach((el) => el.classList.toggle('off', t <= Number(el.dataset.hideuntil)));
+  document.querySelectorAll('[data-hideat]').forEach((el) => el.classList.toggle('fade', t > Number(el.dataset.hideat) - 450));   // het zwevende 'Ongedaan'-blokje vervaagt in de laatste 0,45 s
+  const showRes = resShown();
+  document.querySelectorAll('[data-slot=res]').forEach((el) => el.classList.toggle('off', !showRes));
+  document.querySelectorAll('[data-slot=next]').forEach((el) => el.classList.toggle('off', showRes));
 }, 50);
 setInterval(render, 5000);
 window.addEventListener('online', render); window.addEventListener('offline', render);
