@@ -373,7 +373,7 @@ function achievements(rid, rn, time, mine) {
     const grp = g === 'M' || g === 'V' ? laps.filter((l) => gOf(l.runnerId) === g) : [];
     if (grp.length >= 3 && time < best(grp)) out.push({ t: g === 'V' ? 'Record bij de vrouwen' : 'Record bij de mannen', s: 'Snelste ronde van de groep' });
   }
-  if (mine.length >= 1 && time < best(mine)) out.push({ t: 'Persoonlijk record', s: `${((best(mine) - time) / 1000).toFixed(1)} s sneller dan zijn/haar beste` });
+  if (mine.length >= 2 && time < best(mine)) out.push({ t: 'Persoonlijk record', s: `${((best(mine) - time) / 1000).toFixed(1)} s sneller dan zijn/haar beste` });
   const cnt = {}; laps.forEach((l) => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
   const others = Math.max(0, ...Object.entries(cnt).filter(([id]) => id !== rid).map(([, c]) => c));
   if (n >= 4 && n > others && mine.length <= others) out.push({ t: 'Nu aan de leiding', s: `Meeste rondes: ${n}` });
