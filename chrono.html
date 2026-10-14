@@ -159,7 +159,7 @@
   @keyframes spark { 0%, 58% { opacity: 0; transform: scale(.3); } 68% { opacity: 1; transform: scale(1.2); } 90%, 100% { opacity: 0; transform: scale(1.5); } }
   /* 'Hierna' en 'Ronde klaar' delen één plaats en lopen zacht in elkaar over */
   .slot { display: grid; align-items: start; }   /* de hoogte volgt (zacht) het blokje dat je ziet: zie slotFit() */
-  .slot > .card { grid-area: 1 / 1; transition: opacity .6s ease, transform .6s ease; }
+  .slot > .card { grid-area: 1 / 1; transition: opacity .28s ease, transform .28s ease; }
   .slot > .card.off { opacity: 0; transform: translateY(10px) scale(.98); pointer-events: none; }
   .card.res { background: #d9f7d0; }
   .card.res.fresh { animation: slotIn .6s cubic-bezier(.2,.9,.3,1.1) both; }
@@ -171,13 +171,14 @@
   .res .rfeat .st { font-size: 22px; line-height: 1; } .res .rfeat b { display: block; font-size: 16px; font-weight: 800; line-height: 1.1; } .res .rfeat small { display: block; font-size: 12px; font-weight: 600; color: var(--brown); }
   .res .tell { margin-top: 6px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   /* mini-knoppen in de klokkaart: vaste plaats, verschijnen/verdwijnen enkel met doorzichtigheid (verschuiven niets). Klok en naam zijn daarvoor iets kleiner. */
-  .now .nm { font-size: 26px; transition: font-size .35s ease; }
-  .now .clk { font-size: 62px; height: 70px; display: flex; align-items: center; justify-content: center; margin: 0; transition: font-size .35s ease; }
-  .mini { display: flex; justify-content: center; gap: 8px; margin-top: 10px; min-height: 36px; }
-  .mbtn { font: inherit; font-weight: 800; font-size: 13px; line-height: 1; color: var(--ink); background: #fff; border: 2.5px solid var(--ink); border-radius: 999px; box-shadow: 2px 2px 0 var(--ink); padding: 8px 12px; min-height: 36px; transition: opacity .4s ease, transform .4s ease; }
-  .mbtn:active { transform: translate(2px, 2px); box-shadow: none; }
-  .mbtn.err { background: #fecaca; }
-  .mbtn.off { opacity: 0; transform: scale(.85); pointer-events: none; }
+  /* grote knoppenrij: de groene knop en de rij 'te vroeg / te laat / foutje' liggen op elkaar en vervagen in elkaar over */
+  .bigrow.stack { display: grid; }
+  .bigrow.stack > .layer { grid-area: 1 / 1; display: flex; gap: 10px; align-items: stretch; min-width: 0; transition: opacity .4s ease, transform .4s ease; }
+  .bigrow.stack > .layer.off { opacity: 0; transform: scale(.97); pointer-events: none; }
+  .bigrow.stack > .layer > .big { flex: 1; min-width: 0; }
+  .fixbtn { flex: 1; min-width: 0; min-height: 104px; font: inherit; font-size: 22px; font-weight: 800; line-height: 1.15; color: var(--ink); background: #fff; border: 4px solid var(--ink); border-radius: 22px; box-shadow: 6px 6px 0 var(--ink); padding: 8px; }
+  .fixbtn:active { transform: translate(4px, 4px); box-shadow: 2px 2px 0 var(--ink); }
+  .fixbtn.err { background: #fca5a5; }
   .sheet .big-adj { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 8px 0 4px; } .sheet .big-adj .btn { text-align: center; margin: 0; font-size: 26px; padding: 18px 8px; }
   .slot > .card[data-act] { cursor: pointer; }
   .swaphint { margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--muted); }
@@ -832,9 +833,10 @@ function viewChrono() {
   if (!loaded.queue || !loaded.active) return `<div class="card now" style="background:#fff"><div class="nm" style="color:var(--muted)">Laden…</div><div class="sub">Even geduld, de wachtrij wordt opgehaald</div></div><button class="big wait" disabled>EVEN GEDULD</button>`;
   const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
   let top = '', button = '';
-  // mini-knoppen onderaan de kaart (vaste plaats, dus niets verschuift): te vroeg / te laat voor de laatste ronde (90 s), en een foutje
-  const laMini = lastLapAction(), adjOK = !!laMini && Date.now() - laMini.at < 90000, showFix = running || w.length || laMini;
-  const miniRow = `<div class="mini"><button class="mbtn${adjOK ? '' : ' off'}" data-act="early" ${adjOK ? `data-until="${laMini.at + 90000}"` : 'data-until="0"'}>‹ te vroeg</button><button class="mbtn${adjOK ? '' : ' off'}" data-act="late" ${adjOK ? `data-until="${laMini.at + 90000}"` : 'data-until="0"'}>te laat ›</button><button class="mbtn err${showFix ? '' : ' off'}" data-act="oops">foutje?</button></div>`;
+  // Vlak na een ronde (± 20 s) neemt een rij van drie knoppen (te vroeg / te laat / foutje) de plaats in van de groene knop; een ronde duurt minstens een minuut, dus er valt dan niets te missen.
+  // Daarna vervaagt de rij en komt de groene knop zacht terug (beide liggen op elkaar in dezelfde plaats).
+  const FIX_MS = 20000, laMini = lastLapAction(), fixUntil = laMini ? laMini.at + FIX_MS : 0, fixOn = Date.now() < fixUntil;
+  const miniRow = '';
   if (running) {
     const run = a.runner, ex = expected(run.runnerId);
     top = `<div class="card now">${khead('<div class="k"><span class="dot"></span>Nu aan het lopen</div>')}<div class="nm" style="margin-top:6px">${esc(run.runnerName)}</div><div class="clk" data-live="${st || ''}">${mmssc(st ? tnow() - st : 0)}</div>${runnerFacts(run.runnerId)}${miniRow}</div>`;
@@ -860,7 +862,8 @@ function viewChrono() {
   const nextCard0 = running && w.length ? `<div class="card nextc${resLive ? ' off' : ''}" data-slot="next"${resCard ? resTap : ''}><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${paceBar(w[0].runnerName)}${runnerFacts(w[0].runnerId, true)}${resCard && resTap ? '<div class="swaphint">tik om de laatste ronde te zien</div>' : ''}</div>` : '';
   const nextCard = resCard ? `<div class="slot">${resCard}${nextCard0}</div>` : nextCard0;
   const showOops = running || w.length || lastLapAction();
-  const bigRow = (fixed) => `<div class="bigrow${fixed ? ' fixed' : ''}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>`;
+  const fixBtns = `<button class="fixbtn" data-act="early">‹ te vroeg</button><button class="fixbtn" data-act="late">te laat ›</button><button class="fixbtn err" data-act="oops">foutje?</button>`;
+  const bigRow = (fixed) => `<div class="bigrow stack${fixed ? ' fixed' : ''}"><div class="layer${fixOn ? ' off' : ''}" data-fixmain="${fixUntil}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>${laMini ? `<div class="layer fix${fixOn ? '' : ' off'}" data-fixlayer="${fixUntil}">${fixBtns}</div>` : ''}</div>`;
   if (focusMode) {   // tijdnemer-modus: ook de drie lopers daarna, compact
     const after = w.slice(1, 4).map((q, i) => `<div class="row"><div class="no">${i + 2}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + 1), i + 1)}<small>rond ${clock(tnow() + waitMs(i + 1))}</small></div></div>`).join('');
     return `${top}${undoCard}${nextCard || (running ? '<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">Niemand meer</div></div>' : '')}${after ? `<div class="card" style="padding:10px 12px"><h2 style="font-size:15px;margin-bottom:6px">Daarna <small>${w.length} wachtend</small></h2>${after}</div>` : ''}${bigRow(true)}`;
@@ -1054,7 +1057,7 @@ function slotFit() {
   const s = document.querySelector('.slot'); if (!s) return;
   const vis = s.querySelector('.card:not(.off)'); if (!vis) return;
   const hgt = vis.offsetHeight; if (!hgt || s.dataset.h === String(hgt)) return;
-  s.style.transition = s.dataset.h ? 'height .55s cubic-bezier(.4, 0, .2, 1)' : 'none';
+  s.style.transition = s.dataset.h ? 'height .3s cubic-bezier(.4, 0, .2, 1)' : 'none';
   s.style.height = hgt + 'px'; s.dataset.h = String(hgt);
 }
 function paceTick() {
@@ -1074,7 +1077,8 @@ setInterval(() => {
   document.querySelectorAll('[data-live]').forEach((el) => { const st = Number(el.dataset.live); if (st) el.textContent = mmssc(tnow() - st); });
   paceTick();
   const t = Date.now();   // 'Ronde klaar' maakt zacht plaats voor 'Hierna' (en omgekeerd) zodra de 30 s om zijn
-  document.querySelectorAll('.mbtn[data-until]').forEach((el) => { if (t > Number(el.dataset.until)) el.classList.add('off'); });   // te vroeg / te laat vervagen na 90 s
+  document.querySelectorAll('[data-fixmain]').forEach((el) => el.classList.toggle('off', t < Number(el.dataset.fixmain)));     // groene knop komt terug na 20 s
+  document.querySelectorAll('[data-fixlayer]').forEach((el) => el.classList.toggle('off', t >= Number(el.dataset.fixlayer)));
   slotFit();
   const showRes = resShown();
   document.querySelectorAll('[data-slot=res]').forEach((el) => el.classList.toggle('off', !showRes));
