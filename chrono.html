@@ -954,9 +954,14 @@ document.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-ho
 let batt = null, nagUntil = 0;
 (async () => { try { if (navigator.getBattery) { batt = await navigator.getBattery(); const upd = () => { if (batt.level <= 0.2 && !batt.charging) buzz('warn'); render(); }; batt.addEventListener('levelchange', upd); batt.addEventListener('chargingchange', render); render(); } } catch (e) {} })();
 setInterval(() => { if (!batt) { nagUntil = Date.now() + 60000; buzz('warn'); render(); } }, 90 * 60e3);   // geen batterij-uitlezing (iPhone): elk anderhalf uur een herinnering
-setInterval(() => {   // laat de wachtrij-laptop weten dat de chronometer actief is
-  db.collection(col('meta')).doc('chrono').set({ t: tnow(), battery: batt ? Math.round(batt.level * 100) : null, charging: batt ? !!batt.charging : null, pending }, { merge: true }).catch(() => {});
-}, 15000);
+// Levensteken voor de schermen: elke 15 s. Een achtergrond-tab wordt door de browser tot ± 1 keer per minuut afgeremd, en dan leek de chronometer ten onrechte offline;
+// daarom tikt de klok ook in een aparte worker (die wordt niet afgeremd), en bij het terugkeren naar de app sturen we meteen een teken.
+let beatSeq = 0;
+function beat() {
+  db.collection(col('meta')).doc('chrono').set({ t: tnow(), seq: ++beatSeq, hidden: !!document.hidden, battery: batt ? Math.round(batt.level * 100) : null, charging: batt ? !!batt.charging : null, pending }, { merge: true }).catch(() => {});
+}
+try { const w = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},15000)'], { type: 'text/javascript' }))); w.onmessage = beat; } catch (e) { setInterval(beat, 15000); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) beat(); });
 
 document.addEventListener('click', (e) => {
   const adj = e.target.closest('[data-adj]'); if (adj) { const inSheet = !!$('overlay').querySelector('.sheet'); adjustLast(Number(adj.dataset.adj), adj.dataset.last ? lastLapAction() : null); if (inSheet) oopsSheet(); return; }
