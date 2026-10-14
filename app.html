@@ -993,7 +993,7 @@ function lapTileStyle(n) {
                     h('span', { className: 'text-xs font-semibold text-gray-600' }, 'net binnengekomen')
                 ),
                 h('div', { style: { minHeight: SHOW * 53 } },   // altijd even hoog, ook met minder dan 5 rondes
-                recent.length === 0 ? h('div', { className: 'text-center text-gray-400 py-6' }, 'Nog geen rondes…') : h(FlipBox, { className: 'divide-y divide-gray-100' },
+                recent.length === 0 ? h('div', { className: 'text-center text-gray-400 py-6' }, 'Nog geen rondes…') : h(FlipBox, { className: '' },
                     recent.map((lap, idx) => {
                         const d = new Date(lap.timestamp);
                         const hk = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate() + '-' + d.getHours();
@@ -1005,7 +1005,9 @@ function lapTileStyle(n) {
                         const fresh = lap.id && performance.now() - (seen.current[lap.id] ?? -1e9) < FRESH_MS;
                         const special = isOverall || isHour;
                         const pr = stats.runner[lap.runnerId];
-                        return h('div', { key: lap.id || idx, 'data-flip': lap.id || idx, className: `flex items-center gap-3 py-1.5 px-2 -mx-2 rounded-lg ${fresh ? (special ? 'lap-record' : 'lap-fresh') : ''}` },
+                        // Nieuwe ronde: gevuld vlak met zwarte rand en harde schaduw (net als de top-3 in de ranglijsten); na een minuut vervaagt het zacht terug naar een gewone rij. Records zijn goud.
+                        const hot = fresh ? { background: special ? '#ffd23f' : '#ffd58a', borderColor: '#17120d', boxShadow: '3px 3px 0 #17120d' } : { background: 'rgba(255,213,138,0)', borderColor: 'rgba(23,18,13,0)', boxShadow: '0 0 0 rgba(23,18,13,0)' };
+                        return h('div', { key: lap.id || idx, 'data-flip': lap.id || idx, className: `flex items-center gap-3 -mx-2 rounded-lg ${fresh && special ? 'lap-record' : ''}`, style: { padding: '3px 5px', borderWidth: 3, borderStyle: 'solid', transition: 'background-color .9s ease, border-color .9s ease, box-shadow .9s ease', ...hot } },
                             h('div', { className: 'w-[58px] flex-shrink-0 leading-tight' },
                                 h('div', { className: 'font-mono font-bold text-base text-gray-900' }, d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })),
                                 h('div', { className: 'text-[11px] text-gray-500 whitespace-nowrap' }, ago(lap.timestamp))
