@@ -158,7 +158,7 @@
   @keyframes stick { 0% { transform: translateX(-70px); } 22%, 36% { transform: translateX(0); } 58%, 100% { transform: translateX(62px); } }
   @keyframes spark { 0%, 58% { opacity: 0; transform: scale(.3); } 68% { opacity: 1; transform: scale(1.2); } 90%, 100% { opacity: 0; transform: scale(1.5); } }
   /* 'Hierna' en 'Ronde klaar' delen één plaats en lopen zacht in elkaar over */
-  .slot { display: grid; min-height: 150px; }
+  .slot { display: grid; align-items: start; }   /* de hoogte volgt (zacht) het blokje dat je ziet: zie slotFit() */
   .slot > .card { grid-area: 1 / 1; transition: opacity .6s ease, transform .6s ease; }
   .slot > .card.off { opacity: 0; transform: translateY(10px) scale(.98); pointer-events: none; }
   .card.res { background: #d9f7d0; }
@@ -942,8 +942,10 @@ function render() {
   // Enkel opnieuw opbouwen als er echt iets veranderd is: zo herstart de wisselbalk (en haar animatie) niet bij elke vernieuwing
   const key = html.replace(/(data-live="\d*">)[^<]*/g, '$1');   // de lopende klokken tellen zelf door
   if (key !== lastViewHtml || !$('view').firstChild) {
-    const old = $('view').querySelector('.pace');
+    const old = $('view').querySelector('.pace'), oldSlot = $('view').querySelector('.slot');
     $('view').innerHTML = html; lastViewHtml = key;
+    const newSlot = $('view').querySelector('.slot');   // hoogte van de gedeelde plaats meenemen, anders springt hij heel even
+    if (oldSlot && newSlot && oldSlot.dataset.h) { newSlot.style.transition = 'none'; newSlot.style.height = oldSlot.style.height; newSlot.dataset.h = oldSlot.dataset.h; }
     const nw = $('view').querySelector('.pace');   // de balk zelf blijft staan (geen schokje) zolang het dezelfde loper en dezelfde verwachting is
     if (old && nw && old.dataset.st === nw.dataset.st && old.dataset.exp === nw.dataset.exp && old.querySelector('.pace-next').textContent === nw.querySelector('.pace-next').textContent) nw.replaceWith(old);
   }
@@ -1047,6 +1049,14 @@ listen('activeRunner', (s) => {
 }
 staffGate(startData);
 
+// De gedeelde plaats van 'Ronde klaar' en 'Hierna' krimpt of groeit zacht mee met het blokje dat zichtbaar is (geen sprong als het ene het andere vervangt of verdwijnt).
+function slotFit() {
+  const s = document.querySelector('.slot'); if (!s) return;
+  const vis = s.querySelector('.card:not(.off)'); if (!vis) return;
+  const hgt = vis.offsetHeight; if (!hgt || s.dataset.h === String(hgt)) return;
+  s.style.transition = s.dataset.h ? 'height .55s cubic-bezier(.4, 0, .2, 1)' : 'none';
+  s.style.height = hgt + 'px'; s.dataset.h = String(hgt);
+}
 function paceTick() {
   document.querySelectorAll('.pace').forEach((el) => {
     const st = Number(el.dataset.st), exp = Number(el.dataset.exp); if (!st || !exp) return;
@@ -1065,6 +1075,7 @@ setInterval(() => {
   paceTick();
   const t = Date.now();   // 'Ronde klaar' maakt zacht plaats voor 'Hierna' (en omgekeerd) zodra de 30 s om zijn
   document.querySelectorAll('.mbtn[data-until]').forEach((el) => { if (t > Number(el.dataset.until)) el.classList.add('off'); });   // te vroeg / te laat vervagen na 90 s
+  slotFit();
   const showRes = resShown();
   document.querySelectorAll('[data-slot=res]').forEach((el) => el.classList.toggle('off', !showRes));
   document.querySelectorAll('[data-slot=next]').forEach((el) => el.classList.toggle('off', showRes));
