@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2a342">
+<link rel="icon" href="icon-192.png">
+<title>24u Loop apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap">
+<style>
+  /* Layout: één smalle kolom zoals de apps zelf (boter, dikke zwarte randen, harde schaduw); bewust één licht thema, gelijk aan de apps */
+  :root {
+    --butter: #fff1cf; --cream: #fff6df; --ink: #17120d; --orange: #f2a342; --deep: #e8590c; --muted: #6a5a48; --green: #d9f7d0; --card: #ffffff;
+    --display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+    --body: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--butter); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5; }
+  .wrap { max-width: 720px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+  header { background: var(--orange); border-bottom: 3px solid var(--ink); padding: 20px 16px 18px; }
+  header .in { max-width: 720px; margin: 0 auto; }
+  h1 { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 6vw, 40px); line-height: 1.05; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  header p { margin: 6px 0 0; font-weight: 700; }
+  h2 { font-family: var(--display); font-size: 13px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 30px 2px 10px; }
+  p { margin: 0; }
+  .card { background: var(--card); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 5px 5px 0 var(--ink); padding: 16px; }
+  .start { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; margin-top: 20px; background: var(--green); }
+  .start b { display: block; font-family: var(--display); font-size: 20px; font-weight: 800; }
+  .url { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 14px; background: var(--card); border: 2px solid var(--ink); border-radius: 8px; padding: 3px 8px; overflow-wrap: anywhere; }
+  button { font: inherit; font-weight: 800; font-size: 14px; color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 2px 2px 0 var(--ink); padding: 4px 12px; cursor: pointer; }
+  button:active { transform: translate(2px, 2px); box-shadow: none; }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--deep); outline-offset: 2px; }
+  #qr { width: 116px; height: 116px; background: #fff; border: 3px solid var(--ink); border-radius: 10px; padding: 6px; }
+  #qr svg { display: block; width: 100%; height: 100%; }
+  .apps { display: grid; gap: 14px; }
+  .app { display: grid; gap: 6px; }
+  .app .top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+  .app h3 { font-family: var(--display); font-size: 20px; font-weight: 800; margin: 0; }
+  .who { font-size: 13px; font-weight: 800; background: var(--cream); border: 2px solid var(--ink); border-radius: 999px; padding: 1px 10px; white-space: nowrap; }
+  .app ul { margin: 2px 0 0; padding-left: 20px; }
+  .app li { margin: 2px 0; }
+  .app .link { font-size: 14px; font-weight: 700; color: var(--muted); }
+  .app .link a { color: var(--ink); font-weight: 800; }
+  a { color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  td { padding: 7px 0; border-bottom: 2px dashed #e5d3a8; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { font-weight: 800; padding-right: 14px; white-space: nowrap; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .fact { background: var(--cream); border: 2px solid var(--ink); border-radius: 12px; padding: 8px 12px; }
+  .fact small { display: block; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .fact b { font-family: var(--display); font-size: 19px; font-weight: 800; }
+  .tips { display: grid; gap: 10px; }
+  .tips .card p + p { margin-top: 4px; }
+  .tips b { font-weight: 800; }
+  ol.check { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+  .oef { background: var(--cream); }
+  .pill { display: inline-block; background: var(--deep); color: #fff; font-size: 12px; font-weight: 800; border: 2px solid var(--ink); border-radius: 999px; padding: 0 8px; vertical-align: 2px; letter-spacing: 0; text-transform: none; }
+  footer { margin-top: 30px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  @media (max-width: 480px) { .start { grid-template-columns: 1fr; } #qr { justify-self: start; } td:first-child { white-space: normal; } }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+</style>
+</head>
+<body>
+
+<header><div class="in">
+  <h1>24u Loop Leuven · de apps</h1>
+  <p>Humasol × Atlas Copco · Water for All · di 20 okt 20:00 → wo 21 okt 20:00</p>
+</div></header>
+
+<div class="wrap">
+  <div class="card start">
+    <div>
+      <b>Eén link voor alles</b>
+      <p>Dit menu opent elke app, voor het echte event en om te oefenen.</p>
+      <div class="url"><code id="menuUrl">https://kaskraker.github.io/24u-loop/</code><button type="button" id="copy">Kopieer</button></div>
+    </div>
+    <div id="qr" role="img" aria-label="QR-code naar het menu"></div>
+  </div>
+
+  <h2>Wie gebruikt wat</h2>
+  <div class="apps">
+    <div class="card app">
+      <div class="top"><h3>Lopers-app</h3><span class="who">lopers, via de QR-code</span></div>
+      <ul>
+        <li>Eigen plaats in de wachtrij en wanneer je ongeveer start.</li>
+        <li>Geluid en melding als je 2e en 1e in de rij staat.</li>
+        <li>Eigen rondes en tijden, rankings, en een deelkaart voor Instagram.</li>
+      </ul>
+      <div class="link">Link: <a href="https://kaskraker.github.io/24u-loop/loper.html" target="_blank" rel="noopener">loper.html</a></div>
+    </div>
+    <div class="card app">
+      <div class="top"><h3>Inschrijflaptop</h3><span class="who">Humasollers en lopers aan de stand</span></div>
+      <ul>
+        <li>"Al eens gelopen?" Zoek je naam en druk op Enter om in de rij te komen.</li>
+        <li>"Eerste keer?" Voornaam, achternaam en klassement (Mannen / Vrouwen / Geen).</li>
+        <li>Wachtrij verschuiven of iemand verwijderen.</li>
+      </ul>
+      <div class="link">Link: <a href="https://kaskraker.github.io/24u-loop/app.html?mode=signup" target="_blank" rel="noopener">app.html?mode=signup</a></div>
+    </div>
+    <div class="card app">
+      <div class="top"><h3>Groot scherm</h3><span class="who">tweede scherm of beamer</span></div>
+      <ul>
+        <li>Wie loopt er nu, met de piste en de volgende lopers.</li>
+        <li>Top 10 snelste rondes (vrouwen, mannen), meeste rondes, weetjes en het weer.</li>
+        <li>Klik op "Volledig scherm"; het scherm past zichzelf aan.</li>
+      </ul>
+      <div class="link">Link: <a href="https://kaskraker.github.io/24u-loop/app.html?mode=display" target="_blank" rel="noopener">app.html?mode=display</a></div>
+    </div>
+    <div class="card app">
+      <div class="top"><h3>Chronometer</h3><span class="who">één tijdnemer, met een gsm</span></div>
+      <ul>
+        <li>Grote groene knop ingedrukt houden: ronde klaar, de volgende loper start meteen.</li>
+        <li>Na een ronde: "te vroeg", "te laat" en "foutje?" voor elke correctie.</li>
+        <li>Tijdnemer-modus: enkel klok, volgende lopers en de grote knop.</li>
+        <li>Ook beheer zonder pincode: rij, rondes en lopers aanpassen.</li>
+        <li>In Beheer: "Installeren op beginscherm", dan werkt hij als een app.</li>
+      </ul>
+      <div class="link">Link: <a href="https://kaskraker.github.io/24u-loop/chrono.html" target="_blank" rel="noopener">chrono.html</a></div>
+    </div>
+    <div class="card app">
+      <div class="top"><h3>Beheer &amp; klassement</h3><span class="who">medewerkers, met pincode</span></div>
+      <ul>
+        <li>Volledige beheer op een laptop: lopers, rondes, gegevens downloaden (csv), alles wissen.</li>
+        <li>Zonder pincode: de publieke rankings.</li>
+        <li>De pincode krijg je van Kasper.</li>
+      </ul>
+      <div class="link">Link: <a href="https://kaskraker.github.io/24u-loop/app.html" target="_blank" rel="noopener">app.html</a></div>
+    </div>
+  </div>
+
+  <h2>Oefenen <span class="pill">OEFEN</span></h2>
+  <div class="card oef">
+    <p>In het menu staat onder "Oefenen" elke app nog eens, met aparte testdata. Wat je daar doet, raakt het echte event niet.</p>
+    <p style="margin-top:6px">Het oefen-groot scherm speelt met <b>autoplay</b> het event van vorig jaar live af: lopers, wissels en rondes komen vanzelf binnen. Laat dat venster open. Open je ook de oefen-chronometer, kies dan "Enkel meekijken", anders stopt de replay.</p>
+  </div>
+
+  <h2>Goed om te weten</h2>
+  <div class="facts">
+    <div class="fact"><small>Per ronde</small><b>€ 5</b> voor Water for All</div>
+    <div class="fact"><small>Ronde</small><b>515 m</b>, minstens 1 minuut</div>
+    <div class="fact"><small>Tijden</small><b>naar boven</b> afgerond, zoals in de atletiek</div>
+  </div>
+  <div class="tips" style="margin-top:12px">
+    <div class="card">
+      <p><b>Geen internet?</b> Gewoon verder werken. Alles wordt op het toestel bewaard en vanzelf verstuurd zodra de verbinding terug is.</p>
+    </div>
+    <div class="card">
+      <p><b>Eén chronometer tegelijk.</b> Open je de chronometer op een andere gsm, dan vraagt hij "Overnemen van Huawei-1234?". Overnemen kan altijd; de vorige gsm kijkt dan enkel mee.</p>
+      <p>Valt de vorige gsm offline en komt hij later terug, dan verstuurt hij niets meer. Hij toont de rondes die nog ontbreken, zodat je ze kan toevoegen of laten vallen.</p>
+    </div>
+    <div class="card">
+      <p><b>Iets loopt niet meer mee?</b> In de chronometer: Beheer → App vernieuwen (in de tijdnemer-modus: ↻ bovenaan). Er gaat niets verloren.</p>
+    </div>
+  </div>
+
+  <h2>Vóór het event</h2>
+  <div class="card">
+    <ol class="check">
+      <li>Testdata uit het echte event wissen: Beheer (pincode) → Wissen.</li>
+      <li>Op elke laptop, elk scherm en elke gsm de pagina één keer vernieuwen, zodat iedereen de laatste versie heeft.</li>
+      <li>Chronometer op de gsm van de tijdnemer installeren op het beginscherm en de tijdnemer-modus aanzetten.</li>
+      <li>Gsm van de tijdnemer aan de lader; scherm wakker houden staat aan.</li>
+      <li>Hotspot of wifi testen met alle toestellen tegelijk.</li>
+    </ol>
+  </div>
+
+  <footer>Humasol vzw · 24u Loop Leuven 2026 · vragen: Kasper</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+  (function () {
+    var url = document.getElementById('menuUrl').textContent.trim();
+    try { var q = qrcode(0, 'M'); q.addData(url); q.make(); document.getElementById('qr').innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); } catch (e) { document.getElementById('qr').hidden = true; }
+    var btn = document.getElementById('copy');
+    btn.addEventListener('click', function () {
+      var done = function () { btn.textContent = 'Gekopieerd'; setTimeout(function () { btn.textContent = 'Kopieer'; }, 1800); };
+      var fallback = function () { var r = document.createRange(); r.selectNodeContents(document.getElementById('menuUrl')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Geselecteerd: kopieer met Ctrl+C'; };
+      try { navigator.clipboard.writeText(url).then(done, fallback); } catch (e) { fallback(); }
+    });
+  })();
+</script>
+</body>
+</html>
