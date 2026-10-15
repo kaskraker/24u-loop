@@ -864,8 +864,8 @@
         function trackBand(el, fast, slow) {
           const hi = Math.min(1, el / fast);
           if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi };
-          // Langer weg dan de traagste verwachting: het laatste stukje schuift steeds trager tot aan de finishlijn en is na 60 s helemaal weg
-          const t = Math.min(1, (el - slow) / 60000), w = 0.05 * (1 - t) * (1 - t);
+          // Langer weg dan de traagste verwachting: het laatste stukje schuift steeds trager tot aan de finishlijn en is na 20 s helemaal weg
+          const t = Math.min(1, (el - slow) / 20000), w = 0.05 * (1 - t) * (1 - t);
           return { lo: 1 - w, hi: 1, gone: w < 0.0005 };
         }
         // Wissel van loper: het oude bereik schuift de finish in, aan de stand gaat een ring open (stokje doorgegeven) en het nieuwe bereik vertrekt daar
