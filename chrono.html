@@ -866,7 +866,9 @@ function viewChrono() {
   }
   const recentLaps = [...laps].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
   const undoCard = '';   // het 'Laatste / Ongedaan'-blokje is vervangen door de mini-knoppen in de kaart bovenaan
-  const next = w.slice(1, 6).map((q, i) => { const idx = i + 1; /* de eerste staat al in 'Hierna' (of bovenaan als niemand loopt) */ return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
+  // de eerste wachtende staat al in 'Hierna' (of bovenaan als niemand loopt); staat 'Net binnen' op die plaats, dan begint de lijst bij de eerste
+  const from = running && resShown() ? 0 : 1;
+  const next = w.slice(from, from + 5).map((q, i) => { const idx = i + from; return `<div class="row"><div class="no">${idx + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(idx), idx)}<small>rond ${clock(tnow() + waitMs(idx))}</small></div></div>`; }).join('');
   // wanneer de volgende loper start (zoals op het grote scherm): de tijdnemer staat het dichtst bij die loper en kan hem verwittigen
   const startIn = (i) => { const ms = waitMs(i); return ms <= 5000 && i === 0 ? 'Start elk moment' : `Start ${waitText(ms, i)} · rond ${clock(tnow() + ms)}`; };
   // wisselbalk: voortgang van de lopende loper tegenover zijn verwachte ronde; de groene zone is het moment waarop de volgende moet klaarstaan
@@ -890,7 +892,7 @@ function viewChrono() {
   const fixBtns = `<button class="fixbtn" data-act="early">‹ te vroeg</button><button class="fixbtn" data-act="late">te laat ›</button><button class="fixbtn err" data-act="oops">foutje?</button>`;
   const bigRow = (fixed) => `<div class="bigrow stack${fixed ? ' fixed' : ''}"><div class="layer${fixOn ? ' off' : ''}" data-fixmain="${fixUntil}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>${laMini ? `<div class="layer fix${fixOn ? '' : ' off'}" data-fixlayer="${fixUntil}">${fixBtns}</div>` : ''}</div>`;
   if (focusMode) {   // tijdnemer-modus: ook de drie lopers daarna, compact
-    const after = w.slice(1, 4).map((q, i) => `<div class="row"><div class="no">${i + 2}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + 1), i + 1)}<small>rond ${clock(tnow() + waitMs(i + 1))}</small></div></div>`).join('');
+    const after = w.slice(from, from + 3).map((q, i) => `<div class="row"><div class="no">${i + from + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + from), i + from)}<small>rond ${clock(tnow() + waitMs(i + from))}</small></div></div>`).join('');
     return `${top}${undoCard}${nextCard || (running ? '<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">Niemand meer</div></div>' : '')}${after ? `<div class="card" style="padding:10px 12px"><h2 style="font-size:15px;margin-bottom:6px">Daarna <small>${w.length} wachtend</small></h2>${after}</div>` : ''}${bigRow(true)}`;
   }
   const offer = focusOffer ? `<div class="card" style="background:#d9f7d0;padding:12px 14px"><div style="font-size:17px;font-weight:800">Ben jij de tijdnemer?</div><div class="lbl2" style="margin:2px 0 10px">Enkel de klok, de volgende lopers en de grote knop, vast onderaan.</div><div class="row2"><button class="btn primary" data-act="focus">Start tijdnemer-modus</button><button class="btn" data-act="nooffer">Nee</button></div></div>` : '';
