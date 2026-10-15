@@ -2052,7 +2052,10 @@ function predictNext(times, gender, restMs) {
                 let apBeat = 0, hiddenSince = 0, lateMax = 0;   // lateMax: hoeveel ms de autoplay te laat was (browser remt het tabblad af?)
                 const beatAp = () => { if (stopped || chronoLink.owner !== 'autoplay' || Date.now() - apBeat < 15000) return; apBeat = Date.now(); chronoRef().set({ t: tnow(), hidden: !!document.hidden, late: lateMax }, { merge: true }).catch(() => {}); };
                 const claimAp = () => { apBeat = Date.now(); chronoLink.owner = 'autoplay'; chronoRef().set({ owner: 'autoplay', ownerName: 'Autoplay', ownerSince: tnow(), t: tnow(), hidden: false }, { merge: true }).catch(() => {}); };
-                if (wk) wk.addEventListener('message', beatAp); const apIv = setInterval(beatAp, 15000);
+                // apart levensteken 'de autoplay staat klaar' (ook als een chronometer overnam), zodat die chronometer kan teruggeven
+                let apAlive = 0; const beatAlive = () => { if (stopped || Date.now() - apAlive < 15000) return; apAlive = Date.now(); db.collection(colName('meta')).doc('autoplay').set({ t: tnow() }).catch(() => {}); };
+                const beats = () => { beatAp(); beatAlive(); };
+                if (wk) wk.addEventListener('message', beats); const apIv = setInterval(beats, 15000);
                 const EARLY = Date.UTC(2000, 0, 1);      // wachtrij-items van autoplay staan altijd vóór handmatig toegevoegde
                 const lapId = (seq) => `import_l_${String(seq).padStart(4, '0')}`;
                 const qItem = (l) => ({ runnerId: l.runnerId, runnerName: l.name, gender: l.gender || null, addedAt: new Date(EARLY + l.seq * 1000).toISOString(), order: l.seq });

@@ -850,6 +850,7 @@ function renderChrome() {
   else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
   else if (loaded.queue && isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand meer na deze loper.</div>`;
   if (role === 'viewer' && !conflict) ban = `<div class="banner">Meekijken: ${owner && owner.name ? `<b>${esc(owner.name)}</b>` : 'een ander toestel'} neemt de tijden.</div>` + ban;
+  else if (isOwner() && autoplayReady()) ban = `<div class="banner" style="display:flex;align-items:center;gap:10px"><span style="flex:1">De autoplay wacht</span><button class="btn small" data-act="toautoplay">Terug naar autoplay</button></div>` + ban;
   else if (netPaused && isOwner()) ban = `<div class="banner red">Geen verbinding. Je kan gewoon doorgaan: alles wordt bewaard op dit toestel en verstuurd zodra het internet terug is.</div>`;
   $('banner').innerHTML = ban;
   document.body.classList.toggle('focus', focusMode);
@@ -982,6 +983,7 @@ function viewMore() {
     <div class="row"><div class="nm">Batterij<small>${batt ? `${Math.round(batt.level * 100)}%${batt.charging ? ' · aan de lader' : ' · niet aan de lader'}` : 'kan niet worden uitgelezen op dit toestel (iPhone): zet de gsm aan de lader'}</small></div></div>
     <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
     <div class="row"><div class="nm">Dit toestel<small>${esc(device.name)} · ${isOwner() ? 'neemt de tijden' : role === 'viewer' ? 'kijkt mee' : '…'}</small></div><button class="btn small" data-act="rename">Naam</button></div>
+    ${isOwner() && autoplayReady() ? '<div class="row"><div class="nm">Autoplay<small>wacht tot je teruggeeft</small></div><button class="btn small primary" data-act="toautoplay">Teruggeven</button></div>' : ''}
     <div class="row"><div class="nm">Tijdnemer-modus<small>enkel klok, wachtrij en de grote knop</small></div><button class="btn small primary" data-act="focus">Start</button></div>
     <div class="row"><div class="nm">App vernieuwen<small>als iets niet meer meeloopt; niets gaat verloren</small></div><button class="btn small" data-act="reload">↻</button></div>
     <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
@@ -1059,6 +1061,16 @@ async function claim() {   // dit toestel wordt de chronometer
     await db.collection(col('meta')).doc('chrono').set({ owner: device.id, ownerName: device.name, ownerSince: tnow(), t: tnow() }, { merge: true });
     setRole('owner'); $('overlay').innerHTML = ''; buzz('start'); toast(`${device.name} neemt nu de tijden`, 3000); beat();
   } catch (e) { toast('Overnemen mislukt: ' + (e.code || e.message), 4000); }
+}
+// Oefenmodus: staat er een autoplay klaar (levensteken < 45 s), dan kan dit toestel de tijden teruggeven
+let autoplayT = 0;
+if (NS) db.collection(col('meta')).doc('autoplay').onSnapshot((s) => { const t = s.exists ? s.data().t || 0 : 0; if (t !== autoplayT) { autoplayT = t; render(); } }, () => {});
+const autoplayReady = () => !!NS && !!autoplayT && tnow() - autoplayT < 45000;
+async function toAutoplay() {
+  try {
+    await db.collection(col('meta')).doc('chrono').set({ owner: 'autoplay', ownerName: 'Autoplay', ownerSince: tnow(), t: tnow(), hidden: false }, { merge: true });
+    setRole('viewer'); toast('De autoplay neemt de tijden weer', 3000);
+  } catch (e) { toast('Lukt niet: ' + (e.code || e.message), 4000); }
 }
 function gate() {   // bij het openen: een ander toestel is de chronometer
   gateShown = true;
@@ -1173,6 +1185,7 @@ document.addEventListener('click', (e) => {
   const a = t.dataset.act, id = t.dataset.id;
   if (a === 'focus') { setFocus(true); return; }
   if (a === 'takeover') { claim(); return; }
+  if (a === 'toautoplay') { toAutoplay(); return; }
   if (a === 'cfadd') { resolveConflict(true); return; }
   if (a === 'cfdrop') { resolveConflict(false); return; }
   if (a === 'rename') { ask('Naam van dit toestel', 'Zo zien andere toestellen dit toestel, bv. bij "Overnemen van …".', { input: device.name, ok: 'Opslaan' }).then((v) => { if (v && v.trim()) { device.name = v.trim().slice(0, 24); try { localStorage.setItem(DEV_KEY, JSON.stringify(device)); } catch (e) {} if (isOwner()) db.collection(col('meta')).doc('chrono').set({ ownerName: device.name }, { merge: true }).catch(() => {}); render(); } }); return; }
@@ -1224,7 +1237,7 @@ listen('activeRunner', (s) => {
   const was = loaded.active && isRunning(), who = was ? activeData().runner.runnerName : '';
   activeDocs = s.docs.map((d) => ({ id: d.id, data: d.data() }));
   // De loper stopte zonder dat deze chronometer iets deed (en niet door een lokale schrijfactie die nog onderweg is): een ander toestel of de autoplay van een scherm?
-  if (was && !isRunning() && Date.now() - localChangeAt > 5000 && !s.metadata.hasPendingWrites) {
+  if (was && !isRunning() && isOwner() && Date.now() - localChangeAt > 5000 && !s.metadata.hasPendingWrites) {   // enkel voor wie de tijden neemt
     const replay = queue.some((q) => String(q.id).startsWith('replay_q_'));
     stopNote = { at: Date.now(), who, replay };
     try { const log = JSON.parse(localStorage.getItem('stoplog_' + NS) || '[]'); log.push({ at: new Date().toISOString(), who, replay }); localStorage.setItem('stoplog_' + NS, JSON.stringify(log.slice(-20))); } catch (e) {}
