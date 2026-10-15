@@ -2,7 +2,7 @@
   "name": "24u Loop Leuven Tracker",
   "short_name": "24u Loop",
   "description": "Live tracking en tijdregistratie voor de 24-uurs loop van Humasol",
-  "start_url": "./index.html",
+  "start_url": "./app.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#f2a342",
