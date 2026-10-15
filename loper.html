@@ -46,6 +46,7 @@
   .cd b { display: block; font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
   .cd small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--brown); margin-top: 3px; }
   .cd > div.sec { background: #f2a342; }
+  .status.final { background: #ffd58a; transition: background .6s; } .status.final .cd > div.sec { background: #e8590c; color: #fff; } .status.final .cd > div.sec small { color: #fff; }
   .cdtrack { display: block; width: 100%; max-width: 280px; margin: 12px auto 2px; overflow: visible; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .tile { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; background: #fff6df; border: 2px solid var(--ink); border-radius: 12px; padding: 10px 12px; } .tile .k { font-size: 11px; font-weight: 700; color: var(--muted); } .tile .v { font-size: 24px; font-weight: 800; }
@@ -251,11 +252,13 @@ function expected(rid) {
 function waitMs(idx) {
   let t = 0;
   if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(active.runner.runnerId) - (st ? tnow() - st : 0)); }
+  else if (phase() === 'before') t = eventStart - tnow();   // nog niet gestart: de eerste loper vertrekt bij de start
   const w = waiting();
   for (let j = 0; j < idx && j < w.length; j++) t += 2000 + expected(w[j].runnerId);
   return t;
 }
 function waitText(ms, idx) {
+  if (ms >= 90 * 60e3) return `rond ${clock(tnow() + ms)}`;   // nog lang (vóór de start): een uur i.p.v. honderden minuten
   if (idx === 0 && ms <= 5000) return 'elk moment';
   if (idx === 0 && ms < 90000) return `± ${Math.max(10, Math.round(ms / 10000) * 10)} s`;
   return `± ${Math.max(1, Math.round(ms / 60000))} min`;
@@ -273,7 +276,8 @@ function statusCard(r, self = true) {
   const ms = waitMs(idx);
   const head = self ? (idx === 0 ? 'Jij bent de volgende' : `Je staat ${idx + 1}e in de rij`) : (idx === 0 ? `${fn} is de volgende` : `${fn} staat ${idx + 1}e in de rij`);
   const now = idx === 0 && ms <= 5000;   // de lopende loper is (bijna) binnen
-  const sub = now ? '' : idx === 0 ? `Start rond ${clock(tnow() + ms)}` : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · start rond ${clock(tnow() + ms)}`;
+  const at = ms >= 90 * 60e3 ? shortDay(tnow() + ms) : `start rond ${clock(tnow() + ms)}`;
+  const sub = now ? '' : idx === 0 ? at[0].toUpperCase() + at.slice(1) : `${idx} ${idx === 1 ? 'loper' : 'lopers'} voor ${self ? 'jou' : 'hem/haar'} · ${at}`;
   return `<div class="status ${idx === 0 ? 'go' : ''}"><div class="k">${head}</div><div class="big">${now ? 'Sta klaar!' : waitText(ms, idx)}</div>${sub ? `<div class="s">${sub}</div>` : ''}${idxs.length > 1 ? `<div class="s" style="margin-top:6px;font-weight:700">${self ? 'Daarna sta je' : fn + ' staat daarna'} ook nog ${idxs.slice(1).map((i) => (i + 1) + 'e (' + waitText(waitMs(i), i) + ')').join(' en ')} in de rij.</div>` : ''}${isStale() ? `<div class="s" style="font-size:12px;margin-top:4px;font-weight:700">Geen verbinding: schatting van ${clock(lostAt)}</div>` : ''}${self && idx > 0 ? alertControls() : ''}</div>`;
 }
 
@@ -377,7 +381,7 @@ function nowCard() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${(lapNo === 1 ? [['Ronde', 1]] : [['Ronde', lapNo], ['Schatting', '± ' + mmss(ex)]]).map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#6a5a48', shadow: 'none' }; return `<div style="background:${ts.bg};box-shadow:${ts.shadow};border:3px solid var(--ink);border-radius:12px;padding:4px 10px"><div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${ts.sub}">${k}</div><div style="font-size:22px;font-weight:800;line-height:1.15;color:${ts.fg}">${v}</div></div>`; }).join('')}</div></div>`;
 }
 // ---------- voor en na het event ----------
-function phase() { if (!eventStart) return 'live'; const t = tnow(); return t < eventStart ? 'before' : t >= eventStart + 24 * 3600e3 ? 'after' : 'live'; }
+function phase() { if (!eventStart) return 'live'; const t = tnow(); return t < eventStart && !isRunning() ? 'before' : t >= eventStart + 24 * 3600e3 ? 'after' : 'live'; }
 function setStartFrom(ts) {   // oefenmodus: het event start om 20:00 op of vóór de eerste ronde
   const d = new Date(ts); if (isNaN(d)) return; d.setHours(20, 0, 0, 0); if (d.getTime() > new Date(ts).getTime()) d.setDate(d.getDate() - 1);
   if (!eventStart || d.getTime() < eventStart) { eventStart = d.getTime(); later(true); }
@@ -395,7 +399,8 @@ function cdTick() {
     const ms = Number(el.dataset.cd) - tnow(), html = cdTiles(ms);
     if (el.innerHTML !== html) {
       el.innerHTML = html;
-      const sec = el.querySelector('.sec b'); if (sec && sec.animate && !REDUCED_MOTION) sec.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 300, easing: 'ease-out' });
+      const sec = el.querySelector('.sec b'), fin = ms <= 10000; if (sec && sec.animate && !REDUCED_MOTION) sec.animate([{ transform: `scale(${fin ? 1.6 : 1.25})` }, { transform: 'scale(1)' }], { duration: fin ? 500 : 300, easing: 'ease-out' });
+      const card = el.closest('.status'); if (card) card.classList.toggle('final', ms <= 60000);
     }
     if (ms <= 0) later(true);
   });
@@ -407,8 +412,7 @@ function waitTrack() {
   return `<svg class="cdtrack" viewBox="-2 -2 264 144" aria-hidden="true">
     <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
     <line x1="34.5" y1="90.5" x2="16.1" y2="108.9" stroke="#17120d" stroke-width="5"/>
-    ${REDUCED_MOTION ? '' : `<text x="130" y="78" text-anchor="middle" font-size="26" font-weight="800" fill="#17120d" opacity="0">+ € 5<animate attributeName="opacity" values="1;0;0" keyTimes="0;.4;1" dur="${L}s" repeatCount="indefinite"/><animate attributeName="y" values="80;66;66" keyTimes="0;.4;1" dur="${L}s" repeatCount="indefinite"/></text>
-    <g stroke="#17120d" stroke-width="3" stroke-linecap="round" opacity="0"><path d="M8 84l6 5M4 100h8M40 116l-3-7"/><animate attributeName="opacity" values="1;0;0" keyTimes="0;.15;1" dur="${L}s" repeatCount="indefinite"/></g>`}
+    ${REDUCED_MOTION ? '' : `<g stroke="#17120d" stroke-width="3" stroke-linecap="round" opacity="0"><path d="M8 84l6 5M4 100h8M40 116l-3-7"/><animate attributeName="opacity" values="1;0;0" keyTimes="0;.15;1" dur="${L}s" repeatCount="indefinite"/></g>`}
     <circle ${REDUCED_MOTION ? 'cx="25.3" cy="99.7" ' : ''}r="9" fill="${C[0]}" stroke="#17120d" stroke-width="3">${anim}</circle></svg>`;
 }
 function eventCard() {
@@ -422,7 +426,12 @@ function eventCard() {
   }
   return '';
 }
+let wasBefore = phase() === 'before';
 setInterval(() => {   // aftellen: één keer per seconde is genoeg
+  const ph = phase();
+  if (wasBefore && ph === 'live' && tnow() - eventStart < 120000) { later(true); showCelebration({ title: 'We zijn vertrokken!', time: '', sub: `24 uur lopen voor Water for All. Elke ronde = € ${EUR_PER_LAP}.` }); }
+  wasBefore = ph === 'before';
+  if (ph === 'before') checkTurn();
   if (document.hidden) return;
   cdTick();
 }, 1000);
@@ -437,7 +446,7 @@ function viewQueue() {
     <div class="card"><h2>Wachtrij <small>${w.length} wachtend</small></h2>
       ${w.length === 0 ? '<div class="empty">Niemand in de wachtrij. Schrijf je in aan de stand!</div>' : w.slice(0, LIM).map((q, i) => {
         const ms = waitMs(i), mine = q.runnerId === me;
-        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${crownOf(q.runnerId)}${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>rond ${clock(tnow() + ms)}</small></div>${meR ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
+        return `<div class="row ${mine ? 'me' : ''}"><div class="no">${i + 1}</div><div class="nm" data-act="view" data-id="${esc(q.runnerId)}" style="cursor:pointer">${crownOf(q.runnerId)}${esc(q.runnerName)}${mine ? '<span class="badge">jij</span>' : ''}</div><div class="w">${waitText(ms, i)}<small>${ms >= 90 * 60e3 ? shortDay(tnow() + ms) : `rond ${clock(tnow() + ms)}`}</small></div>${meR ? '' : `<button class="btn small" data-act="pick" data-id="${esc(q.runnerId)}">Dit ben ik</button>`}</div>`;
       }).join('')}
       ${w.length > LIM ? `<button class="btn small full" data-act="qall" style="margin-top:4px">Toon alle ${w.length} wachtenden</button>` : showAllQ && w.length > 8 ? '<button class="btn small full" data-act="qall" style="margin-top:4px">Toon minder</button>' : ''}</div>
     ${ph === 'before' && !recent.length ? '' : `<div class="card"><h2>Net gelopen <small>laatste ${recent.length || ''} rondes</small></h2>
@@ -571,7 +580,7 @@ let queueLoaded = false, turn = { me: '', key: '', lvl: 0 };
 function checkTurn() {
   if (!me || !queueLoaded) { turn.me = ''; return; }
   const runningMe = isRunning() && active.runner.runnerId === me;
-  const w = waiting(), idx = w.findIndex((q) => q.runnerId === me), key = idx >= 0 ? w[idx].id : '', lvl = runningMe ? 0 : idx === 0 ? 2 : idx === 1 ? 1 : 0;
+  const w = waiting(), idx = w.findIndex((q) => q.runnerId === me), key = idx >= 0 ? w[idx].id : '', lvl = runningMe ? 0 : phase() === 'before' ? (idx === 0 && waitMs(0) <= 5 * 60e3 ? 2 : idx === 1 && waitMs(0) <= 3 * 60e3 ? 1 : 0) : idx === 0 ? 2 : idx === 1 ? 1 : 0;
   if (wakeOn && (runningMe || idx === -1)) setWake(false);   // je loopt of je staat niet meer in de rij: scherm mag weer uit
   if (turn.me !== me) { turn = { me, key, lvl }; return; }   // net geopend of andere loper gekozen: niet meteen alarm slaan
   const prev = key === turn.key ? turn.lvl : 0;
