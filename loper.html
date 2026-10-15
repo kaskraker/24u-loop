@@ -289,15 +289,22 @@ function statusCard(r, self = true) {
 
 function tempoSvg(times) {
   if (times.length < 2) return '';
-  const W = 300, H = 90, mn = Math.min(...times), mx = Math.max(...times), rg = (mx - mn) || 1;
-  const X = (i) => 10 + i * (W - 20) / (times.length - 1), Y = (t) => 12 + (t - mn) / rg * (H - 30);
-  const bi = times.indexOf(mn), avg = times.reduce((a, b) => a + b, 0) / times.length;
+  // Lijngrafiek met de tijd bij elk punt en het rondenummer eronder; hoger = sneller
+  const n = times.length, W = 320, H = 170, L = 24, R = 24, T = 34, B = 36;
+  const mn = Math.min(...times), mx = Math.max(...times), pad = Math.max((mx - mn) * 0.2, 3000), lo = mn - pad, hi = mx + pad;
+  const X = (i) => L + i * (W - L - R) / (n - 1), Y = (t) => T + (t - lo) / (hi - lo) * (H - T - B);
+  const bi = times.indexOf(mn), avg = times.reduce((a, b) => a + b, 0) / n, all = n <= 10;
+  const showLabel = (i) => all || i === 0 || i === n - 1 || i === bi;
+  const lx = (i) => Math.min(W - 16, Math.max(16, X(i)));
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">
-    <line x1="10" x2="${W - 10}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#6a5a48" stroke-dasharray="4 4" stroke-width="1.5"/>
+    <text x="2" y="12" font-size="10" font-weight="700" fill="#6a5a48">↑ sneller</text>
+    <line x1="${L - 10}" x2="${W - R + 10}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="#9a8a76" stroke-dasharray="5 4" stroke-width="1.5"/>
     <polyline fill="none" stroke="#e8590c" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round" points="${times.map((t, i) => `${X(i)},${Y(t)}`).join(' ')}"/>
-    ${times.map((t, i) => `<circle cx="${X(i)}" cy="${Y(t)}" r="${i === bi ? 6 : 3.5}" fill="${i === bi ? '#2fb344' : '#17120d'}"/>`).join('')}
-    <text x="${X(bi)}" y="${Math.max(10, Y(mn) - 9)}" font-size="11" font-weight="800" text-anchor="middle" fill="#17120d">${mmss(mn)}</text>
-    <text x="${W - 10}" y="${H - 2}" font-size="10" text-anchor="end" fill="#6a5a48">stippellijn = gemiddelde</text></svg>`;
+    ${times.map((t, i) => `<circle cx="${X(i)}" cy="${Y(t)}" r="${i === bi ? 7 : 5}" fill="${i === bi ? '#2fb344' : '#fff'}" stroke="#17120d" stroke-width="3"/>`).join('')}
+    ${times.map((t, i) => showLabel(i) ? `<text x="${lx(i)}" y="${Y(t) - 12}" font-size="${i === bi ? 13 : 11.5}" font-weight="800" text-anchor="middle" fill="${i === bi ? '#1f7a2e' : '#17120d'}" style="paint-order:stroke;stroke:#fff;stroke-width:3px">${mmss(t)}</text>` : '').join('')}
+    ${times.map((t, i) => (all || i === 0 || i === n - 1 || (i + 1) % 5 === 0) ? `<text x="${X(i)}" y="${H - 8}" font-size="10.5" font-weight="700" text-anchor="middle" fill="#6a5a48">${i + 1}</text>` : '').join('')}
+    <text x="2" y="${H - 8}" font-size="9" fill="#6a5a48" text-anchor="start" style="display:none">ronde</text></svg>
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 10px;font-size:11px;font-weight:600;color:#6a5a48;margin-top:2px"><span>ronde →</span><span>stippellijn = gemiddelde ${mmss(avg)} · groene stip = snelste</span></div>`;
 }
 
 function viewMine() {
