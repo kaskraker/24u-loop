@@ -786,9 +786,12 @@ function collectLive() {   // na elke wijziging van de pagina: de live-elementen
 // Piste: waar is de loper waarschijnlijk? lo..hi als deel van de ronde. Loopt hij langer dan de traagste verwachting, dan blijft het stuk
 // vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
 const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-function trackBand(el, fast, slow) {   // langer weg dan de traagste verwachting: het bereik blijft aan de finish staan
+function trackBand(el, fast, slow) {
   const hi = Math.min(1, el / fast);
-  return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi };
+  if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi };
+  // Langer weg dan de traagste verwachting: het laatste stukje schuift steeds trager tot aan de finishlijn en is na 60 s helemaal weg
+  const t = Math.min(1, (el - slow) / 60000), w = 0.05 * (1 - t) * (1 - t);
+  return { lo: 1 - w, hi: 1, gone: w < 0.0005 };
 }
 // Wissel van loper: het oude bereik schuift de finish in, aan de stand gaat een ring open (stokje doorgegeven) en het nieuwe bereik vertrekt daar
 function handoffFrame(e, f) {
@@ -805,7 +808,7 @@ function paintTrack(el, band, fr) {
   const old = fr && fr.old, lo = old ? fr.lo : band.lo, hi = Math.max(old ? fr.hi : band.hi, lo + 0.002);
   tl.setAttribute('stroke-dasharray', `${Math.max(0.001, fr ? fr.tlo : band.lo)} 2`); tl.style.opacity = 0.55 * (fr ? fr.tloOp : 1);
   th.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); th.setAttribute('stroke-dashoffset', -lo);
-  th.style.opacity = fr && !old ? fr.newOp : 1;
+  th.style.opacity = fr && !old ? fr.newOp : band.gone ? 0 : 1;
   if (rg) { const R = fr && fr.ring; rg.setAttribute('r', R ? R.r : 0); rg.setAttribute('stroke-width', R ? R.w : 0); rg.style.opacity = R ? R.op : 0; }
 }
 function liveTick() {
