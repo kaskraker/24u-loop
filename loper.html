@@ -243,7 +243,13 @@ const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', 
 
 const isRunning = () => !!(active && active.isRunning && active.runner);
 const startMs = () => active && active.startTime ? new Date(active.startTime).getTime() : null;
-const waiting = () => queue.filter((q) => !(isRunning() && q.runnerId === active.runner.runnerId));
+// Wachtenden: de wachtrij zonder de plaats van wie nu loopt (enkel die ene plaats: een tweede inschrijving van dezelfde loper blijft staan). Zelfde regel als op het grote scherm.
+const waiting = () => {
+  if (!isRunning()) return queue;
+  let k = queue.findIndex((q) => q.id === active.runner.id);
+  if (k < 0) k = queue.findIndex((q) => q.runnerId === active.runner.runnerId);
+  return k < 0 ? queue : queue.filter((q, i) => i !== k);
+};
 
 function expected(rid) {
   const r = getR(rid), prior = FIRST_LAP_MS[r && r.gender] || FIRST_LAP_MS.X;
@@ -758,7 +764,7 @@ function startLean() {
     idxUpd = d.updatedAt || 0; applyIndex(d.list || []); later(); } }).catch(() => {}); };
   window.refreshIndex = () => { if (Date.now() - idxAt > 60000) loadIndex(); };   // bij uitklappen van een klassement: verse gegevens
   window.refreshIndexSoon = () => { if (Date.now() - idxAt > soonWait) loadIndex(); };   // er is een nieuwe loper die nog niet in de index staat
-  loadIndex(); setInterval(loadIndex, 10 * 60e3);
+  loadIndex(); setInterval(() => { if (!document.hidden) loadIndex(); }, 2 * 60e3);   // de chronometer werkt de index elke ~2 min bij (wachttijden zoals op het grote scherm)
   window.addEventListener('focus', () => { if (Date.now() - idxAt > 120000) loadIndex(); });
 }
 function startHeavy(fromLean) {   // geen (verse) samenvatting beschikbaar: alles lezen (enkel voor oefenen zonder chronometer)

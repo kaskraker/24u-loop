@@ -1045,6 +1045,13 @@ function lapTileStyle(n) {
         };
 
         // ===== Display links: volgende lopers mét PR, wachttijd en verwacht startuur =====
+        // Wachtenden: de wachtrij zonder de plaats van wie nu loopt (op id; anders de eerste plaats van die loper). Zelfde regel als in de lopers-app.
+        const queueWaiting = (queue, active, running) => {
+            if (!(active && running)) return queue;
+            let k = queue.findIndex(q => q.id === active.id);
+            if (k < 0) k = queue.findIndex(q => q.runnerId === active.runnerId);
+            return k < 0 ? queue : queue.filter((q, i) => i !== k);
+        };
         const DisplayNext = ({ waiting, runners, laps, estimateWaitMs, formatTimeSimple }) => {
             const SHOW = 6;   // vaste hoogte: altijd plaats voor 6 rijen + de regel '… en nog', zodat het scherm niet verschuift als de wachtrij groeit of krimpt
             const [, setTick] = React.useState(0);   // ververst enkel dit blok elke 2 s (wachttijden), niet de hele pagina
@@ -2574,18 +2581,19 @@ function predictNext(times, gender, restMs) {
             // Verwachte rondetijd van één loper: zijn eigen gemiddelde, bij weinig rondes bijgestuurd naar het groepsgemiddelde
             const expectedLapMs = (runnerId) => {
                 const e = lapStats.per[runnerId];
-                const rn = runners.find(r => r.id === runnerId);
-                const prior = FIRST_LAP_MS[rn && rn.gender] || FIRST_LAP_MS.X;   // startwaarde uit de data van vorig jaar, per geslacht
+                const rn = runners.find(r => r.id === runnerId), qi = queue.find(q => q.runnerId === runnerId);
+                const g = (rn && rn.gender) || (qi && qi.gender);   // nieuwe loper zonder loper-document: geslacht uit de wachtrij (zoals de lopers-app)
+                const prior = FIRST_LAP_MS[g] || FIRST_LAP_MS.X;   // startwaarde uit de data van vorig jaar, per geslacht
                 if (!e) return prior;
                 const runningThis = activeRunner && isRunning && activeRunner.runnerId === runnerId && startTime;
                 const rest = (runningThis ? +startTime : tnow()) - (lapStats.lastAt[runnerId] || tnow());   // rust sinds de vorige ronde
-                return predictNext(lapStats.seq[runnerId] || [], rn && rn.gender, rest);   // recente rondes wegen zwaarder, na lange rust fris
+                return predictNext(lapStats.seq[runnerId] || [], g, rest);   // recente rondes wegen zwaarder, na lange rust fris
             };
             // Wachttijd tot de loper op plaats idx (0 = eerste in de rij na de lopende loper) mag starten:
             // rest van de lopende loper (zijn eigen verwachte tijd min wat al gelopen is) + de verwachte tijd van elke loper ervoor + wissel
             const estimateWaitMs = (idx) => {
                 const GAP = 2000;   // wissel tussen twee lopers (vorig jaar mediaan 0,9 s, 90% onder 1,6 s; met marge)
-                const waitingList = queue.filter((q, i) => !(activeRunner && isRunning && i === 0));
+                const waitingList = queueWaiting(queue, activeRunner, isRunning);
                 let t = 0;
                 if (activeRunner && isRunning) t = Math.max(5000, expectedLapMs(activeRunner.runnerId) - (startTime ? tnow() - startTime : elapsedTime));
                 for (let j = 0; j < idx && j < waitingList.length; j++) t += GAP + expectedLapMs(waitingList[j].runnerId);
@@ -2597,7 +2605,7 @@ function predictNext(times, gender, restMs) {
                 if (!force && activeRunner && isRunning && activeRunner.runnerId === runner.id) {
                     return { ok: false, reason: 'running', name: runner.name, runner };
                 }
-                const waitingList = queue.filter((q, i) => !(activeRunner && isRunning && i === 0));
+                const waitingList = queueWaiting(queue, activeRunner, isRunning);
                 const idx = waitingList.findIndex(q => q.runnerId === runner.id);
                 if (!force && idx >= 0) {
                     return { ok: false, reason: 'queued', name: runner.name, position: idx + 1, waitMs: estimateWaitMs(idx), runner };
@@ -4258,7 +4266,7 @@ function predictNext(times, gender, restMs) {
 
                         h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
                             (() => {
-                                const waiting = queue.filter((q, i) => !(activeRunner && isRunning && i === 0));
+                                const waiting = queueWaiting(queue, activeRunner, isRunning);
                                 const offset = activeRunner && isRunning ? 1 : 0;   // de lopende loper staat voorop in de volledige wachtrij
                                 const move = (from, to) => { if (to < 0 || to >= waiting.length || from === to) return; reorderQueue(from + offset, to + offset); };
                                 const finishDrop = (e) => {
@@ -4838,8 +4846,8 @@ function predictNext(times, gender, restMs) {
                                 // Left column: nu aan het lopen, volgende lopers, laatste rondes
                                 h('div', { className: 'space-y-4' },
                                     // Nu aan het lopen (met piste) en volgende lopers (met wachttijd)
-                                    h(DisplayNow, { activeRunner, isRunning, startTime, elapsedTime, formatTime, formatTimeSimple, runners, laps, waiting: queue.filter((q, i) => !(activeRunner && isRunning && i === 0)) }),
-                                    h(DisplayNext, { waiting: queue.filter((q, i) => !(activeRunner && isRunning && i === 0)), runners, laps, estimateWaitMs, formatTimeSimple }),
+                                    h(DisplayNow, { activeRunner, isRunning, startTime, elapsedTime, formatTime, formatTimeSimple, runners, laps, waiting: queueWaiting(queue, activeRunner, isRunning) }),
+                                    h(DisplayNext, { waiting: queueWaiting(queue, activeRunner, isRunning), runners, laps, estimateWaitMs, formatTimeSimple }),
 
                                     h(DisplayLastLaps, { laps, formatTimeSimple })
                                 ),
@@ -4946,7 +4954,7 @@ function predictNext(times, gender, restMs) {
                                 bt('Ontgrendelen', unlockAdmin, 'primary', { cls: 'w-full' })
                             );
                         }
-                        const waitingN = queue.filter((q, i) => !(activeRunner && isRunning && i === 0)).length;
+                        const waitingN = queueWaiting(queue, activeRunner, isRunning).length;
                         const tabs = [['overzicht', 'Overzicht'], ['rondes', 'Rondes'], ['lopers', 'Lopers'], ['gegevens', 'Gegevens']].concat(NS ? [['oefenen', 'Oefenen']] : []).concat([['wissen', 'Wissen']]);
                         const tile = (k, v, sub) => h('div', { className: 'rounded-lg p-3', style: { border: `3px solid ${INK}`, background: '#fff6df' } }, h('div', { className: 'text-xs font-extrabold uppercase tracking-wide text-gray-700' }, k), h('div', { className: 'text-4xl font-extrabold leading-tight' }, v), sub && h('div', { className: 'text-xs text-gray-700' }, sub));
                         let body = null;
