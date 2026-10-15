@@ -41,6 +41,12 @@
   .status .k { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
   .status .big { font-size: 52px; font-weight: 800; line-height: 1.05; margin: 2px 0; }
   .status .s { font-size: 14px; font-weight: 500; }
+  .cd { display: flex; justify-content: center; gap: 8px; margin: 10px 0 4px; }
+  .cd > div { min-width: 64px; background: #ffd58a; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 3px 3px 0 var(--ink); padding: 6px 4px 4px; }
+  .cd b { display: block; font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .cd small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--brown); margin-top: 3px; }
+  .cd > div.sec { background: #f2a342; }
+  .cdtrack { display: block; width: 100%; max-width: 280px; margin: 12px auto 2px; overflow: visible; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .tile { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; background: #fff6df; border: 2px solid var(--ink); border-radius: 12px; padding: 10px 12px; } .tile .k { font-size: 11px; font-weight: 700; color: var(--muted); } .tile .v { font-size: 24px; font-weight: 800; }
   .tile .go { position: absolute; right: 10px; top: 6px; font-size: 18px; font-weight: 800; color: var(--muted); }
@@ -378,14 +384,37 @@ function setStartFrom(ts) {   // oefenmodus: het event start om 20:00 op of vó�
 }
 const DAGEN = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'], MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 const shortDay = (t) => { const d = new Date(t); return `${DAGEN[d.getDay()]} ${d.getDate()} ${MAANDEN[d.getMonth()]}`; };   // "di 20 okt"
-function cdText(ms) {
-  const s = Math.max(0, Math.ceil(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), p = (x) => String(x).padStart(2, '0');
-  return d ? `${d} d ${h} u` : `${p(h)}:${p(m)}:${p(s % 60)}`;
+// Aftellen in vakjes (dagen · uur · min · sec). De kaart zelf verandert niet, enkel de cijfers: zo loopt de animatie ongestoord door.
+function cdTiles(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000)), d = Math.floor(s / 86400), p = (x) => String(x).padStart(2, '0');
+  const parts = [[d, d === 1 ? 'dag' : 'dagen'], [p(Math.floor(s % 86400 / 3600)), 'uur'], [p(Math.floor(s % 3600 / 60)), 'min'], [p(s % 60), 'sec']].filter((x, i) => i || d);
+  return parts.map(([v, l], i) => `<div${i === parts.length - 1 ? ' class="sec"' : ''}><b>${v}</b><small>${l}</small></div>`).join('');
+}
+function cdTick() {
+  document.querySelectorAll('[data-cd]').forEach((el) => {
+    const ms = Number(el.dataset.cd) - tnow(), html = cdTiles(ms);
+    if (el.innerHTML !== html) {
+      el.innerHTML = html;
+      const sec = el.querySelector('.sec b'); if (sec && sec.animate && !REDUCED_MOTION) sec.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 300, easing: 'ease-out' });
+    }
+    if (ms <= 0) later(true);
+  });
+}
+// Wachten op de start: estafettelopers draaien rondjes op de piste; bij elke wissel aan de Humasol-stand een andere kleur en € 5 erbij.
+function waitTrack() {
+  const L = 3.2, C = ['#f2a342', '#38bdf8', '#2fb344', '#ff6fa5'];
+  const anim = REDUCED_MOTION ? '' : `<animateMotion dur="${L}s" repeatCount="indefinite" path="${TRACK_D}"/><animate attributeName="fill" values="${C.join(';')}" keyTimes="0;.25;.5;.75" calcMode="discrete" dur="${L * 4}s" repeatCount="indefinite"/>`;
+  return `<svg class="cdtrack" viewBox="-2 -2 264 144" aria-hidden="true">
+    <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
+    <line x1="34.5" y1="90.5" x2="16.1" y2="108.9" stroke="#17120d" stroke-width="5"/>
+    ${REDUCED_MOTION ? '' : `<text x="130" y="78" text-anchor="middle" font-size="26" font-weight="800" fill="#17120d" opacity="0">+ € 5<animate attributeName="opacity" values="1;0;0" keyTimes="0;.4;1" dur="${L}s" repeatCount="indefinite"/><animate attributeName="y" values="80;66;66" keyTimes="0;.4;1" dur="${L}s" repeatCount="indefinite"/></text>
+    <g stroke="#17120d" stroke-width="3" stroke-linecap="round" opacity="0"><path d="M8 84l6 5M4 100h8M40 116l-3-7"/><animate attributeName="opacity" values="1;0;0" keyTimes="0;.15;1" dur="${L}s" repeatCount="indefinite"/></g>`}
+    <circle ${REDUCED_MOTION ? 'cx="25.3" cy="99.7" ' : ''}r="9" fill="${C[0]}" stroke="#17120d" stroke-width="3">${anim}</circle></svg>`;
 }
 function eventCard() {
   const ph = phase();
   if (ph === 'before') {
-    return `<div class="status none"><div class="k">Start ${shortDay(eventStart)} · ${clock(eventStart)}</div><div class="big" data-cd="${eventStart}">${cdText(eventStart - tnow())}</div></div>`;
+    return `<div class="status none"><div class="k">Start ${shortDay(eventStart)} · ${clock(eventStart)}</div><div class="cd" data-cd="${eventStart}"></div>${waitTrack()}</div>`;
   }
   if (ph === 'after') {
     const r = me && getR(me), n = r ? (lapsOf(me).length || r.totalLaps) : 0;
@@ -395,7 +424,7 @@ function eventCard() {
 }
 setInterval(() => {   // aftellen: één keer per seconde is genoeg
   if (document.hidden) return;
-  document.querySelectorAll('[data-cd]').forEach((el) => { const ms = Number(el.dataset.cd) - tnow(); el.textContent = cdText(ms); if (ms <= 0) later(true); });
+  cdTick();
 }, 1000);
 function viewQueue() {
   const ph = phase();
@@ -731,7 +760,7 @@ let liveEls = [], trackEls = [], loopOn = false;
 function collectLive() {   // na elke wijziging van de pagina: de live-elementen één keer opzoeken i.p.v. bij elke tik
   liveEls = [...document.querySelectorAll('[data-live]')].filter((el) => Number(el.dataset.live));
   trackEls = [...document.querySelectorAll('svg[data-track]')];
-  liveTick(); wakeLoop();
+  cdTick(); liveTick(); wakeLoop();
 }
 // Piste: waar is de loper waarschijnlijk? lo..hi als deel van de ronde. Loopt hij langer dan de traagste verwachting, dan blijft het stuk
 // vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
