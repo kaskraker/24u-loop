@@ -1062,10 +1062,10 @@ async function claim() {   // dit toestel wordt de chronometer
     setRole('owner'); $('overlay').innerHTML = ''; buzz('start'); toast(`${device.name} neemt nu de tijden`, 3000); beat();
   } catch (e) { toast('Overnemen mislukt: ' + (e.code || e.message), 4000); }
 }
-// Oefenmodus: staat er een autoplay klaar (levensteken < 45 s), dan kan dit toestel de tijden teruggeven
+// Oefenmodus: staat er een autoplay klaar (levensteken < 135 s), dan kan dit toestel de tijden teruggeven
 let autoplayT = 0;
 if (NS) db.collection(col('meta')).doc('autoplay').onSnapshot((s) => { const t = s.exists ? s.data().t || 0 : 0; if (t !== autoplayT) { autoplayT = t; render(); } }, () => {});
-const autoplayReady = () => !!NS && !!autoplayT && tnow() - autoplayT < 45000;
+const autoplayReady = () => !!NS && !!autoplayT && tnow() - autoplayT < 135000;
 async function toAutoplay() {
   try {
     await db.collection(col('meta')).doc('chrono').set({ owner: 'autoplay', ownerName: 'Autoplay', ownerSince: tnow(), t: tnow(), hidden: false }, { merge: true });
@@ -1168,14 +1168,14 @@ setInterval(() => { if (conflict && loaded.laps && ownerKnown && !$('overlay').i
 let batt = null, nagUntil = 0;
 (async () => { try { if (navigator.getBattery) { batt = await navigator.getBattery(); const upd = () => { if (batt.level <= 0.2 && !batt.charging) buzz('warn'); render(); }; batt.addEventListener('levelchange', upd); batt.addEventListener('chargingchange', render); render(); } } catch (e) {} })();
 setInterval(() => { if (!batt) { nagUntil = Date.now() + 60000; buzz('warn'); render(); } }, 90 * 60e3);   // geen batterij-uitlezing (iPhone): elk anderhalf uur een herinnering
-// Levensteken voor de schermen: elke 15 s. Een achtergrond-tab wordt door de browser tot ± 1 keer per minuut afgeremd, en dan leek de chronometer ten onrechte offline;
+// Levensteken voor de schermen: elke 60 s (elk teken is een leesactie op elk scherm dat meekijkt). Een achtergrond-tab wordt door de browser tot ± 1 keer per minuut afgeremd, en dan leek de chronometer ten onrechte offline;
 // daarom tikt de klok ook in een aparte worker (die wordt niet afgeremd), en bij het terugkeren naar de app sturen we meteen een teken.
 let beatSeq = 0;
 function beat() {
   if (!isOwner() || netPaused) return;
   db.collection(col('meta')).doc('chrono').set({ t: tnow(), seq: ++beatSeq, hidden: !!document.hidden, battery: batt ? Math.round(batt.level * 100) : null, charging: batt ? !!batt.charging : null, pending }, { merge: true }).catch(() => {});
 }
-try { const w = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},15000)'], { type: 'text/javascript' }))); w.onmessage = beat; } catch (e) { setInterval(beat, 15000); }
+try { const w = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},60000)'], { type: 'text/javascript' }))); w.onmessage = beat; } catch (e) { setInterval(beat, 60000); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) beat(); });
 
 document.addEventListener('click', (e) => {

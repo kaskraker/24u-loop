@@ -339,14 +339,10 @@
                 try { db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) { console.warn('Firestore-instellingen:', e.message); }
                 // Offline-opslag: lokaal bewaren (ook na herladen) en later automatisch synchroniseren
                 // Elk venster heeft zijn eigen verbinding: geen gedeeld "hoofdvenster" dat op de achtergrond kan vertragen.
-                // Het eerste venster bewaart offline-data; het grote scherm (enkel lezen) heeft geen offline-opslag nodig.
-                if (new URLSearchParams(window.location.search).get('mode') === 'display') {
-                    syncState.persistence = 'off:display';
-                } else {
-                    db.enablePersistence({ synchronizeTabs: false })
-                        .then(() => { syncState.persistence = 'on'; notifySync(); })
-                        .catch((err) => { syncState.persistence = 'off:' + err.code; console.warn('Offline-opslag niet beschikbaar in dit venster:', err.code); notifySync(); });
-                }
+                // Het eerste venster bewaart offline-data. Ook het grote scherm: na herladen leest het dan enkel wat veranderde i.p.v. alle rondes opnieuw.
+                db.enablePersistence({ synchronizeTabs: false })
+                    .then(() => { syncState.persistence = 'on'; notifySync(); })
+                    .catch((err) => { syncState.persistence = 'off:' + err.code; console.warn('Offline-opslag niet beschikbaar in dit venster:', err.code); notifySync(); });
                 console.log("Firebase verbonden!");
             } else {
                 console.warn("Demo modus - configureer Firebase voor multi-device sync");
@@ -684,10 +680,10 @@
             label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
-        // ===== Chronometer offline: de chronometer schrijft elke 15 s een levensteken. Blijft dat weg (45 s tot 20 min), dan bevriest de klok op het laatst bekende moment =====
+        // ===== Chronometer offline: de chronometer schrijft elke 60 s een levensteken. Blijft dat weg (135 s tot 20 min), dan bevriest de klok op het laatst bekende moment =====
         // (niet tijdens autoplay, en niet als dit scherm zelf offline is: dan weten we het niet)
         const chronoLink = { t: null, sub: null, fresh: false, latched: false };
-        // 'ok' | 'offline' | 'unknown'. Offline pas na 75 s zonder levensteken (de chronometer tikt elke 15 s; een achtergrond-tab kan tot een minuut vertragen)
+        // 'ok' | 'offline' | 'unknown'. Offline pas na 135 s zonder levensteken (de chronometer tikt elke 60 s)
         // en weer 'ok' pas als er een vers teken van de server is binnengekomen (niet uit de cache), zodat het niet heen en weer flikkert.
         const chronoState = () => {
             // Autoplay (oefenscherm) speelt zelf een loop af: dan tellen we een chronometer pas mee als we hem in deze sessie echt hebben zien leven
@@ -695,15 +691,15 @@
             try { if (typeof computeConnection === 'function' && computeConnection() === 'offline') return 'unknown'; } catch (e) {}   // dit scherm zelf is offline: we weten het niet
             const age = tnow() - chronoLink.t;
             if (age > 20 * 60e3) { chronoLink.latched = false; return 'unknown'; }   // al heel lang stil: waarschijnlijk is er geen chronometer in gebruik
-            if (age > 75000) chronoLink.latched = true;
-            else if (chronoLink.latched && age < 30000 && chronoLink.fresh) chronoLink.latched = false;
+            if (age > 135000) chronoLink.latched = true;
+            else if (chronoLink.latched && age < 75000 && chronoLink.fresh) chronoLink.latched = false;
             return chronoLink.latched ? 'offline' : 'ok';
         };
         const chronoOfflineNow = () => chronoState() === 'offline';
         const effNow = () => chronoOfflineNow() ? chronoLink.t : tnow();   // 'nu' voor alle lopende klokken en pistes
         const ensureChronoSub = () => {
             if (chronoLink.sub) return;
-            try { if (typeof db !== 'undefined' && db) chronoLink.sub = db.collection(colName('meta')).doc('chrono').onSnapshot({ includeMetadataChanges: true }, (snap) => { const d = snap.exists ? snap.data() : null; chronoLink.t = d && d.t ? d.t : null; chronoLink.owner = d && d.owner || null; chronoLink.hidden = !!(d && d.hidden); chronoLink.fresh = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites; chronoLink.loaded = true; if (chronoLink.fresh && chronoLink.t && tnow() - chronoLink.t < 30000) chronoLink.seenLive = true; }, () => { chronoLink.loaded = true; }); } catch (e) {}
+            try { if (typeof db !== 'undefined' && db) chronoLink.sub = db.collection(colName('meta')).doc('chrono').onSnapshot({ includeMetadataChanges: true }, (snap) => { const d = snap.exists ? snap.data() : null; chronoLink.t = d && d.t ? d.t : null; chronoLink.owner = d && d.owner || null; chronoLink.hidden = !!(d && d.hidden); chronoLink.fresh = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites; chronoLink.loaded = true; if (chronoLink.fresh && chronoLink.t && tnow() - chronoLink.t < 75000) chronoLink.seenLive = true; }, () => { chronoLink.loaded = true; }); } catch (e) {}
         };
         const useChronoOffline = () => {
             const [, tick] = React.useState(0);
@@ -1678,7 +1674,7 @@ function predictNext(times, gender, restMs) {
             style: { position: 'fixed', left: 8, bottom: 8, zIndex: 65, background: '#e8590c', color: '#fff', padding: '3px 12px', borderRadius: 999, fontSize: 12, fontWeight: 800, border: '2px solid #17120d', boxShadow: '2px 2px 0 #17120d', pointerEvents: 'none' }
         }, `OEFENMODUS · ${NS}${AUTOPLAY ? ' · ▶ autoplay' : ''}`) : null;
 
-        // Waarschuwing op de wachtrij-laptop als de chronometer niets meer laat horen (hij schrijft elke 15 s een levensteken) of bijna leeg is
+        // Waarschuwing op de wachtrij-laptop als de chronometer niets meer laat horen (hij schrijft elke 60 s een levensteken) of bijna leeg is
         const ChronoBanner = ({ relevant }) => {
             const [doc, setDoc] = React.useState(undefined), [, tick] = React.useState(0);
             React.useEffect(() => {
@@ -1689,7 +1685,7 @@ function predictNext(times, gender, restMs) {
             if (doc === undefined || !relevant) return null;
             const age = doc && doc.t ? tnow() - doc.t : Infinity;
             let title = null, text = '';
-            if (age > 75000) {
+            if (age > 135000) {
                 title = 'Chronometer reageert niet';
                 text = doc && doc.t ? `Laatst gezien om ${fmtClock(doc.t)}. Controleer de telefoon van de tijdopnemer: wifi, scherm aan, app open.` : 'Er is nog geen chronometer verbonden. Open de chrono-app op de telefoon van de tijdopnemer.';
             } else if (doc.battery != null && doc.battery <= 20 && !doc.charging) {
@@ -2051,12 +2047,12 @@ function predictNext(times, gender, restMs) {
                 // en neemt enkel over met 'Overnemen'. Is die chronometer 60 s stil, of al 2 min op de achtergrond, dan neemt de autoplay het weer over.
                 const chronoRef = () => db.collection(colName('meta')).doc('chrono');
                 let apBeat = 0, hiddenSince = 0, lateMax = 0;   // lateMax: hoeveel ms de autoplay te laat was (browser remt het tabblad af?)
-                const beatAp = () => { if (stopped || chronoLink.owner !== 'autoplay' || Date.now() - apBeat < 15000) return; apBeat = Date.now(); chronoRef().set({ t: tnow(), hidden: !!document.hidden, late: lateMax }, { merge: true }).catch(() => {}); };
+                const beatAp = () => { if (stopped || chronoLink.owner !== 'autoplay' || Date.now() - apBeat < 60000) return; apBeat = Date.now(); chronoRef().set({ t: tnow(), hidden: !!document.hidden, late: lateMax }, { merge: true }).catch(() => {}); };
                 const claimAp = () => { apBeat = Date.now(); chronoLink.owner = 'autoplay'; chronoRef().set({ owner: 'autoplay', ownerName: 'Autoplay', ownerSince: tnow(), t: tnow(), hidden: false }, { merge: true }).catch(() => {}); };
                 // apart levensteken 'de autoplay staat klaar' (ook als een chronometer overnam), zodat die chronometer kan teruggeven
-                let apAlive = 0; const beatAlive = () => { if (stopped || Date.now() - apAlive < 15000) return; apAlive = Date.now(); db.collection(colName('meta')).doc('autoplay').set({ t: tnow() }).catch(() => {}); };
+                let apAlive = 0; const beatAlive = () => { if (stopped || Date.now() - apAlive < 60000) return; apAlive = Date.now(); db.collection(colName('meta')).doc('autoplay').set({ t: tnow() }).catch(() => {}); };
                 const beats = () => { beatAp(); beatAlive(); };
-                if (wk) wk.addEventListener('message', beats); const apIv = setInterval(beats, 15000);
+                if (wk) wk.addEventListener('message', beats); const apIv = setInterval(beats, 60000);
                 const EARLY = Date.UTC(2000, 0, 1);      // wachtrij-items van autoplay staan altijd vóór handmatig toegevoegde
                 const lapId = (seq) => `import_l_${String(seq).padStart(4, '0')}`;
                 const qItem = (l) => ({ runnerId: l.runnerId, runnerName: l.name, gender: l.gender || null, addedAt: new Date(EARLY + l.seq * 1000).toISOString(), order: l.seq });
@@ -2067,7 +2063,7 @@ function predictNext(times, gender, restMs) {
                     // Een echte (oefen)chronometer heeft voorrang: zolang die een levensteken geeft, schrijft de autoplay niets, dus een refresh van dit scherm stopt de lopende loper niet meer.
                     ensureChronoSub();
                     if (!chronoLink.loaded) { schedule(800); return; }
-                    const human = chronoLink.owner && chronoLink.owner !== 'autoplay' && chronoLink.t != null && tnow() - chronoLink.t < 60000;
+                    const human = chronoLink.owner && chronoLink.owner !== 'autoplay' && chronoLink.t != null && tnow() - chronoLink.t < 135000;
                     hiddenSince = human && chronoLink.hidden ? (hiddenSince || Date.now()) : 0;
                     if (human && !(hiddenSince && Date.now() - hiddenSince > 120000)) { lastActive = undefined; schedule(5000); return; }
                     if (chronoLink.owner !== 'autoplay') claimAp();
