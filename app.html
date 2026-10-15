@@ -861,17 +861,9 @@
 // Piste: waar is de loper waarschijnlijk? lo..hi als deel van de ronde. Loopt hij langer dan de traagste verwachting, dan blijft het stuk
         // vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
         const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-        function trackBand(el, fast, slow, nowMs) {
+        function trackBand(el, fast, slow) {   // langer weg dan de traagste verwachting: het bereik blijft aan de finish staan
           const hi = Math.min(1, el / fast);
-          if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi };
-          // Langer weg dan de traagste verwachting: het laatste stuk voor de finish krijgt streepjes die naar de finish stromen (hij komt eraan)
-          const len = 0.05 + 0.07 * Math.min(1, (el - slow) / 3000);
-          return { lo: 1 - len, hi: 1, flow: REDUCED_MOTION ? null : flowDash(1 - len, nowMs) };
-        }
-        function flowDash(lo, nowMs) {   // stroke-dasharray (pathLength 1) met streepjes tussen lo en de finish, die elke 0,7 s één streepje opschuiven
-          const P = 0.024, D = 0.013, ph = (nowMs / 700 % 1) * P, out = [0]; let cur = 0;
-          for (let s = lo - P + ph; s < 1; s += P) { const a = Math.max(s, lo), b = Math.min(s + D, 1); if (b > a) { out.push(a - cur, b - a); cur = b; } }
-          out.push(2); return out.map((x) => +x.toFixed(4)).join(' ');
+          return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi };
         }
         // Wissel van loper: het oude bereik schuift de finish in, aan de stand gaat een ring open (stokje doorgegeven) en het nieuwe bereik vertrekt daar
         function handoffFrame(e, f) {
@@ -892,7 +884,7 @@
                 const draw = (now) => {
                     const { fastMs: fm, slowMs: sm, t0 } = par.current;
                     const el = Math.max(0, effNow() - t0);
-                    const band = trackBand(el, fm, sm, now);
+                    const band = trackBand(el, fm, sm);
                     // Nieuwe loper: het oude bereik schuift de finish in, ring aan de stand, het nieuwe bereik vertrekt (zie handoffFrame)
                     if (lastT0 !== null && t0 !== lastT0 && shown.current && !REDUCED_MOTION) sw = { at: now, f: { ...shown.current } };
                     lastT0 = t0;
@@ -901,8 +893,7 @@
                     const old = fr && fr.old, lo = old ? fr.lo : band.lo, hi = Math.max(old ? fr.hi : band.hi, lo + 0.002);
                     if (loRef.current) { loRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, fr ? fr.tlo : band.lo)} 2`); loRef.current.style.opacity = fr ? fr.tloOp : 1; }
                     if (hiRef.current) {
-                        if (!old && band.flow) { hiRef.current.setAttribute('stroke-dasharray', band.flow); hiRef.current.setAttribute('stroke-dashoffset', 0); }
-                        else { hiRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); hiRef.current.setAttribute('stroke-dashoffset', -lo); }
+                        hiRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); hiRef.current.setAttribute('stroke-dashoffset', -lo);
                         hiRef.current.style.opacity = fr && !old ? fr.newOp : 1;
                     }
                     if (ringRef.current) { const R = fr && fr.ring; ringRef.current.setAttribute('r', R ? R.r : 0); ringRef.current.setAttribute('stroke-width', R ? R.w : 0); ringRef.current.style.opacity = R ? R.op : 0; }
