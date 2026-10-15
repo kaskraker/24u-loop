@@ -127,6 +127,9 @@ const LAP_KM = 0.515;   // lengte van één ronde
 // Het event: dinsdag 20 oktober 2026, 20:00 tot woensdag 20:00. In de oefenmodus (?ns=) halen we de start uit de eerste ronde.
 const EVENT_START_REAL = Date.parse('2026-10-20T20:00:00+02:00');
 let eventStart = NS ? 0 : EVENT_START_REAL;
+// Einde: woensdag 21 oktober 2026 om 20:00 (wat dan nog loopt, telt niet). Testen: ?ns=oefen&einde=21:30 of &einde=2026-10-15T21:30; oefenmodus zonder &einde: geen einde.
+const parseEnd = (v) => { if (!v) return null; const m = /^(\d{1,2})[:.h](\d{2})$/.exec(v.trim()); if (m) { const d = new Date(); d.setHours(+m[1], +m[2], 0, 0); return d.getTime(); } const t = Date.parse(v); return isNaN(t) ? null : t; };
+const EVENT_END = (NS && parseEnd(params.get('einde'))) || (NS ? Infinity : EVENT_START_REAL + 24 * 3600e3);
 
 // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
 // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
@@ -223,7 +226,7 @@ function mergeKnown() {
   if (extra.length && typeof refreshIndexSoon === 'function') refreshIndexSoon();   // snel opnieuw kijken of de index al bijgewerkt is
 }
 // totaal: de samenvatting (hoogstens ~2 min oud) + de rondes die daarna al binnenkwamen, zodat de euro's meteen meetellen
-const totalLaps = () => SUM ? SUM.total + (MODE === 'lean' ? recent.filter((l) => Date.parse(l.timestamp) > SUM.updatedAt).length : 0) : 0;
+const totalLaps = () => SUM ? SUM.total + (MODE === 'lean' ? recent.filter((l) => Date.parse(l.timestamp) > SUM.updatedAt && Date.parse(l.timestamp) <= EVENT_END).length : 0) : 0;
 const ME_KEY = 'myRunnerId' + (NS ? '_' + NS : '');   // per omgeving onthouden (oefen en echt apart)
 let me = ''; try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) {}
 if (params.get('me')) me = params.get('me');   // testlink: ?me=<runnerId>
@@ -241,10 +244,11 @@ const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000
 const tenths = (ms) => { const d = Math.ceil(ms / 100); return `${Math.floor(d / 600)}:${String(Math.floor(d / 10) % 60).padStart(2, '0')}<span style="font-size:.68em">,${d % 10}</span>`; };   // ranglijsten (tiende kleiner, zoals in sportuitslagen), handtijd zoals in de atletiek naar boven: 81 930 ms -> 1:22,0 (zelfde als het grote scherm)
 const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
 
-const isRunning = () => !!(active && active.isRunning && active.runner);
+const isRunning = () => !!(active && active.isRunning && active.runner) && tnow() < EVENT_END;
 const startMs = () => active && active.startTime ? new Date(active.startTime).getTime() : null;
 // Wachtenden: de wachtrij zonder de plaats van wie nu loopt (enkel die ene plaats: een tweede inschrijving van dezelfde loper blijft staan). Zelfde regel als op het grote scherm.
 const waiting = () => {
+  if (tnow() >= EVENT_END) return [];
   if (!isRunning()) return queue;
   let k = queue.findIndex((q) => q.id === active.runner.id);
   if (k < 0) k = queue.findIndex((q) => q.runnerId === active.runner.runnerId);
@@ -395,7 +399,7 @@ function nowCard() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${(lapNo === 1 ? [['Ronde', 1]] : [['Ronde', lapNo], ['Schatting', '± ' + mmss(ex)]]).map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#6a5a48', shadow: 'none' }; return `<div style="background:${ts.bg};box-shadow:${ts.shadow};border:3px solid var(--ink);border-radius:12px;padding:4px 10px"><div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${ts.sub}">${k}</div><div style="font-size:22px;font-weight:800;line-height:1.15;color:${ts.fg}">${v}</div></div>`; }).join('')}</div></div>`;
 }
 // ---------- voor en na het event ----------
-function phase() { if (!eventStart) return 'live'; const t = tnow(); return t < eventStart && !isRunning() ? 'before' : t >= eventStart + 24 * 3600e3 ? 'after' : 'live'; }
+function phase() { const t = tnow(); if (t >= EVENT_END) return 'after'; if (!eventStart) return 'live'; return t < eventStart && !isRunning() ? 'before' : 'live'; }
 function setStartFrom(ts) {   // oefenmodus: het event start om 20:00 op of vóór de eerste ronde
   const d = new Date(ts); if (isNaN(d)) return; d.setHours(20, 0, 0, 0); if (d.getTime() > new Date(ts).getTime()) d.setDate(d.getDate() - 1);
   if (!eventStart || d.getTime() < eventStart) { eventStart = d.getTime(); later(true); }
@@ -440,11 +444,12 @@ function eventCard() {
   }
   return '';
 }
-let wasBefore = phase() === 'before';
+let wasBefore = phase() === 'before', wasAfter = phase() === 'after';
 setInterval(() => {   // aftellen: één keer per seconde is genoeg
   const ph = phase();
   if (wasBefore && ph === 'live' && tnow() - eventStart < 120000) { later(true); showCelebration({ title: 'We zijn vertrokken!', time: '', sub: `24 uur lopen voor Water for All. Elke ronde = € ${EUR_PER_LAP}.` }); }
   wasBefore = ph === 'before';
+  if (ph === 'after' && !wasAfter) { wasAfter = true; later(true); }   // om 20:00: zelf omschakelen naar de eindstand
   if (ph === 'before') checkTurn();
   if (document.hidden) return;
   cdTick();
@@ -779,7 +784,7 @@ function startHeavy(fromLean) {   // geen (verse) samenvatting beschikbaar: alle
   MODE = 'heavy'; if (!fromLean) startCommon();
   const rebuild = () => { const m = buildMeta(rawRunners, rawLaps); SUM = m.summary; applyIndex(m.index.list); Object.keys(LAPS).forEach((k) => delete LAPS[k]); rawLaps.forEach((l) => { (LAPS[l.runnerId] = LAPS[l.runnerId] || []).push(l); }); };
   snap('runners', (s) => { rawRunners = s.docs.map((d) => ({ id: d.id, ...d.data() })); rebuild(); });
-  snap('laps', (s) => { rawLaps = s.docs.map((d) => ({ id: d.id, ...d.data() })); rebuild(); });
+  snap('laps', (s) => { rawLaps = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((l) => Date.parse(l.timestamp) <= EVENT_END); rebuild(); });
 }
 (function boot(tries) {
   // samenvatting al bij het opstarten veel ouder dan de nieuwste ronde? dan meteen alles zelf rekenen (zie checkStale)

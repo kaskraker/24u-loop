@@ -179,6 +179,17 @@
             if (d.getTime() > (isFinite(first) ? first : Date.now())) d.setDate(d.getDate() - 1);
             return d.getTime();
         };
+        // Einde: woensdag 21 oktober 2026 om 20:00. Wat dan nog loopt, telt niet meer; daarna tonen alle schermen de eindstand.
+        // Testen (enkel ?ns= of ?sim=1): &einde=21:30 (vandaag) of &einde=2026-10-15T21:30. Oefenmodus zonder &einde: geen einde.
+        const EVENT_END_REAL = Date.parse('2026-10-21T20:00:00+02:00');
+        const parseEnd = (v) => {
+            if (!v) return null;
+            const m = /^(\d{1,2})[:.h](\d{2})$/.exec(v.trim());
+            if (m) { const d = new Date(); d.setHours(+m[1], +m[2], 0, 0); return d.getTime(); }
+            const t = Date.parse(v); return isNaN(t) ? null : t;
+        };
+        const EVENT_END_TEST = (NS || SIM_MODE) ? parseEnd(new URLSearchParams(window.location.search).get('einde')) : null;
+        const eventEndFor = (laps) => EVENT_END_TEST || (!NS && !SIM_MODE ? EVENT_END_REAL : SIM_MODE ? eventStartFor(laps) + 24 * 3600e3 : Infinity);
         const colName = (name) => NS ? `${NS}_${name}` : name;
         // ?autoplay=1 (enkel in oefenmodus): dit venster speelt de rest van het event van vorig jaar live af in Firestore
         const AUTOPLAY = !!NS && new URLSearchParams(window.location.search).get('autoplay') === '1';
@@ -1907,7 +1918,117 @@ function predictNext(times, gender, restMs) {
             );
         };
 
-        const DonationBanner = ({ laps, variant = 'card' }) => {
+        // ===== Eindscherm na 20:00: eindstand, podiums die per klassement wisselen, rondes per uur en weetjes over de hele editie =====
+        const FINALE_MS = Number(new URLSearchParams(window.location.search).get('slidems')) || 11000;   // zelfde ritme als de weetjes
+        const formatMMSS = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+        const DisplayFinale = ({ laps, runners, endAt, compact, loading }) => {
+            const [k, setK] = useState(0);
+            useEffect(() => { const iv = setInterval(() => setK(x => x + 1), FINALE_MS); return () => clearInterval(iv); }, []);
+            const d = React.useMemo(() => {
+                const gOf = {}, nameOf = {}; runners.forEach(r => { gOf[r.id] = r.gender || 'X'; nameOf[r.id] = r.name; });
+                const per = {};
+                laps.forEach(l => { const e = per[l.runnerId] || (per[l.runnerId] = { id: l.runnerId, name: nameOf[l.runnerId] || l.runnerName, g: gOf[l.runnerId] || 'X', n: 0, sum: 0, best: Infinity }); e.n++; e.sum += l.time; if (l.time < e.best) e.best = l.time; });
+                const all = Object.values(per);
+                const most = (f) => all.filter(f).sort((a, b) => b.n - a.n || a.best - b.best).map(x => ({ id: x.id, name: x.name, v: x.n, txt: `${x.n} rondes` }));
+                // snelste rondes per RONDE, zoals de ranglijst op het grote scherm (dezelfde loper mag er twee keer in staan)
+                const fast = (f) => laps.filter(l => f(per[l.runnerId])).sort((a, b) => a.time - b.time).map(l => ({ id: l.id, name: nameOf[l.runnerId] || l.runnerName, v: Math.ceil(l.time / 100), el: lapTenthsEl(l.time) }));
+                const avg = all.filter(x => x.n >= 5).sort((a, b) => a.sum / a.n - b.sum / b.n).map(x => ({ id: x.id, name: x.name, v: Math.ceil(x.sum / x.n / 1000), txt: `${formatMMSS(x.sum / x.n)} gem.` }));
+                const boards = [
+                    ['Meeste rondes', most(() => true)],
+                    ['Snelste ronde · vrouwen', fast(x => x.g === 'V')],
+                    ['Snelste ronde · mannen', fast(x => x.g === 'M')],
+                    ['Meeste rondes · vrouwen', most(x => x.g === 'V')],
+                    ['Meeste rondes · mannen', most(x => x.g === 'M')],
+                    ['Snelste gemiddelde', avg, 'min. 5 rondes'],
+                ].filter(b => b[1].length);
+                const start = endAt - 24 * 3600e3, hours = Array(24).fill(0);
+                laps.forEach(l => { const i = Math.floor((new Date(l.timestamp).getTime() - start) / 3600e3); if (i >= 0 && i < 24) hours[i]++; });
+                const peak = hours.indexOf(Math.max(...hours));
+                const sorted = [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)), rec = laps.reduce((m, l) => !m || l.time < m.time ? l : m, null);
+                const night = laps.filter(l => { const hh = new Date(l.timestamp).getHours(); return hh < 6; }).length;
+                return { boards, hours, peak, start, rec, first: sorted[0], last: sorted[sorted.length - 1], night, nRunners: all.length };
+            }, [laps, runners, endAt]);
+            const ink = '#17120d', card = { background: '#fff', border: `3px solid ${ink}`, borderRadius: 16, boxShadow: `4px 4px 0 ${ink}`, color: ink };
+            const label = (t) => h('div', { style: { fontSize: 13, letterSpacing: '.14em', fontWeight: 800, textTransform: 'uppercase', color: '#6a5a48' } }, t);
+            const hh = (i) => `${String(new Date(d.start + i * 3600e3).getHours()).padStart(2, '0')}u`;
+            const km = (laps.length * 0.515).toFixed(1).replace('.', ',');
+
+            // ---- podium ----
+            const bi = d.boards.length ? k % d.boards.length : 0, board = d.boards[bi];
+            const podium = () => {
+                if (!board) return h('div', { style: { ...card, padding: 24, textAlign: 'center', fontSize: 22, fontWeight: 800 } }, 'Geen rondes');
+                const [title, list, note] = board, top = list.slice(0, 3), rest = list.slice(3, compact ? 6 : 8);
+                const rank = (i) => tieRank(list, i, x => x.v);
+                const STEP = { 1: [210, '#ffd23f'], 2: [150, '#f2a342'], 3: [105, '#ffd58a'] };
+                const col = (x, i) => {
+                    if (!x) return h('div', { key: 'e' + i, style: { flex: 1 } });
+                    const r = rank(i), [hgt, bg] = STEP[Math.min(3, r)], delay = r === 1 ? 0.55 : r === 2 ? 0.3 : 0.05;
+                    return h('div', { key: x.id, style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' } },
+                        h('div', { style: { textAlign: 'center', marginBottom: 10, padding: '0 6px', width: '100%', animation: `finIn .5s ${delay + 0.35}s cubic-bezier(.2,.9,.3,1.3) both` } },
+                            r === 1 && h('svg', { viewBox: '0 0 24 24', width: 46, height: 46, style: { display: 'block', margin: '0 auto 2px' } }, h('path', { d: LB_CROWN, fill: '#ffd23f', stroke: ink, strokeWidth: 1.6, strokeLinejoin: 'round' })),
+                            h('div', { style: { fontSize: r === 1 ? 30 : 24, fontWeight: 800, lineHeight: 1.1, overflowWrap: 'anywhere' } }, x.name),
+                            h('div', { style: { fontSize: r === 1 ? 26 : 21, fontWeight: 800, marginTop: 4, fontVariantNumeric: 'tabular-nums', color: '#863c14' } }, x.el || x.txt)),
+                        h('div', { style: { width: '100%', height: hgt, background: bg, border: `3px solid ${ink}`, borderRadius: '14px 14px 0 0', boxShadow: `4px 0 0 ${ink}`, display: 'flex', justifyContent: 'center', paddingTop: 10, transformOrigin: 'bottom', animation: `finUp .55s ${delay}s cubic-bezier(.2,.9,.3,1.2) both` } },
+                            h('div', { style: { fontSize: r === 1 ? 72 : 56, fontWeight: 800, lineHeight: 1 } }, r)));
+                };
+                return h('div', { key: 'b' + k, style: { ...card, padding: '16px 22px 0', display: 'flex', flexDirection: 'column', background: '#fff6df' } },
+                    h('div', { className: 'flex items-center justify-between', style: { marginBottom: 6 } },
+                        h('div', null, label('Podium'), h('div', { style: { fontSize: 34, fontWeight: 800, lineHeight: 1.1, animation: 'finIn .4s both' } }, title, note && h('span', { style: { fontSize: 16, fontWeight: 700, color: '#6a5a48', marginLeft: 10 } }, note))),
+                        h('div', { className: 'flex gap-2' }, d.boards.map((b, i) => h('div', { key: i, style: { width: i === bi ? 34 : 14, height: 14, borderRadius: 999, border: `3px solid ${ink}`, background: i === bi ? '#e8590c' : '#fff', transition: 'width .4s' } })))),
+                    h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 14, height: compact ? 340 : 520, borderBottom: `5px solid ${ink}`, margin: '0 -22px', padding: '0 22px' } },
+                        [col(top[1], 1), col(top[0], 0), col(top[2], 2)]),
+                    h('div', { style: { display: 'grid', gridTemplateColumns: compact ? '1fr' : '1fr 1fr', gridAutoRows: 'min-content', gap: '6px 16px', padding: '12px 0 14px', minHeight: compact ? 156 : 156 } },
+                        rest.map((x, j) => h('div', { key: x.id, className: 'flex items-center gap-3', style: { background: '#fff', border: `2px solid ${ink}`, borderRadius: 10, padding: '6px 12px', animation: `finIn .4s ${1 + j * 0.08}s both` } },
+                            h('span', { style: { width: 30, fontWeight: 800, color: '#8b7a63' } }, `#${rank(j + 3)}`),
+                            h('span', { className: 'truncate', style: { flex: 1, fontWeight: 700, fontSize: 18 } }, x.name),
+                            h('span', { style: { fontWeight: 800, fontSize: 18, fontVariantNumeric: 'tabular-nums' } }, x.el || x.txt)))),
+                    h('div', { style: { height: 6, margin: '0 -22px', background: '#fff1cf', borderRadius: '0 0 12px 12px', overflow: 'hidden' } },
+                        h('div', { key: 'p' + k, style: { height: '100%', background: '#e8590c', animation: `finBar ${FINALE_MS}ms linear both` } })));
+            };
+
+            // ---- eindstand ----
+            const total = h('div', { style: { ...card, background: '#ffd58a', padding: '18px 22px', textAlign: 'center' } },
+                label('De 24 uur zitten erop'),
+                h('div', { style: { fontSize: 64, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-.02em' } }, 'Afgelopen!'),
+                h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 12, background: '#fff', border: `3px solid ${ink}`, borderRadius: 14, boxShadow: `4px 4px 0 #0090c0`, padding: '6px 18px', margin: '10px 0 12px' } },
+                    h('img', { src: 'water-for-all-logo.png', alt: 'Water for All', style: { height: 44, width: 'auto' } }),
+                    h('div', { style: { fontSize: 58, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 } }, `€ ${(laps.length * EUR_PER_LAP).toLocaleString('nl-BE')}`)),
+                h('div', { className: 'flex justify-center gap-3' }, [[laps.length.toLocaleString('nl-BE'), 'rondes'], [km, 'km'], [d.nRunners, 'lopers']].map(([v, t]) =>
+                    h('div', { key: t, style: { background: '#fff6df', border: `2px solid ${ink}`, borderRadius: 12, padding: '4px 14px', minWidth: 96 } },
+                        h('div', { style: { fontSize: 30, fontWeight: 800, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' } }, v), h('div', { style: { fontSize: 13, fontWeight: 700, color: '#6a5a48' } }, t)))));
+
+            // ---- rondes per uur ----
+            const maxH = Math.max(1, ...d.hours);
+            const chart = h('div', { style: { ...card, padding: '14px 18px', flex: 1, display: 'flex', flexDirection: 'column' } },
+                label('Rondes per uur'),
+                h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 3, height: compact ? 120 : 170, flex: compact ? 'none' : 1, marginTop: 10 } },
+                    d.hours.map((n, i) => h('div', { key: i, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' } },
+                        i === d.peak && n > 0 && h('div', { style: { fontSize: 13, fontWeight: 800 } }, n),
+                        h('div', { style: { width: '100%', height: `${Math.max(2, n / maxH * 100)}%`, background: i === d.peak ? '#e8590c' : '#f2a342', border: `2px solid ${ink}`, borderRadius: '5px 5px 0 0', transformOrigin: 'bottom', animation: `finUp .5s ${i * 0.03}s both` } })))),
+                h('div', { style: { display: 'flex', gap: 3, marginTop: 4 } }, d.hours.map((_, i) => h('div', { key: i, style: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#6a5a48' } }, i % 4 === 0 ? hh(i) : ''))));
+
+            // ---- weetjes ----
+            const facts = [
+                d.rec && ['Snelste ronde', lapTenthsEl(d.rec.time), d.rec.runnerName],
+                d.hours[d.peak] > 0 && ['Drukste uur', `${hh(d.peak)}–${hh(d.peak + 1)}`, `${d.hours[d.peak]} rondes`],
+                ['Rondes ’s nachts', d.night, '00u–06u'],
+                d.last && ['Laatste ronde', clockOf(d.last.timestamp), d.last.runnerName],
+            ].filter(Boolean);
+            const factRow = h('div', { style: { display: 'grid', gridTemplateColumns: `repeat(${facts.length}, minmax(0, 1fr))`, gap: 14 } },
+                facts.map(([t, v, s]) => h('div', { key: t, style: { ...card, padding: '10px 14px' } }, label(t),
+                    h('div', { style: { fontSize: 38, fontWeight: 800, lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' } }, v),
+                    h('div', { className: 'truncate', style: { fontSize: 15, fontWeight: 700, color: '#5b4a3a' } }, s))));
+
+            if (loading) return h('div', { className: 'text-center py-16', style: { fontSize: 28, fontWeight: 800, color: '#6a5a48' } }, 'Laden…');
+            const css = h('style', null, '@keyframes finUp{from{transform:scaleY(0)}to{transform:none}}@keyframes finIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}@keyframes finBar{from{width:0}to{width:100%}}');
+            if (compact) return h('div', { className: 'grid gap-4 lg:grid-cols-5 items-start' }, css,
+                h('div', { className: 'lg:col-span-2 space-y-4' }, total, chart), h('div', { className: 'lg:col-span-3 space-y-4' }, podium()));
+            return h('div', { className: 'grid gap-4', style: { gridTemplateColumns: '1fr 2fr' } }, css,
+                h('div', { className: 'flex flex-col gap-4' }, total, chart),
+                h('div', { className: 'space-y-4' }, podium(), factRow));
+        };
+
+        const DonationBanner = ({ laps, variant = 'card', ended }) => {
             const amount = laps * EUR_PER_LAP;
             const shown = useCountUp(amount);
             const milestoneIdx = Math.floor(amount / MILESTONE_EUR);
@@ -1953,7 +2074,7 @@ function predictNext(times, gender, restMs) {
                             h('div', { style: { height: 16, background: '#d8f1fa', border: '3px solid #17120d', borderRadius: 999, overflow: 'hidden', marginTop: 5 } },
                                 h('div', { style: { width: `${Math.max(progress, 2)}%`, height: '100%', background: '#0090c0', borderRight: progress > 1 ? '3px solid #17120d' : 'none', transition: 'width 1s ease' } })
                             ),
-                            h('div', { style: { fontSize: 12, color: '#00577a', fontWeight: 700, marginTop: 4 } }, `nog ${lapsToGo} ${lapsToGo === 1 ? 'ronde' : 'rondes'} tot ${formatEuro(next)} · € ${EUR_PER_LAP} per ronde`)
+                            h('div', { style: { fontSize: 12, color: '#00577a', fontWeight: 700, marginTop: 4 } }, ended ? `Eindstand · € ${EUR_PER_LAP} per ronde` : `nog ${lapsToGo} ${lapsToGo === 1 ? 'ronde' : 'rondes'} tot ${formatEuro(next)} · € ${EUR_PER_LAP} per ronde`)
                         )
                     ),
                     celebrate && h(Celebration, { amount: celebrate.amount })
@@ -2003,11 +2124,24 @@ function predictNext(times, gender, restMs) {
             const [qDropAt, setQDropAt] = useState(null);  // positie waar hij ingevoegd wordt (0..n)   // melding onder het toevoeg-formulier (geen popups)
             const activeDocIdsRef = useRef([]);
             const [runners, setRunners] = useState([]);
-            const [laps, setLaps] = useState([]);
-            const [queue, setQueue] = useState([]);
+            const [lapsRaw, setLaps] = useState([]);
+            const [lapsLoaded, setLapsLoaded] = useState(SIM_MODE);
+            const [queueRaw, setQueue] = useState([]);
             const [queueLoaded, setQueueLoaded] = useState(false);   // pas na de eerste lading weten we of de wachtrij echt leeg is
             const [activeRunner, setActiveRunner] = useState(null);
-            const [isRunning, setIsRunning] = useState(false);
+            const [isRunningRaw, setIsRunning] = useState(false);
+            // Na het einde (20:00): geen lopende loper of wachtrij meer, en rondes die later binnenkwamen tellen niet
+            const endAt = React.useMemo(() => eventEndFor(lapsRaw), [lapsRaw.length > 0]);
+            const [ended, setEnded] = useState(() => tnow() >= endAt);
+            useEffect(() => {
+                if (!isFinite(endAt)) { setEnded(false); return; }
+                const tick = () => setEnded(tnow() >= endAt);
+                tick(); const iv = setInterval(tick, 1000);
+                return () => clearInterval(iv);
+            }, [endAt]);
+            const laps = React.useMemo(() => isFinite(endAt) ? lapsRaw.filter(l => new Date(l.timestamp).getTime() <= endAt) : lapsRaw, [lapsRaw, endAt]);
+            const queue = ended ? [] : queueRaw;
+            const isRunning = isRunningRaw && !ended;
             const [startTime, setStartTime] = useState(null);
             const [elapsedTime, setElapsedTime] = useState(0);
             const [manualTime, setManualTime] = useState('');
@@ -2033,8 +2167,8 @@ function predictNext(times, gender, restMs) {
             }, [publicView, view]);
 
             // ===== Autoplay (oefenmodus, ?autoplay=1): schrijft de rest van het event van vorig jaar op het juiste moment weg =====
-            const lapsRef = useRef([]); lapsRef.current = laps;
-            const queueRef = useRef([]); queueRef.current = queue;
+            const lapsRef = useRef([]); lapsRef.current = lapsRaw;
+            const queueRef = useRef([]); queueRef.current = queueRaw;
             useEffect(() => {
                 if (!AUTOPLAY || !isFirebaseConfigured) return;
                 let timer = null, plan = [], stopped = false, lastActive = undefined, dueAt = 0;
@@ -2070,7 +2204,7 @@ function predictNext(times, gender, restMs) {
                     const now = tnow();
                     // 1. afgelopen rondes opslaan (met de juiste totalen van de loper)
                     const have = new Set(lapsRef.current.map(l => l.id));
-                    const due = plan.filter(l => l.finishTs <= now && !have.has(lapId(l.seq)) && !applied.has(l.seq));
+                    const due = plan.filter(l => l.finishTs <= Math.min(now, EVENT_END_TEST || Infinity) && !have.has(lapId(l.seq)) && !applied.has(l.seq));
                     if (due.length) {
                         due.forEach(l => applied.add(l.seq));
                         const byRunner = {};
@@ -2080,6 +2214,13 @@ function predictNext(times, gender, restMs) {
                             runnerId: l.runnerId, runnerName: l.name, time: l.ms, distance: 515,
                             timestamp: new Date(l.finishTs).toISOString(), startTime: new Date(l.startTs).toISOString(), isPersonalRecord: l.isPR, lapNumber: l.lapNumber
                         } })));
+                    }
+                    // na het einde (&einde=): de lopende ronde telt niet, wachtrij leeg, de autoplay stopt
+                    if (EVENT_END_TEST && now >= EVENT_END_TEST) {
+                        const rq = queueRef.current.filter(q => String(q.id).startsWith('replay_q_')).map(q => q.id);
+                        if (rq.length) firestoreWrapper.collection('queue').deleteMany(rq);
+                        if (lastActive !== null) firestoreWrapper.collection('activeRunner').doc('current').delete();
+                        lastActive = null; return;
                     }
                     // 2. wie loopt nu, en de volgende lopers in de wachtrij
                     let active = plan.find(l => l.startTs <= now && now < l.finishTs) || null;
@@ -2109,6 +2250,7 @@ function predictNext(times, gender, restMs) {
                     // 3. volgende wekker: start of einde van de eerstvolgende ronde
                     let next = Infinity;
                     plan.forEach(l => { if (l.startTs > now) next = Math.min(next, l.startTs); if (l.finishTs > now) next = Math.min(next, l.finishTs); });
+                    if (EVENT_END_TEST) next = Math.min(next, EVENT_END_TEST);
                     schedule(isFinite(next) ? Math.max(300, next - Date.now() + 50) : 60000);
                 };
                 const unsub = firestoreWrapper.collection('replay').onSnapshot(snap => {
@@ -2217,7 +2359,7 @@ function predictNext(times, gender, restMs) {
                 };
             }, [isDisplayFullscreen, view]);
             // opnieuw passen als de inhoud van lengte verandert (andere wachtrij, nieuwe ronde)
-            useEffect(() => { if (fitDisplayRef.current) fitDisplayRef.current(); }, [queue.length, laps.length, runners.length, activeRunner && activeRunner.runnerId]);
+            useEffect(() => { if (fitDisplayRef.current) fitDisplayRef.current(); }, [queue.length, laps.length, runners.length, activeRunner && activeRunner.runnerId, ended]);
 
             // Display/fullscreen: nooit scrollbalken
             useEffect(() => {
@@ -2365,7 +2507,7 @@ function predictNext(times, gender, restMs) {
 
                 const unsubLaps = firestoreWrapper.collection('laps').onSnapshot(snapshot => {
                     const v = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    later(() => setLaps(v));
+                    later(() => { setLaps(v); setLapsLoaded(true); });
                 });
 
                 const unsubQueue = firestoreWrapper.collection('queue').onSnapshot(snapshot => {
@@ -3783,7 +3925,7 @@ function predictNext(times, gender, restMs) {
                 }` 
             },
                 h(SyncBanner, null),
-                IS_SIGNUP && h(ChronoBanner, { relevant: (activeRunner && isRunning) || queue.length > 0 }),
+                IS_SIGNUP && !ended && h(ChronoBanner, { relevant: (activeRunner && isRunning) || queue.length > 0 }),
                 h(PracticeBadge, null),
                 confirmDlg && h('div', { className: 'fixed inset-0 z-[100] flex items-center justify-center p-4', style: { background: 'rgba(23,18,13,.55)' }, onClick: () => answerConfirm(false) },
                     h('div', { className: 'bg-white rounded-lg shadow-lg p-6 w-full max-w-md', style: { animation: 'swapIn .25s ease-out both' }, onClick: (e) => e.stopPropagation() },
@@ -3880,7 +4022,7 @@ function predictNext(times, gender, restMs) {
                         !isDisplayFullscreen && h('div', { className: 'flex gap-2' }, sTab('queue', 'Wachtrij'), sTab('admin', 'Beheer')),
                         h(SyncChip, null),
                         h('div', { className: 'text-right leading-tight' },
-                            h('div', { className: (isDisplayFullscreen ? 'text-4xl' : 'text-2xl') + ' font-extrabold whitespace-nowrap' }, `${activeRunner && isRunning ? Math.max(0, queue.length - 1) : queue.length} wachtend`)
+                            h('div', { className: (isDisplayFullscreen ? 'text-4xl' : 'text-2xl') + ' font-extrabold whitespace-nowrap' }, ended ? 'Afgelopen' : `${activeRunner && isRunning ? Math.max(0, queue.length - 1) : queue.length} wachtend`)
                         ),
                         !isDisplayFullscreen && h('button', { onClick: toggleDisplayFullscreen, className: 'flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm', style: { background: '#fff', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' } }, h(Icon, { name: 'expand', className: 'w-5 h-5' }), h('span', null, 'Volledig scherm')),
                         h('img', { src: 'humasol_logo.png', alt: 'Humasol', className: 'h-9 w-auto rounded-xl px-2 py-1', style: { background: '#fff', border: '3px solid #17120d' } })
@@ -3913,7 +4055,7 @@ function predictNext(times, gender, restMs) {
                     ),
 
                     // Low queue warning (shown on all views except display fullscreen)
-                    showChrome && !publicView && showLowQueueWarning && h('div', { className: 'keep-light mb-4 rounded-lg px-4 py-2 flex items-center justify-between gap-3', style: { background: '#ffd58a', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d' } },
+                    showChrome && !publicView && showLowQueueWarning && !ended && h('div', { className: 'keep-light mb-4 rounded-lg px-4 py-2 flex items-center justify-between gap-3', style: { background: '#ffd58a', border: '3px solid #17120d', boxShadow: '4px 4px 0 #17120d' } },
                         h('div', null,
                             h('b', { className: 'text-gray-900' }, queue.length === 0 ? 'Wachtrij is leeg' : `Nog maar ${queue.length} ${queue.length === 1 ? 'loper' : 'lopers'} in de wachtrij`),
                             h('span', { className: 'ml-3 text-sm text-gray-800' }, 'Roep mensen op om zich in te schrijven.')
@@ -4143,8 +4285,9 @@ function predictNext(times, gender, restMs) {
                         )
                     ),
 
-                    // Queue View
-                    view === 'queue' && h('div', { className: 'grid gap-6 lg:grid-cols-5 items-start' },
+                    // Queue View (na 20:00: de eindstand, geen inschrijvingen meer)
+                    view === 'queue' && ended && h(DisplayFinale, { laps, runners, endAt, compact: true, loading: !lapsLoaded }),
+                    view === 'queue' && !ended && h('div', { className: 'grid gap-6 lg:grid-cols-5 items-start' },
                         // Links: nieuwe loper toevoegen (bovenaan, zonder scrollen)
                         h('div', { className: 'lg:col-span-2 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto' + (isDisplayFullscreen || IS_SIGNUP ? ' lg:max-h-[calc(100vh-9rem)]' : '') },
                         h('div', { className: 'bg-white rounded-lg shadow-lg p-6' },
@@ -4813,7 +4956,7 @@ function predictNext(times, gender, restMs) {
                                 ),
                                 // Water for All: bedrag in het midden van de balk
                                 h('div', { className: 'lg:justify-self-center' },
-                                    h(DonationBanner, { laps: laps.length, variant: 'header' })
+                                    h(DonationBanner, { laps: laps.length, variant: 'header', ended })
                                 ),
                                 h('div', { className: 'relative lg:justify-self-end flex items-center gap-4' },
                                     IS_DISPLAY_ONLY && !isDisplayFullscreen && h('button', { onClick: toggleDisplayFullscreen, className: 'flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm', style: { background: '#fff', border: '3px solid #17120d', boxShadow: '3px 3px 0 #17120d', color: '#17120d' } }, h(Icon, { name: 'expand', className: 'w-5 h-5' }), h('span', null, 'Volledig scherm')),
@@ -4836,8 +4979,9 @@ function predictNext(times, gender, restMs) {
                             )
                         ),
 
-                        // Main content area
-                        h('div', { className: 'px-6 py-4' },
+                        // Main content area (na 20:00: het eindscherm)
+                        ended && h('div', { className: 'px-6 py-4' }, h(DisplayFinale, { laps, runners, endAt, loading: !lapsLoaded })),
+                        !ended && h('div', { className: 'px-6 py-4' },
                             h('div', { className: 'grid gap-4', style: { gridTemplateColumns: '1fr 2fr' } },
                                 // Left column: nu aan het lopen, volgende lopers, laatste rondes
                                 h('div', { className: 'space-y-4' },

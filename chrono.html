@@ -235,6 +235,15 @@ async function syncClock() {
   } catch (e) {}
 }
 syncClock(); setInterval(syncClock, 10 * 60e3);
+// ===== Einde van het event: woensdag 21 oktober 2026 om 20:00 =====
+// Een ronde die dan nog loopt, telt niet. Daarna enkel nog corrigeren (Rondes, Lopers), geen starts of wachtrij.
+// Testen in de oefenmodus: ?ns=oefen&einde=21:30 (vandaag) of &einde=2026-10-15T21:30. Oefenmodus zonder &einde: geen einde.
+const EVENT_END_REAL = Date.parse('2026-10-21T20:00:00+02:00');
+const parseEnd = (v) => { if (!v) return null; const m = /^(\d{1,2})[:.h](\d{2})$/.exec(v.trim()); if (m) { const d = new Date(); d.setHours(+m[1], +m[2], 0, 0); return d.getTime(); } const t = Date.parse(v); return isNaN(t) ? null : t; };
+const EVENT_END = (NS && parseEnd(params.get('einde'))) || (NS ? Infinity : EVENT_END_REAL);
+const ended = () => tnow() >= EVENT_END;
+const inEvent = (l) => new Date(l.timestamp).getTime() <= EVENT_END;
+let endCut = null, endCleared = false;   // wie er om 20:00 nog liep (telt niet mee)
 
 // ===== Firebase met offline-opslag =====
 firebase.initializeApp(firebaseConfig);
@@ -306,9 +315,9 @@ function predictNext(times, gender, restMs) {
 const mmss = (ms) => { const s = Math.ceil(ms / 1000);   /* zoals in de atletiek naar boven afronden, net als het grote scherm en de lopers-app */ return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const mmssc = (ms) => { const t = Math.max(0, ms); const s = Math.floor(t / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.${String(Math.floor((t % 1000) / 10)).padStart(2, '0')}`; };
 const clock = (d) => new Date(d).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
-const sortedQueue = () => [...queue].sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt));
+const sortedQueue = () => ended() ? [] : [...queue].sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt));
 const activeData = () => { const d = activeDocs.find((x) => x.id === 'current') || activeDocs[0]; return d ? d.data : null; };
-const isRunning = () => { const a = activeData(); return !!(a && a.isRunning && a.runner); };
+const isRunning = () => { const a = activeData(); return !!(a && a.isRunning && a.runner) && !ended(); };
 const startMs = () => { const a = activeData(); return a && a.startTime ? new Date(a.startTime).getTime() : null; };
 const runItem = () => { if (!isRunning()) return null; const q = sortedQueue(); const rid = activeData().runner.runnerId; return q.find((x) => x.runnerId === rid) || null; };
 const waiting = () => { const q = sortedQueue(), r = runItem(); return r ? q.filter((x) => x.id !== r.id) : q; };
@@ -484,11 +493,12 @@ function lastLapAction() {
   const nextStarted = !!(a && a.isRunning && a.startTime === L.timestamp);
   return { lapId: L.id, lapData: L, time: L.time, runnerDocId: rn ? rn.id : null, at, nextStartISO: nextStarted ? L.timestamp : null,
     queueItem: { id: qid, data: item }, prevActive: { runner: { id: qid, ...item }, isRunning: true, startTime: L.startTime || new Date(at - L.time).toISOString() },
-    canUndo: !(a && a.isRunning) || nextStarted };   // enkel als er sindsdien niets anders gebeurde
+    canUndo: !ended() && (!(a && a.isRunning) || nextStarted) };   // enkel als er sindsdien niets anders gebeurde
 }
 async function undo(given) {
   if (!mayTime()) return;
   const la = given || lastAction; if (!la) return;
+  if (ended()) { toast('Afgelopen: wis de ronde via Rondes', 3500); return; }
   if (Date.now() - la.at > 120000 && !(await ask('Ongedaan maken?', `De laatste actie was meer dan 2 minuten geleden.\nDe ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd en de timer loopt weer verder voor die loper.`, { ok: 'Ja, ongedaan maken', danger: true }))) return;
   if (!la.at || Date.now() - la.at <= 120000) { if (!(await ask('Ongedaan maken?', `De ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd.\nDe timer loopt weer verder voor ${la.lapData.runnerName}.`, { ok: 'Ja, ongedaan maken', danger: true }))) return; }
   const b = db.batch();
@@ -613,6 +623,7 @@ async function resetAll() {
 
 // ===== Samenvatting voor de lopers-app: de chronometer schrijft elke ~2 min een kleine samenvatting, zodat gsm's niet alle rondes hoeven te lezen =====
 function buildMeta(runnersArr, lapsArr) {
+  lapsArr = lapsArr.filter(inEvent);
   const by = {};
   lapsArr.forEach((l) => { const e = by[l.runnerId] || (by[l.runnerId] = { n: 0, tt: 0, best: Infinity, sq: 0 }); e.n++; e.tt += l.time; if (l.time < e.best) e.best = l.time; });
   lapsArr.forEach((l) => { const e = by[l.runnerId], m = e.tt / e.n; e.sq += (l.time - m) * (l.time - m); });
@@ -647,7 +658,7 @@ function writeMeta() {
 // wachtrijlengte om de 5 minuten bewaren (voor de weetjes op het grote scherm)
 function sampleQueue() {
   if (!isOwner()) return;
-  if (!loaded.queue) return;
+  if (!loaded.queue || ended()) return;
   const t5 = Math.floor(tnow() / 300000) * 300000;
   db.collection(col('meta')).doc('queueHistory').set({ samples: FV.arrayUnion({ t: t5, n: waiting().length }) }, { merge: true }).catch(() => {});
 }
@@ -718,7 +729,7 @@ async function addLapManual() {   // gemiste ronde toevoegen
   if (v === null) return;
   const ms = parseTime(v); if (!ms) { toast('Ongeldige tijd. Gebruik m:ss', 3500); return; }
   if (ms < MIN_LAP) { toast(MIN_LAP_TXT, 3500); return; }
-  const mine = laps.filter((l) => l.runnerId === r.id), prevBest = mine.length ? Math.min(...mine.map((l) => l.time)) : Infinity, now = new Date(tnow());
+  const mine = laps.filter((l) => l.runnerId === r.id), prevBest = mine.length ? Math.min(...mine.map((l) => l.time)) : Infinity, now = new Date(Math.min(tnow(), EVENT_END - 1000));   // na het einde: net vóór 20:00, anders telt ze niet
   const b = db.batch();
   b.set(ref('laps').doc(), { runnerId: r.id, runnerName: r.name, time: ms, distance: 515, timestamp: now.toISOString(), startTime: new Date(now.getTime() - ms).toISOString(), isPersonalRecord: ms < prevBest, lapNumber: mine.length + 1, manual: true });
   b.update(ref('runners', r.id), { totalLaps: FV.increment(1), totalTime: FV.increment(ms) });
@@ -847,6 +858,7 @@ function renderChrome() {
   else if (stopNote && Date.now() - stopNote.at < 90000) ban = `<div class="banner red"><b>${esc(stopNote.who)} is gestopt, maar niet door deze chronometer.</b> ${stopNote.replay ? 'Er draait een autoplay-simulatie op een scherm (oefenscherm): die overschrijft de chronometer. Sluit dat scherm.' : 'Een ander toestel (of een andere chronometer) heeft de loper gestopt. Controleer wie nog de chronometer open heeft.'} Start opnieuw als dat nodig is.</div>`;
   else if (batt && batt.level <= 0.2 && !batt.charging) ban = `<div class="banner red">Batterij bijna leeg (${Math.round(batt.level * 100)}%). Sluit de lader aan.</div>`;
   else if (nagUntil > Date.now()) ban = `<div class="banner">Even controleren: hangt de gsm aan de lader en staat het scherm aan?</div>`;
+  else if (ended()) ban = '';
   else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
   else if (loaded.queue && isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand meer na deze loper.</div>`;
   if (role === 'viewer' && !conflict) ban = `<div class="banner">Meekijken: ${owner && owner.name ? `<b>${esc(owner.name)}</b>` : 'een ander toestel'} neemt de tijden.</div>` + ban;
@@ -869,7 +881,19 @@ function runnerFacts(rid, next) {
   return `<div class="facts">${first}<span><small>Laatste</small>${mmss(last)}</span><span><small>Snelste</small>${mmss(best)}</span></div>`;
 }
 const khead = (pill) => focusMode ? `<div class="khead">${pill}</div>` : `<div class="khead split">${pill}<button class="focusin" data-act="focus" aria-label="Tijdnemer-modus">⤢ Tijdnemer</button></div>`;
+// na 20:00: de eindstand in plaats van de klok en de grote knop; corrigeren kan via Rondes en Lopers
+function viewEnd() {
+  if (!loaded.laps) return `<div class="card now" style="background:#fff"><div class="nm" style="color:var(--muted)">Laden…</div></div>`;
+  const L = laps.filter(inEvent), n = L.length, nr = new Set(L.map((l) => l.runnerId)).size;
+  const recentLaps = [...L].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5).map((l) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(l.timestamp)}</div><div class="nm">${esc(l.runnerName)}</div><div class="w">${mmssc(l.time)}</div></div>`).join('');
+  return `<div class="card now"><div class="khead"><div class="k">Afgelopen</div></div><div class="clk" style="font-size:60px">€ ${(n * EUR_PER_LAP).toLocaleString('nl-BE')}</div>
+    <div class="facts"><span><small>Rondes</small>${n}</span><span><small>Km</small>${(n * LAP_KM).toFixed(1).replace('.', ',')}</span><span><small>Lopers</small>${nr}</span></div>
+    ${endCut ? `<div class="sub" style="margin-top:8px">Niet meegeteld: ${esc(endCut)} (liep nog om ${clock(EVENT_END)})</div>` : ''}</div>
+    <div class="row2"><button class="btn" data-tab="laps">Rondes corrigeren</button><button class="btn" data-tab="runners">Lopers</button></div>
+    <div class="card"><h2>Laatste rondes <small>${n} in totaal</small></h2>${recentLaps || '<div class="empty">Geen rondes</div>'}</div>`;
+}
 function viewChrono() {
+  if (ended()) return viewEnd();
   if (!loaded.queue || !loaded.active) return `<div class="card now" style="background:#fff"><div class="nm" style="color:var(--muted)">Laden…</div><div class="sub">Even geduld, de wachtrij wordt opgehaald</div></div><button class="big wait" disabled>EVEN GEDULD</button>`;
   syncResult();
   const a = activeData(), running = isRunning(), w = waiting(), st = startMs(), busy = locked();
@@ -935,6 +959,7 @@ function sresHtml() {   // zoekresultaten bij 'Inschrijven'
     + (!res.length && !offerNew ? '<div class="empty">Niemand gevonden. Typ voor- en achternaam voor een nieuwe loper.</div>' : '');
 }
 function viewQueue() {
+  if (ended()) return '<div class="card"><h2>Wachtrij</h2><div class="empty">Afgelopen</div></div>';
   const w = waiting(), r = runItem(), a = activeData();
   const form = nr ? `<div style="margin-top:8px"><div class="row2"><input class="in" id="nrF" placeholder="Voornaam" value="${esc(nr.first)}" autocomplete="off" style="margin:0"><input class="in" id="nrL" placeholder="Achternaam" value="${esc(nr.last)}" autocomplete="off" style="margin:0"></div>
     <div class="lbl2" style="margin-top:8px">Klassement</div><div class="seg">${Object.entries(KL).map(([k, v]) => `<button data-act="nrg" data-g="${k}" class="${nr.g === k ? 'on' : ''}">${v}</button>`).join('')}</div>
@@ -968,7 +993,7 @@ function viewRunners() {
     <input class="in" id="rq" placeholder="Zoek een loper…" value="${esc(rq)}" autocomplete="off" style="margin-top:0"><div id="rres">${rresHtml()}</div></div>`;
 }
 function viewMore() {
-  const eur = laps.length * EUR_PER_LAP;
+  const laps0 = laps, laps = laps0.filter(inEvent), eur = laps.length * EUR_PER_LAP;
   return `<div class="card"><h2>Overzicht</h2><div class="tiles">
       <div class="tile"><div class="tk">Lopers</div><div class="tv">${runners.length}</div></div>
       <div class="tile"><div class="tk">Rondes</div><div class="tv">${laps.length}<small>${(laps.length * LAP_KM).toFixed(1).replace('.', ',')} km</small></div></div>
@@ -1282,6 +1307,20 @@ setInterval(() => {
   document.querySelectorAll('[data-slot=next]').forEach((el) => el.classList.toggle('off', showRes));
 }, 50);
 setInterval(render, 5000);
+// Om 20:00 schakelt de chronometer zelf om: de lopende ronde vervalt (de eigenaar wist de lopende loper) en de eindstand verschijnt
+let endShown = false;
+setInterval(() => {
+  if (!ended() || !loaded.active) return;
+  const a = activeDocs.find((x) => x.id === 'current') || activeDocs[0], raw = a && a.data;
+  if (raw && raw.isRunning && raw.runner && !endCut) endCut = raw.runner.runnerName;
+  if (raw && isOwner() && !endCleared) { endCleared = true; const b = db.batch(); activeClear(b); commit(b); }
+  if (!endShown) {
+    endShown = true; focusMode = false; lastResult = null; if (window._handEl) window._handEl.remove();
+    if ($('overlay').querySelector('.sheet')) $('overlay').innerHTML = '';
+    if (holdState) holdCancel(false);
+    tab = tab === 'queue' ? 'chrono' : tab; buzz('warn'); render();
+  }
+}, 1000);
 window.addEventListener('online', render); window.addEventListener('offline', render);
 
 // Signaalsterkte: tik op de chip. Browsers geven geen wifi-dBm, dus we meten de reactietijd naar de server (enkel terwijl het paneel open staat, sluit na 1 min)

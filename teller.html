@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2a342">
+<title>24u Loop · Teller</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #17120d; --butter: #fff1cf; --orange: #f2a342; --deep: #e8590c; --muted: #6a5a48; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--butter); color: var(--ink); cursor: none; font-family: 'Bricolage Grotesque', system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #top { position: fixed; left: 4vw; top: 5vh; z-index: 2; }
+  #logos { display: flex; align-items: stretch; gap: 2.4vh; }
+  .lg { display: flex; align-items: center; background: #fff; border: .45vh solid var(--ink); border-radius: 2.2vh; box-shadow: .8vh .8vh 0 var(--ink); padding: 1.2vh 2.4vh; }
+  .lg img { display: block; width: auto; }
+  .lg .wfa { height: 11vh; }
+  .lg .ac { height: 8vh; }
+  #amount { margin-top: 2.5vh; display: flex; align-items: baseline; white-space: nowrap; font-weight: 800; font-size: min(18vw, 35vh); line-height: .95; letter-spacing: -.035em; transform-origin: 0 70%; }
+  #amount.bump { animation: bump .6s cubic-bezier(.2, 1.5, .4, 1); }
+  @keyframes bump { 0% { transform: scale(1.045); } 100% { transform: scale(1); } }
+  .cur { font-size: .48em; margin-right: .1em; }
+  .dig { display: inline-block; height: 1em; width: .6em; overflow: hidden; }
+  .dig i { display: block; font-style: normal; transition: transform 1.1s cubic-bezier(.2, .85, .25, 1); transform: translateY(calc(var(--d, 0) * -1em)); }
+  .dig b { display: block; height: 1em; line-height: 1; text-align: center; font-weight: inherit; }
+  .sep { display: inline-block; width: .22em; text-align: center; }
+  #cap { margin-top: .4vh; font-size: 4.2vh; font-weight: 700; }
+  #next { margin-left: 1.4vh; font-size: 3vh; font-weight: 700; color: var(--muted); }
+  #ms { position: fixed; inset: 0; z-index: 4; background: var(--orange); display: flex; flex-direction: column; align-items: center; justify-content: center; clip-path: inset(0 100% 0 0); pointer-events: none; }
+  #ms.show { animation: wipe 6s cubic-bezier(.7, 0, .2, 1) forwards; }
+  @keyframes wipe { 0% { clip-path: inset(0 100% 0 0); } 9% { clip-path: inset(0 0 0 0); } 88% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); } }
+  #ms span { font-size: 4.6vh; font-weight: 800; letter-spacing: .3em; text-transform: uppercase; }
+  #ms b { font-size: min(19vw, 34vh); font-weight: 800; line-height: 1; letter-spacing: -.03em; text-shadow: 1.2vh 1.2vh 0 #fff1cf; margin: 1vh 0 4vh; }
+  #ms.show b { animation: grow 6s ease-out forwards; }
+  @keyframes grow { 0%, 8% { transform: scale(.85); } 20% { transform: scale(1.02); } 100% { transform: scale(1.07); } }
+  #ms .lg .wfa { height: 10vh; }
+  #dot { position: fixed; right: 1.4vh; bottom: 1.4vh; width: 1.2vh; height: 1.2vh; border-radius: 50%; background: var(--deep); opacity: 0; transition: opacity .5s; z-index: 3; }
+  #dot.on { opacity: .9; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="top">
+  <div id="logos"><div class="lg"><img class="wfa" src="water-for-all-logo.png" alt="Water for All"></div><div class="lg"><img class="ac" src="atlas-copco-logo.png" alt="Atlas Copco"></div></div>
+  <div id="amount"></div>
+  <div id="cap">voor Water for All <span id="next"></span></div>
+</div>
+<div id="ms"><span>Mijlpaal</span><b id="msAmount"></b><div class="lg"><img class="wfa" src="water-for-all-logo.png" alt="Water for All"></div></div>
+<div id="dot"></div>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>
+// ===== Instellingen =====
+const EUR_PER_LAP = 5;
+const TANK_EUR = 100, TANK_LAPS = TANK_EUR / EUR_PER_LAP;   // een ton is vol bij € 100 en gaat dan op de pallet
+const MILESTONE_EUR = 500, MILESTONE_LAPS = MILESTONE_EUR / EUR_PER_LAP;
+const params = new URLSearchParams(location.search);
+const NS = (params.get('ns') || '').replace(/[^a-zA-Z0-9_-]/g, '');
+const DEMO = params.has('demo');
+// Einde: woensdag 21 oktober 2026 om 20:00 (wat dan nog loopt, telt niet; daarna blijft de eindstand staan). Testen: ?ns=oefen&einde=21:30
+const parseEnd = (v) => { if (!v) return null; const m = /^(\d{1,2})[:.h](\d{2})$/.exec(v.trim()); if (m) { const d = new Date(); d.setHours(+m[1], +m[2], 0, 0); return d.getTime(); } const t = Date.parse(v); return isNaN(t) ? null : t; };
+const EVENT_END = ((NS || DEMO) && parseEnd(params.get('einde'))) || (NS || DEMO ? Infinity : Date.parse('2026-10-21T20:00:00+02:00'));
+const ended = () => tnow() >= EVENT_END;
+const col = (n) => NS ? `${NS}_${n}` : n;
+const fmt = (n) => Math.round(n).toLocaleString('nl-BE');
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOutBack = (x) => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const easeOutBounce = (x) => { const n = 7.5625, d = 2.75; if (x < 1 / d) return n * x * x; if (x < 2 / d) return n * (x -= 1.5 / d) * x + 0.75; if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + 0.9375; return n * (x -= 2.625 / d) * x + 0.984375; };
+
+// Verwachte rondetijd en bereik: zelfde regels als de piste op het grote scherm en in de lopers-app
+const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
+const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };
+const FIRST_LAP_RANGE = { M: [83000, 106000], V: [99000, 133000], X: [91000, 119500] };
+
+// ===== Gedeelde tijd (klok van de server, zoals de andere apps) =====
+let TIME_OFFSET = 0;
+const tnow = () => Date.now() + TIME_OFFSET;
+async function syncClock() {
+  try {
+    let lo = -Infinity, hi = Infinity;
+    for (let i = 0; i < 6; i++) {
+      const t0 = Date.now();
+      const res = await fetch(location.pathname + '?_t=' + t0 + '_' + i, { method: 'HEAD', cache: 'no-store' });
+      const t1 = Date.now(), d = res.headers.get('Date');
+      if (!d) continue;
+      const mid = (t0 + t1) / 2, srv = new Date(d).getTime();
+      lo = Math.max(lo, srv - mid); hi = Math.min(hi, srv + 1000 - mid);
+      await new Promise((r) => setTimeout(r, 170));
+    }
+    if (isFinite(lo) && isFinite(hi)) { const est = (lo + hi) / 2; if (Math.abs(est) < 10 * 60e3) TIME_OFFSET = est; }
+  } catch (e) {}
+}
+
+// ===== Gegevens =====
+let realLaps = null, SUM = null, recent = [], fullCount = null, active = null, lastOk = Date.now();
+const runnerIdx = new Map();   // id → { l: rondes, t: totale tijd, b: beste, s: spreiding, e: verwachte volgende ronde, g }
+function lapsNow() {
+  if (fullCount != null) return fullCount;
+  if (!SUM) return null;
+  return SUM.total + recent.filter((l) => Date.parse(l.timestamp) > (SUM.updatedAt || 0) && Date.parse(l.timestamp) <= EVENT_END).length;
+}
+function pushLaps() { const n = lapsNow(); if (n != null) realLaps = n; }
+const isRunning = () => !!(active && active.isRunning && active.runner && active.startTime) && !ended();
+function lapRange() {   // { fast, slow } voor de lopende loper
+  const rid = active.runner.runnerId, r = runnerIdx.get(rid), gender = (r && r.g) || active.runner.gender || 'X';
+  const n = r ? r.l : 0, best = r && r.b ? r.b : 0;
+  const ex = n ? (r.e || (r.t + (FIRST_LAP_MS[gender] || FIRST_LAP_MS.X) * 2) / (n + 2)) : (FIRST_LAP_TYPICAL_MS[gender] || FIRST_LAP_TYPICAL_MS.X);
+  const rel = Math.max(0.06, Math.min(0.25, n >= 3 && r.s ? r.s : 0.15));
+  const first = FIRST_LAP_RANGE[gender] || FIRST_LAP_RANGE.X;
+  const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : first[0], slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : first[1];
+  return { fast, slow };
+}
+function startFirebase() {
+  syncClock(); setInterval(syncClock, 10 * 60e3);
+  firebase.initializeApp({
+    apiKey: "AIzaSyDVULWNjHaR41EaptoQYnWnTdnU-suMuuA", authDomain: "u-loop-leuven-2026.firebaseapp.com", projectId: "u-loop-leuven-2026",
+    storageBucket: "u-loop-leuven-2026.firebasestorage.app", messagingSenderId: "1032849674125", appId: "1:1032849674125:web:110054a3b61ba10eedb7c4"
+  });
+  const db = firebase.firestore();
+  const ok = (s) => { if (!s.metadata.fromCache) lastOk = Date.now(); };
+  let unsubFull = null, staleT = null;
+  const startFull = () => { if (!unsubFull) unsubFull = db.collection(col('laps')).onSnapshot((s) => { ok(s); fullCount = s.docs.filter((d) => Date.parse(d.data().timestamp) <= EVENT_END).length; pushLaps(); }, () => {}); };
+  const checkStale = () => {   // samenvatting van de chronometer veel ouder dan de nieuwste ronde: zelf tellen
+    const stale = () => fullCount == null && SUM && recent.length && Date.parse(recent[0].timestamp) - (SUM.updatedAt || 0) > 10 * 60e3;
+    if (!stale()) { clearTimeout(staleT); staleT = null; return; }
+    if (!staleT) staleT = setTimeout(() => { staleT = null; if (stale()) startFull(); }, 30000);
+  };
+  const meta = db.collection(col('meta'));
+  meta.doc('summary').onSnapshot({ includeMetadataChanges: true }, (s) => { ok(s); if (s.exists) { SUM = s.data(); checkStale(); pushLaps(); } else if (!SUM) startFull(); }, () => {});
+  db.collection(col('laps')).orderBy('timestamp', 'desc').limit(12).onSnapshot({ includeMetadataChanges: true }, (s) => { ok(s); recent = s.docs.map((d) => d.data()); checkStale(); pushLaps(); }, () => {});
+  db.collection(col('activeRunner')).onSnapshot((s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; }, () => {});
+  const loadIndex = () => meta.doc('runnerIndex').get().then((s) => { if (s.exists) (s.data().list || []).forEach((a) => runnerIdx.set(a.i, { l: a.l, t: a.t, b: a.b, s: a.s, e: a.e, g: a.g })); }).catch(() => {});
+  loadIndex(); setInterval(loadIndex, 2 * 60e3);
+  setTimeout(() => { if (realLaps == null) realLaps = 0; }, 6000);
+}
+// Demo: ?demo=1&laps=17. Rondes van 13 à 17 s. Spatie = ronde klaar, T = vlak voor een volle ton, M = vlak voor een mijlpaal.
+function startDemo() {
+  realLaps = parseInt(params.get('laps') || '0', 10) || 0;
+  const names = ['Jana Peeters', 'Wout Claes', 'Lotte Janssens', 'Arne Maes', 'Fien Willems', 'Seppe Jacobs', 'Noor Mertens', 'Ruben Goossens'];
+  let k = 0, endT = null;
+  const next = () => {
+    const id = 'd' + (k % names.length), ex = rnd(13000, 17000);
+    runnerIdx.set(id, { l: 4, t: ex * 4, b: ex * 0.9, s: 0.1, e: ex, g: 'X' });
+    active = { isRunning: true, startTime: new Date(tnow()).toISOString(), runner: { runnerId: id, runnerName: names[k % names.length], gender: 'X' } };
+    k++; clearTimeout(endT); endT = setTimeout(finish, ex * rnd(0.92, 1.12));
+  };
+  const finish = () => { realLaps++; next(); };
+  setTimeout(next, 1500);
+  addEventListener('keydown', (e) => {
+    if (e.key === ' ') finish();
+    else if (e.key === 't') jumpTo(Math.floor(shownLaps / TANK_LAPS) * TANK_LAPS + TANK_LAPS - 1);
+    else if (e.key === 'm') jumpTo(Math.floor(shownLaps / MILESTONE_LAPS) * MILESTONE_LAPS + MILESTONE_LAPS - 1);
+  });
+}
+
+// ===== Bedrag (kilometerteller) =====
+const amountEl = document.getElementById('amount');
+let digitEls = [], shownText = '';
+function buildAmount(euro, zero) {
+  const s = fmt(euro);
+  amountEl.innerHTML = '<span class="cur">€</span>' + [...s].map((ch) => /\d/.test(ch)
+    ? `<span class="dig"><i style="--d:${zero ? 0 : ch}">${'0123456789'.replace(/./g, '<b>$&</b>')}</i></span>` : `<span class="sep">${ch}</span>`).join('');
+  digitEls = [...amountEl.querySelectorAll('.dig i')]; shownText = s; fitAmount();
+}
+function setAmount(euro) {
+  const s = fmt(euro);
+  if (s.length !== shownText.length) { buildAmount(euro); return; }
+  let k = 0; [...s].forEach((ch) => { if (/\d/.test(ch)) digitEls[k++].style.setProperty('--d', ch); });
+  shownText = s;
+}
+function fitAmount() {   // nooit tot aan de paal van de kantelbak
+  amountEl.style.fontSize = '';
+  const max = Math.min(innerWidth * 0.58, (POST_X - 50) * SC - amountEl.getBoundingClientRect().left), w = amountEl.scrollWidth;
+  if (w > max) amountEl.style.fontSize = `calc(min(18vw, 35vh) * ${(max / w).toFixed(3)})`;
+}
+function bump() { amountEl.classList.remove('bump'); void amountEl.offsetWidth; amountEl.classList.add('bump'); }
+function renderNext() {
+  if (ended()) { document.getElementById('next').textContent = `eindstand · ${fmt(shownLaps)} rondes`; return; }
+  const euro = shownLaps * EUR_PER_LAP, goal = (Math.floor(shownLaps / MILESTONE_LAPS) + 1) * MILESTONE_EUR;
+  document.getElementById('next').textContent = `nog € ${fmt(goal - euro)} tot € ${fmt(goal)}`;
+}
+
+// ===== Tekenvlak: virtuele hoogte 1000, breedte volgens het scherm =====
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+let CW = 0, CH = 0, SC = 1, DPR = 1, VW = 1778;
+const FLOOR = 935, TW = 420, TH = 360;     // vloer, breedte en hoogte van de grote ton
+let TANK_CX, AX, AY = 338, NZ_X, NZ_Y = 188, POST_X, ST_X0, ST_X1, ST_TOP = 660;
+function layout() {
+  VW = 1000 * CW / CH;
+  TANK_CX = Math.max(VW * 0.7, VW - 390); AX = TANK_CX - 120; NZ_X = AX; POST_X = TANK_CX - TW / 2 - 75;
+  ST_X0 = VW * 0.04; ST_X1 = POST_X - 70;
+}
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2); CW = innerWidth; CH = innerHeight; SC = CH / 1000;
+  cv.width = Math.round(CW * DPR); cv.height = Math.round(CH * DPR);
+  layout(); fitAmount(); if (started) stackS = stackTarget();
+  if (main && !enter) main.cx = TANK_CX;   // bv. bij volledig scherm: de ton schuift mee met de kantelbak
+}
+addEventListener('resize', resize);
+const INK = '#17120d', CREAM = '#fff9ea', ORANGE = '#f2a342', WOOD = '#d9a066', WATER = '#3db4e6', WATER2 = '#0b74ad', FOAM = '#eafaff';
+const LW = 6, SH = 9;
+function bold(path, fill, shadow, lw) {
+  if (shadow) { g.save(); g.translate(shadow, shadow); path(); g.fillStyle = INK; g.fill(); g.restore(); }
+  path(); if (fill) { g.fillStyle = fill; g.fill(); }
+  g.lineWidth = lw || LW; g.strokeStyle = INK; g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke();
+}
+function rrect(x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); }
+function pipe(path, w) {   // buis: dikke zwarte lijn met een lichte binnenkant
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  path(); g.lineWidth = w + LW * 2; g.strokeStyle = INK; g.stroke();
+  path(); g.lineWidth = w; g.strokeStyle = CREAM; g.stroke();
+  path(); g.lineWidth = w * 0.22; g.strokeStyle = 'rgba(255,255,255,.9)'; g.save(); g.translate(-w * 0.22, -w * 0.22); g.stroke(); g.restore();
+}
+
+// ===== Polygonen: oppervlakte onder een waterlijn (voor het water in de kantelbak) =====
+function clipBelow(poly, yw) {
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], ain = a.y >= yw, bin = b.y >= yw;
+    if (ain) out.push(a);
+    if (ain !== bin) { const t = (yw - a.y) / (b.y - a.y); out.push({ x: a.x + (b.x - a.x) * t, y: yw }); }
+  }
+  return out;
+}
+function area(p) { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a.x * b.y - b.x * a.y; } return Math.abs(s) / 2; }
+function surfaceFor(poly, A) {   // waterlijn waaronder precies A oppervlakte ligt
+  let lo = Infinity, hi = -Infinity; poly.forEach((p) => { lo = Math.min(lo, p.y); hi = Math.max(hi, p.y); });
+  for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; if (area(clipBelow(poly, m)) > A) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+
+// ===== Kantelbak (maatbeker op een as) =====
+const JUG = { L: [-80, -95], R: [80, -95], BR: [60, 105], BL: [-60, 105], BEAK: [96, -107] };
+const JUG_LOCAL = [JUG.L, JUG.R, JUG.BR, JUG.BL].map(([x, y]) => ({ x, y }));
+const A_MAX = area(clipBelow(JUG_LOCAL, -95 + 14));   // vol = 14 onder de rand
+const levelY = (v) => surfaceFor(JUG_LOCAL, v * A_MAX);   // lokale hoogte van een vulgraad, rechtop
+let th = 0, om = 0, thTarget = 0;   // hoek, hoeksnelheid, doelhoek
+const jp = ([x, y]) => { const c = Math.cos(th), s = Math.sin(th); return { x: AX + x * c - y * s, y: AY + x * s + y * c }; };
+const jugPoly = () => [jp(JUG.L), jp(JUG.R), jp(JUG.BR), jp(JUG.BL)];
+
+// ===== Grote ton + golfjes =====
+const M = 64, wh = new Float32Array(M), wv = new Float32Array(M), wl = new Float32Array(M), wr = new Float32Array(M);
+function waveStep() {
+  for (let i = 0; i < M; i++) { wv[i] += -0.028 * wh[i] - 0.045 * wv[i]; wh[i] += wv[i]; }
+  for (let p = 0; p < 3; p++) {
+    for (let i = 0; i < M; i++) { if (i > 0) { wl[i] = 0.2 * (wh[i] - wh[i - 1]); wv[i - 1] += wl[i]; } if (i < M - 1) { wr[i] = 0.2 * (wh[i] - wh[i + 1]); wv[i + 1] += wr[i]; } }
+    for (let i = 0; i < M; i++) { if (i > 0) wh[i - 1] += wl[i]; if (i < M - 1) wh[i + 1] += wr[i]; }
+  }
+}
+function kick(x, amp) {
+  if (!main) return;
+  const c = Math.round((x - (main.cx - TW / 2)) / TW * (M - 1));
+  for (let k = -3; k <= 3; k++) { const i = c + k; if (i >= 0 && i < M) wv[i] += amp * Math.exp(-k * k / 4); }
+}
+const tankLevelY = (lv) => FLOOR - 14 - lv * (TH - 54);
+function tankY(x, t) {
+  const f = clamp((x - (main.cx - TW / 2)) / TW, 0, 1) * (M - 1), i = Math.floor(f), j = Math.min(M - 1, i + 1);
+  return tankLevelY(main.lvl) - lerp(wh[i], wh[j], f - i) + Math.sin(x * 0.021 + t * 1.5) * 2.2 + Math.sin(x * 0.047 - t * 2.2) * 1.2;
+}
+
+// ===== Toestand =====
+let started = false, shownLaps = 0, time = 0;
+let A = 0, wob = 0, wobX = 0, activeKey = '', hold = null;
+let pour = null;                 // { n, A0, phase, t, counted, tankStart }
+let main = null;                 // ton onder de kantelbak: { cx, lvl, lid, lidDrop, stamp }
+let seq = null, fly = null, enter = null;
+let stackCount = 0, stackS = 0.2, landT = 9;
+let lever = 0, leverV = 0, drip = 0, dripWait = 0;
+const drops = [], specks = [], foam = [], rings = [];
+const ST = { on: false, t0: 0, t1: -99, lip: { x: 0, y: 0 }, vx: 0, w: 0 };   // straal: werpbaan van de tuit tot in de ton
+
+const newBarrel = (cx, lvl) => ({ cx, lvl, lid: false, lidDrop: 0, stamp: 0 });
+function jumpTo(n) {   // stil naar een stand springen (opstarten, grote inhaalbeweging, demo-toetsen)
+  realLaps = Math.max(realLaps || 0, n); shownLaps = n; pour = null; seq = null; fly = null; enter = null; th = om = thTarget = 0;
+  stackCount = Math.floor(n / TANK_LAPS); stackS = stackTarget();
+  main = newBarrel(TANK_CX, (n % TANK_LAPS) / TANK_LAPS); wh.fill(0); wv.fill(0);
+  setAmount(n * EUR_PER_LAP); renderNext();
+}
+function glassTarget() {
+  if (!isRunning()) return 0;
+  const el = tnow() - new Date(active.startTime).getTime(), { fast, slow } = lapRange();
+  if (el <= 0) return 0;
+  if (el < fast) return 0.8 * el / fast;                                  // tot de snelste verwachte tijd: 80% vol
+  if (el < slow) return 0.8 + 0.17 * (el - fast) / (slow - fast);          // binnen het bereik
+  return 0.97 + 0.02 * (1 - Math.exp(-(el - slow) / 20000));               // trager: vlak onder de rand
+}
+
+// ===== Pallets: 10 tonnen per pallet (4-3-2-1), dus € 1.000 per pallet =====
+const ROWS = [4, 3, 2, 1];
+function stackTarget() {
+  const n = Math.max(1, Math.ceil((stackCount + 1) / 10)), w = ST_X1 - ST_X0, h = FLOOR - ST_TOP;
+  const bwW = w / (n * 4.5 + (n - 1) * 0.5), bwH = h / 3.75;
+  return Math.min(bwW, bwH, 120) / TW;
+}
+function slotPos(k, s) {
+  const bw = TW * s, bh = TH * s, p = Math.floor(k / 10); let j = k % 10, r = 0;
+  while (j >= ROWS[r]) { j -= ROWS[r]; r++; }
+  const px = ST_X0 + p * (bw * 4.5 + bw * 0.5), ph = bw * 0.24;
+  return { cx: px + bw * 0.22 + r * bw * 0.53 + j * bw * 1.06 + bw / 2, bottom: FLOOR - ph - r * (bh + bw * 0.06) };
+}
+
+function update(dt) {
+  time += dt;
+  // nieuwe loper gestart? dan blijft de volle bak staan tot de ronde binnen is (die komt soms een tel later)
+  const key = isRunning() ? active.startTime + '|' + active.runner.runnerId : '';
+  if (key !== activeKey) { if (activeKey && A > 0.25 * A_MAX && !pour) hold = { A, until: time + 8 }; activeKey = key; }
+  if (hold && time > hold.until) hold = null;
+
+  if (realLaps != null) {
+    if (!started) {
+      started = true; jumpTo(realLaps); buildAmount(shownLaps * EUR_PER_LAP, true);
+      setTimeout(() => setAmount(shownLaps * EUR_PER_LAP), 400);   // bij het openen rolt de teller naar de stand
+    } else if (realLaps < shownLaps) jumpTo(realLaps);
+    else if (realLaps - shownLaps > 40) jumpTo(realLaps - 1);
+    else if (realLaps > shownLaps && !pour && !seq && main) {
+      const n = Math.min(realLaps - shownLaps, TANK_LAPS - (shownLaps % TANK_LAPS));
+      A = Math.max(A, 0.3 * A_MAX); hold = null;
+      pour = { n, A0: A, phase: 'tip', t: 0, tp: null, tEnd: 1.25, counted: false, tankStart: main.lvl };
+    }
+  }
+  if (!pour) A += ((hold ? hold.A : glassTarget() * A_MAX) - A) * (1 - Math.exp(-dt * 3));
+
+  // Gieten als vaste choreografie: vlot kantelen, dan in een vaste tijd leeggieten (de straal bouwt op, loopt vol en wordt dunner),
+  // afbreken en terugzwaaien met een veer. De beker en het water erin blijven wel fysisch kloppen (horizontaal oppervlak).
+  const TH1 = 78 * Math.PI / 180, TH2 = 120 * Math.PI / 180, TILT = 0.42;
+  const thAt = (t) => t < TILT ? TH1 * ease(t / TILT) : lerp(TH1, TH2, 1 - Math.pow(1 - clamp((t - TILT) / (pour.tEnd - TILT), 0, 1), 2));
+  if (pour && pour.phase === 'tip') {
+    pour.t += dt; const nt = thAt(pour.t); if (dt > 0) om = (nt - th) / dt; th = nt;
+  } else {
+    for (let s = 0, n = Math.ceil(dt / 0.004); s < n; s++) { const h = dt / n; om += (30 * (thTarget - th) - 4 * om) * h; th += om * h; }
+  }
+  const poly = jugPoly(), yw = surfaceFor(poly, A);
+  const lipL = jp(JUG.L), lipB = jp(JUG.BEAK), lip = lipB.y > lipL.y ? lipB : lipL, head = lip.y - yw;
+  let rate = 0;
+  if (pour && pour.phase === 'tip') {
+    const t = pour.t;
+    if (pour.tp == null && (head > 0 || t > 1.1)) { pour.tp = t; pour.tEnd = Math.max(1.25, t + 0.75); }   // het water bereikt de tuit
+    if (pour.tp != null) {
+      const T = pour.tEnd - pour.tp, u = clamp((t - pour.tp) / T, 0, 1);
+      A = pour.A0 * (1 - u * u * (3 - 2 * u)); rate = pour.A0 * 6 * u * (1 - u) / T;
+      if (!pour.counted) { pour.counted = true; shownLaps += pour.n; setAmount(shownLaps * EUR_PER_LAP); bump(); renderNext(); }
+      main.lvl = pour.tankStart + (1 - A / pour.A0) * pour.n / TANK_LAPS;
+      if (u >= 1) { pour.phase = 'back'; pour.tb = 0; thTarget = 0; A = 0; main.lvl = pour.tankStart + pour.n / TANK_LAPS; }
+    }
+  }
+  // straal: werpbaan van de tuit tot in de ton, breedte volgens hoeveel er op dat moment uitstroomt
+  const on = rate > 0;
+  if (on && !ST.on) { ST.on = true; ST.t0 = time; }
+  if (!on && ST.on) { ST.on = false; ST.t1 = time; }
+  if (on) {
+    const rx = lipB.x - lipL.x, rl = Math.hypot(rx, lipB.y - lipL.y) || 1;
+    ST.lip = { x: lip.x, y: lip.y }; ST.vx = (25 + 0.25 * Math.sqrt(rate)) * Math.max(0.15, rx / rl); ST.w = clamp(4 + Math.sqrt(rate) * 0.11, 4, 26);
+  }
+  if (ST.on && main && time - ST.t0 > streamEnd()) {   // waar de straal de ton raakt: golfjes en wat schuim
+    const xe = ST.lip.x + ST.vx * streamEnd(); kick(xe, -0.035 * ST.w);
+    if (Math.random() < dt * 4) foam.push({ x: xe + rnd(-20, 20), vx: rnd(-40, 40), r: rnd(4, 8), life: rnd(0.8, 1.4), max: 1.4 });
+    if (Math.random() < dt * 2) specks.push({ x: xe, y: tankY(xe, time), vx: rnd(-140, 140), vy: rnd(-380, -160), r: rnd(2.5, 4) });
+  }
+  if (pour && pour.phase === 'back') {
+    pour.tb += dt;
+    if (pour.tb > 1.2 && Math.abs(th) < 0.01 && Math.abs(om) < 0.05) {
+      pour = null;
+      if (shownLaps > 0 && shownLaps % TANK_LAPS === 0) { seq = { t: 0 }; main.lid = true; main.lidDrop = 1; }
+    }
+  }
+
+  // ton vol: deksel erop, stempel, op de pallet zetten en een nieuwe lege ton aanschuiven
+  if (seq) {
+    seq.t += dt; const t = seq.t;
+    if (main && main.lid && !fly) { main.lidDrop = 1 - easeOutBounce(clamp(t / 0.75, 0, 1)); main.stamp = t < 0.7 ? 0 : easeOutBack(clamp((t - 0.7) / 0.45, 0, 1)); }
+    if (t >= 1.7 && !fly && main && main.lid) { fly = { o: main, t: 0, dur: 2.1, from: { cx: main.cx } }; main = null; }
+    if (t >= 2.7 && !enter && !main) { main = newBarrel(VW + 300, 0); enter = { t: 0 }; wh.fill(0); wv.fill(0); }
+    if (enter && enter !== 'done') { enter.t += dt; const e = clamp(enter.t / 1.2, 0, 1); main.cx = lerp(VW + 300, TANK_CX, easeOutBack(e)); if (e >= 1) enter = 'done'; }
+    if (fly) {
+      fly.t += dt;
+      if (fly.t >= fly.dur) {
+        stackCount++; landT = 0; fly = null;
+        if (stackCount % (MILESTONE_LAPS / TANK_LAPS) === 0) milestone(stackCount * TANK_EUR);
+      }
+    }
+    if (!fly && enter === 'done' && t > 3) { seq = null; enter = null; }
+  }
+  stackS += (stackTarget() - stackS) * (1 - Math.exp(-dt * 2)); landT += dt;
+
+  // kraan open zolang er iemand loopt en de bak rechtop staat
+  const open = isRunning() && !pour && Math.abs(th) < 0.15;
+  leverV += (90 * ((open ? 0.55 : 0) - lever) - 14 * leverV) * dt; lever += leverV * dt;
+  dripWait -= dt;
+  if (open && dripWait <= 0) { drip += dt * 16; if (drip >= 7.5) { drops.push({ x: NZ_X, y: NZ_Y + 9, vy: 30, r: 7.5 }); drip = 0; dripWait = 0.12; } }
+  else if (!open) drip = Math.max(0, drip - dt * 20);
+
+  // druppels: in de bak of (als de bak kantelt) in de ton
+  for (let i = drops.length - 1; i >= 0; i--) {
+    const d = drops[i]; d.vy += 2400 * dt; d.y += d.vy * dt;
+    const inJug = Math.abs(th) < 0.3 && Math.abs(d.x - AX) < 70;
+    if (inJug && d.y >= yw - 2) { drops.splice(i, 1); wob = Math.min(5, wob + 2.4); wobX = d.x; rings.push({ x: d.x, y: yw, t: 0 });  continue; }
+    if (main && d.y >= tankY(d.x, time)) { drops.splice(i, 1); kick(d.x, -4); continue; }
+    if (d.y > 1100) drops.splice(i, 1);
+  }
+  wob *= Math.exp(-dt * 3.5);
+  for (let i = specks.length - 1; i >= 0; i--) {
+    const s = specks[i]; s.vy += 2000 * dt; s.x += s.vx * dt; s.y += s.vy * dt;
+    const floor = s.jug ? (Math.abs(th) < 0.3 ? yw : 2000) : (main ? tankY(s.x, time) : 2000);
+    if (s.vy > 0 && s.y >= floor) { specks.splice(i, 1); if (!s.jug) kick(s.x, -1); }
+  }
+  for (let i = foam.length - 1; i >= 0; i--) { const f = foam[i]; f.life -= dt; f.x += f.vx * dt; f.vx *= 0.96; if (f.life <= 0) foam.splice(i, 1); }
+  for (let i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t > 0.5) rings.splice(i, 1); }
+}
+function milestone(euro) {
+  document.getElementById('msAmount').textContent = '€ ' + fmt(euro);
+  const ms = document.getElementById('ms'); ms.classList.remove('show'); void ms.offsetWidth; ms.classList.add('show');
+}
+
+// ===== Tekenen =====
+function barrelPath(cx, bottom, s) {
+  const w = TW * s, h = TH * s, x = cx - w / 2, y = bottom - h, b = 20 * s, r = 18 * s;
+  g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w + b, y + h / 2, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x - b, y + h / 2, x + r, y); g.closePath();
+}
+function drawBarrel(o, cx, bottom, s, t, isMain, squash, rot) {
+  const w = TW * s, h = TH * s, x = cx - w / 2, y = bottom - h, lw = LW * Math.max(0.5, Math.sqrt(s)), sh = SH * Math.max(0.45, s);
+  g.save();
+  if (rot || squash) { g.translate(cx, bottom); if (rot) g.rotate(rot); if (squash) g.scale(1 + squash, 1 - squash); g.translate(-cx, -bottom); }
+  g.save(); g.translate(sh, sh); barrelPath(cx, bottom, s); g.fillStyle = INK; g.fill(); g.restore();
+  barrelPath(cx, bottom, s); g.fillStyle = '#fff'; g.fill();
+  g.save(); barrelPath(cx, bottom, s); g.clip();
+  const lvY = bottom - (14 + o.lvl * (TH - 54)) * s;
+  const surf = (xx) => isMain ? tankY(xx, t) : lvY;
+  const step = Math.max(4, 8 * s);
+  const waterPath = () => { g.beginPath(); g.moveTo(x - 40 * s, bottom + 10); for (let xx = x - 40 * s; xx <= x + w + 40 * s; xx += step) g.lineTo(xx, surf(xx)); g.lineTo(x + w + 40 * s, bottom + 10); g.closePath(); };
+  const ticks = (color) => {
+    g.fillStyle = color; g.strokeStyle = color; g.lineWidth = 4; g.font = '800 28px "Bricolage Grotesque", sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+    for (let e = 10; e < TANK_EUR; e += 10) { const yy = tankLevelY(e / TANK_EUR), big = e % 20 === 0; g.beginPath(); g.moveTo(x + 18, yy); g.lineTo(x + (big ? 50 : 36), yy); g.stroke(); if (big) g.fillText(`€ ${e}`, x + 60, yy + 1); }
+  };
+  if (isMain) ticks(INK);
+  if (o.lvl > 0.003) {
+    waterPath();
+    const gr = g.createLinearGradient(0, lvY, 0, bottom); gr.addColorStop(0, WATER); gr.addColorStop(1, WATER2);
+    g.fillStyle = gr; g.fill();
+    if (isMain) { g.save(); waterPath(); g.clip(); ticks('#fff'); g.restore(); }
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 4.5 * Math.max(0.4, s); g.beginPath();
+    for (let xx = x - 40 * s, f = true; xx <= x + w + 40 * s; xx += step, f = false) { const yy = surf(xx) + 3 * s; f ? g.moveTo(xx, yy) : g.lineTo(xx, yy); } g.stroke();
+    if (isMain) foam.forEach((f) => { g.globalAlpha = clamp(f.life / f.max * 1.5, 0, 1); g.fillStyle = FOAM; g.beginPath(); g.arc(f.x, tankY(f.x, t) - 1, f.r * (0.6 + 0.4 * f.life / f.max), 0, 6.3); g.fill(); g.globalAlpha = 1; });
+  }
+  g.strokeStyle = INK; g.lineWidth = lw;   // banden
+  [y + h * 0.17, y + h * 0.9].forEach((yy) => { g.beginPath(); g.moveTo(x - 30 * s, yy); g.lineTo(x + w + 30 * s, yy); g.stroke(); });
+  g.restore();
+  barrelPath(cx, bottom, s); g.lineWidth = lw; g.strokeStyle = INK; g.lineJoin = 'round'; g.stroke();
+  if (o.lid) {
+    const ly = y - o.lidDrop * 380 * s;
+    bold(() => rrect(cx - 34 * s, ly - 40 * s, 68 * s, 22 * s, 8 * s), ORANGE, 0, lw);
+    bold(() => rrect(x - 8 * s, ly - 24 * s, w + 16 * s, 28 * s, 10 * s), ORANGE, sh, lw);
+  }
+  if (o.stamp > 0) {
+    g.save(); g.translate(cx, y + h * 0.5); g.rotate(-0.07); g.scale(o.stamp, o.stamp);
+    bold(() => rrect(-118 * s, -50 * s, 236 * s, 100 * s, 18 * s), ORANGE, sh, lw);
+    if (s > 0.3) { g.fillStyle = INK; g.font = `800 ${74 * s}px "Bricolage Grotesque", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(`€ ${TANK_EUR}`, 0, 4 * s); }
+    g.restore();
+  }
+  g.restore();
+}
+function drawStack(t) {
+  const s = stackS, bw = TW * s, lw = LW * Math.max(0.5, Math.sqrt(s)), nP = Math.ceil((stackCount + 1) / 10);
+  for (let p = 0; p < nP; p++) {
+    const px = ST_X0 + p * (bw * 4.5 + bw * 0.5), pw = bw * 4.5, ph = bw * 0.24;
+    // pallet: plank op drie blokjes
+    [0.04, 0.46, 0.88].forEach((f) => bold(() => rrect(px + pw * f - ph * 0.3, FLOOR - ph * 0.55, ph * 0.9, ph * 0.55, 3), WOOD, 0, lw * 0.8));
+    bold(() => rrect(px, FLOOR - ph, pw + ph * 0.3, ph * 0.48, 4), WOOD, SH * 0.5, lw * 0.8);
+    if ((p + 1) * 10 <= stackCount && (bw > 40 || (p + 1) % 5 === 0)) { g.fillStyle = INK; g.font = `800 ${clamp(bw * 0.32, 16, 36)}px "Bricolage Grotesque", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'top'; g.fillText(`€ ${fmt((p + 1) * 1000)}`, px + pw / 2, FLOOR + 14); }
+  }
+  for (let k = 0; k < stackCount; k++) {
+    const q = slotPos(k, s), sq = k === stackCount - 1 && landT < 0.45 ? Math.sin(landT / 0.45 * Math.PI) * 0.12 * (1 - landT / 0.45) : 0;
+    drawBarrel({ lvl: 1, lid: true, lidDrop: 0, stamp: 1 }, q.cx, q.bottom, s, t, false, sq);
+  }
+}
+function drawFly(t) {
+  if (!fly) return;
+  const e = ease(clamp(fly.t / fly.dur, 0, 1)), to = slotPos(stackCount, stackS);
+  // eerst over de vloer naar links glijden, dan opgetild en op zijn plaats gezet
+  const P0 = { x: fly.from.cx, y: FLOOR }, P1 = { x: fly.from.cx - 380, y: FLOOR }, P2 = { x: to.cx + 160, y: to.bottom - 260 }, P3 = { x: to.cx, y: to.bottom };
+  const u = 1 - e, x = u * u * u * P0.x + 3 * u * u * e * P1.x + 3 * u * e * e * P2.x + e * e * e * P3.x, y = u * u * u * P0.y + 3 * u * u * e * P1.y + 3 * u * e * e * P2.y + e * e * e * P3.y;
+  drawBarrel(fly.o, x, y, lerp(1, stackS, Math.pow(e, 1.6)), t, false, 0, Math.sin(e * Math.PI) * -0.06);
+}
+function drawStand() {
+  // paal met arm tot aan de as
+  bold(() => rrect(POST_X - 16, AY - 30, 32, FLOOR - AY + 30, 6), CREAM, SH);
+  bold(() => rrect(POST_X - 16, AY - 14, AX - POST_X + 16, 28, 8), CREAM, SH);
+  bold(() => rrect(POST_X - 40, FLOOR - 16, 80, 16, 4), CREAM, 0);
+}
+function drawFaucet() {
+  const px = AX + 170, body = AX + 92;
+  pipe(() => { g.beginPath(); g.moveTo(px, -60); g.lineTo(px, 92); g.quadraticCurveTo(px, 130, px - 38, 130); g.lineTo(NZ_X + 42, 130); g.quadraticCurveTo(NZ_X, 130, NZ_X, 172); g.lineTo(NZ_X, NZ_Y - 12); }, 30);
+  bold(() => rrect(NZ_X - 22, NZ_Y - 16, 44, 18, 6), CREAM, 0);   // tuit
+  // kraanhuis met hendel
+  g.save(); g.translate(body, 104); g.rotate(lever);
+  bold(() => { g.beginPath(); g.moveTo(0, -5); g.lineTo(-80, -11); g.arc(-80, -2, 9, -Math.PI / 2, Math.PI / 2, true); g.lineTo(0, 7); g.closePath(); }, ORANGE, 0, 5);
+  g.restore();
+  bold(() => rrect(body - 30, 106, 60, 48, 12), CREAM, 0);
+  bold(() => { g.beginPath(); g.arc(body, 104, 12, 0, 6.3); }, '#fff', 0, 5);
+  // druppel die aan de tuit hangt en zwelt
+  if (drip > 0.4) {
+    const r = drip, cy = NZ_Y + 2 + r * 0.95;
+    g.beginPath(); g.moveTo(NZ_X - r * 0.45, NZ_Y + 1); g.quadraticCurveTo(NZ_X - r, cy - r * 0.3, NZ_X - r, cy); g.arc(NZ_X, cy, r, Math.PI, 0, true); g.quadraticCurveTo(NZ_X + r, cy - r * 0.3, NZ_X + r * 0.45, NZ_Y + 1); g.closePath();
+    g.fillStyle = WATER; g.fill(); g.lineWidth = 3; g.strokeStyle = INK; g.stroke();
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(NZ_X - r * 0.35, cy - r * 0.2, r * 0.25, 0, 6.3); g.fill();
+  }
+}
+function drawDrops() {
+  drops.forEach((d) => {
+    const st = 1 + Math.min(1.1, d.vy / 1600), rx = d.r / Math.sqrt(st), ry = d.r * st;
+    g.beginPath(); g.moveTo(d.x, d.y - ry * 1.5); g.bezierCurveTo(d.x + rx * 0.5, d.y - ry * 0.8, d.x + rx, d.y - ry * 0.3, d.x + rx, d.y); g.arc(d.x, d.y, rx, 0, Math.PI, false); g.bezierCurveTo(d.x - rx, d.y - ry * 0.3, d.x - rx * 0.5, d.y - ry * 0.8, d.x, d.y - ry * 1.5);
+    g.fillStyle = WATER; g.fill(); g.lineWidth = 3; g.strokeStyle = INK; g.stroke();
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.ellipse(d.x - rx * 0.35, d.y - ry * 0.1, rx * 0.22, ry * 0.3, 0, 0, 6.3); g.fill();
+  });
+}
+function drawSpecks(jug) {
+  specks.forEach((s) => { if (!!s.jug !== jug) return; g.beginPath(); g.arc(s.x, s.y, s.r, 0, 6.3); g.fillStyle = WATER; g.fill(); g.lineWidth = 2; g.strokeStyle = INK; g.stroke(); });
+}
+const GRAV = 2400;
+function streamEnd() { const surf = main ? tankLevelY(main.lvl) : FLOOR; return Math.sqrt(Math.max(0, 2 * (surf - ST.lip.y)) / GRAV); }
+function drawStream() {
+  const te = streamEnd(), b = ST.on ? Math.min(te, time - ST.t0) : te, a = ST.on ? 0 : Math.min(te, time - ST.t1);
+  if (!main || b - a < 0.005) return;
+  const N = 26, P = [];
+  for (let i = 0; i <= N; i++) { const tau = a + (b - a) * i / N; P.push({ x: ST.lip.x + ST.vx * tau, y: ST.lip.y + 0.5 * GRAV * tau * tau, k: tau / (te || 1) }); }
+  const L = [], R = [];
+  P.forEach((p, i) => {
+    const q = P[Math.min(N, i + 1)], o = P[Math.max(0, i - 1)], dx = q.x - o.x, dy = q.y - o.y, d = Math.hypot(dx, dy) || 1;
+    const w = ST.w * 0.5 * (1 - 0.4 * p.k);   // smaller naarmate het sneller valt
+    L.push({ x: p.x - dy / d * w, y: p.y + dx / d * w }); R.push({ x: p.x + dy / d * w, y: p.y - dx / d * w });
+  });
+  g.beginPath(); g.moveTo(L[0].x, L[0].y); L.forEach((p) => g.lineTo(p.x, p.y));
+  const e = P[N], ew = ST.w * 0.5 * (1 - 0.4 * e.k); g.arc(e.x, e.y, ew, Math.atan2(L[N].y - e.y, L[N].x - e.x), Math.atan2(R[N].y - e.y, R[N].x - e.x), true);
+  for (let i = N; i >= 0; i--) g.lineTo(R[i].x, R[i].y);
+  if (a > 0) { const s0 = P[0], sw = ST.w * 0.5 * (1 - 0.4 * s0.k); g.arc(s0.x, s0.y, sw, Math.atan2(R[0].y - s0.y, R[0].x - s0.x), Math.atan2(L[0].y - s0.y, L[0].x - s0.x), true); }
+  g.closePath(); g.lineJoin = 'round'; g.lineWidth = 3.5; g.strokeStyle = INK; g.fillStyle = WATER; g.fill(); g.stroke();
+}
+function drawJug(t) {
+  const poly = jugPoly(), yw = surfaceFor(poly, A);
+  const polyPath = () => { g.beginPath(); poly.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.closePath(); };
+  // schaduw en achterwand (doorzichtig glas)
+  g.save(); g.translate(SH, SH); polyPath(); g.fillStyle = INK; g.fill(); g.restore();
+  polyPath(); g.fillStyle = '#fff1cf'; g.fill(); g.fillStyle = 'rgba(255,255,255,.6)'; g.fill();
+  drawDrops();                      // druppels zie je door het glas vallen
+  if (A > 2) {
+    g.save(); polyPath(); g.clip();
+    let mnx = Infinity, mxx = -Infinity, mxy = -Infinity; poly.forEach((p) => { mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x); mxy = Math.max(mxy, p.y); });
+    const wave = (x) => yw + Math.sin((x - wobX) * 0.11 - t * 13) * wob * Math.exp(-Math.abs(x - wobX) / 90);
+    g.beginPath(); g.moveTo(mnx - 10, mxy + 10);
+    for (let x = mnx - 10; x <= mxx + 10; x += 6) g.lineTo(x, wave(x));
+    g.lineTo(mxx + 10, mxy + 10); g.closePath();
+    const gr = g.createLinearGradient(0, yw, 0, mxy); gr.addColorStop(0, WATER); gr.addColorStop(1, WATER2); g.fillStyle = gr; g.fill();
+    g.beginPath(); for (let x = mnx - 10, f = true; x <= mxx + 10; x += 6, f = false) f ? g.moveTo(x, wave(x) + 2.5) : g.lineTo(x, wave(x) + 2.5);
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 4; g.stroke();
+    rings.forEach((r) => { const k = r.t / 0.5; g.globalAlpha = 1 - k; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.ellipse(r.x, yw + 2, 8 + k * 34, 2 + k * 5, 0, 0, 6.3); g.stroke(); g.globalAlpha = 1; });
+    g.restore();
+  }
+  drawSpecks(true);
+  // wanden (open bovenaan) met tuitje
+  const pB = jp(JUG.BEAK), pR = jp(JUG.R), pBR = jp(JUG.BR), pBL = jp(JUG.BL), pL = jp(JUG.L);
+  g.beginPath(); g.moveTo(pB.x, pB.y); g.lineTo(pR.x, pR.y); g.lineTo(pBR.x, pBR.y); g.lineTo(pBL.x, pBL.y); g.lineTo(pL.x, pL.y);
+  g.lineWidth = 7; g.strokeStyle = INK; g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke();
+  const h1 = jp([-60, -72]), h2 = jp([-47, 78]);
+  g.beginPath(); g.moveTo(h1.x, h1.y); g.lineTo(h2.x, h2.y); g.lineWidth = 5; g.strokeStyle = 'rgba(255,255,255,.95)'; g.stroke();
+  // as
+  bold(() => { g.beginPath(); g.arc(AX, AY, 15, 0, 6.3); }, CREAM, 0, 5);
+  g.fillStyle = INK; g.beginPath(); g.arc(AX, AY, 4.5, 0, 6.3); g.fill();
+}
+function drawName() {   // onder de kantelbak, rechts van de paal: loopt nooit over de paal of de ton; lange namen op twee regels
+  if (!isRunning() || pour || seq) return;
+  const name = (active.runner.runnerName || '').trim(), x = POST_X + 36, maxW = TANK_CX + TW / 2 + 10 - x;
+  const font = (fs) => { g.font = `800 ${fs}px "Bricolage Grotesque", sans-serif`; };
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  let fs = 40, lines = [name]; font(fs);
+  while (fs > 32 && g.measureText(name).width > maxW) font(fs -= 2);
+  if (g.measureText(name).width > maxW && name.includes(' ')) {   // splitsen bij de spatie het dichtst bij het midden
+    const sp = [...name].map((c, i) => c === ' ' ? i : -1).filter((i) => i > 0), mid = name.length / 2;
+    const k = sp.reduce((a, b) => Math.abs(b - mid) < Math.abs(a - mid) ? b : a);
+    lines = [name.slice(0, k), name.slice(k + 1)];
+    fs = 36; font(fs);
+    while (fs > 22 && Math.max(...lines.map((l) => g.measureText(l).width)) > maxW) font(fs -= 2);
+  } else while (fs > 22 && g.measureText(name).width > maxW) font(fs -= 2);
+  const y0 = lines.length > 1 ? AY + 176 : AY + 194;
+  g.fillStyle = INK; lines.forEach((l, i) => g.fillText(l, x, y0 + i * fs * 1.08));
+  g.fillStyle = '#6a5a48'; g.font = '700 26px "Bricolage Grotesque", sans-serif'; g.fillText('loopt nu', x, y0 - fs - 4);
+}
+
+let last = 0, acc = 0;
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - (last || ts)) / 1000); last = ts;
+  update(dt);
+  acc += dt; while (acc > 1 / 60) { waveStep(); acc -= 1 / 60; }
+  g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, CW, CH);
+  g.setTransform(DPR * SC, 0, 0, DPR * SC, 0, 0);
+  g.fillStyle = INK; g.fillRect(-10, FLOOR, VW + 20, 5);   // vloer
+  drawStand();
+  drawStack(time);
+  if (main) drawBarrel(main, main.cx, FLOOR, 1, time, true);
+  drawFly(time);
+  drawStream();
+  drawSpecks(false);
+  drawJug(time);
+  drawFaucet();
+  drawName();
+  document.getElementById('dot').classList.toggle('on', !DEMO && Date.now() - lastOk > 15000);
+  requestAnimationFrame(frame);
+}
+
+// ===== Opstarten =====
+resize();
+if (DEMO) startDemo(); else startFirebase();
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(fitAmount);
+requestAnimationFrame(frame);
+let endShown = false; setInterval(() => { if (!endShown && ended() && started) { endShown = true; renderNext(); } }, 1000);   // om 20:00: de eindstand
+const keep = () => { try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {} };
+keep(); document.addEventListener('visibilitychange', () => { if (!document.hidden) keep(); });
+const full = () => { if (!document.fullscreenElement) { const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (p) p.catch(() => {}); } else document.exitFullscreen(); };
+addEventListener('keydown', (e) => { if (e.key === 'f' || e.key === 'F') full(); });
+addEventListener('dblclick', full);
+</script>
+</body>
+</html>
