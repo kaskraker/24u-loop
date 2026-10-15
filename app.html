@@ -861,11 +861,13 @@
         // vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
         const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
         function trackBand(el, fast, slow, nowMs) {
-          const hi = Math.min(1, el / fast);
-          if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi, pulse: 1 };
-          const over = el - slow, w = Math.max(0.012, 0.05 * Math.exp(-over / 40000));
-          const pulse = REDUCED_MOTION ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(2 * Math.PI * nowMs / 1400));
-          return { lo: 1 - w, hi: 1, pulse };
+          // Zachte rem vanaf 75 % van de ronde: het bereik schuift altijd nog wat op (steeds trager) en botst niet op de finish om daar stil te staan
+          const K = 0.75, ease = (x) => x <= K ? x : K + (1 - K) * (1 - Math.exp(-(x - K) / (1 - K)));
+          const hi = ease(el / fast), over = el - slow;
+          const minW = over <= 0 ? 0.05 : Math.max(0.012, 0.05 * Math.exp(-over / 40000));   // te laat: smaller worden, maar nooit weg
+          const lo = Math.max(0, Math.min(hi - minW, ease(el / slow)));
+          const pulse = over <= 0 || REDUCED_MOTION ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(2 * Math.PI * nowMs / 1400));
+          return { lo, hi, pulse };
         }
         const LiveTrack = ({ startTime, fastMs, slowMs, lo0, hi0 }) => {
             const loRef = React.useRef(null), hiRef = React.useRef(null);
@@ -937,8 +939,7 @@ function lapTileStyle(n) {
             const fastMs = best ? Math.max(expected * (1 - rel), best * 0.99) : firstRange[0];
             const slowMs = best ? Math.max(expected * (1 + rel), fastMs * 1.08) : firstRange[1];
             const el = startTime ? Math.max(0, effNow() - startTime) : elapsedTime;   // elapsedTime loopt op het scherm maar elke 30 s bij (en is bij een wissel nog die van de vorige loper)
-            const hi = Math.min(1, el / fastMs);
-            const lo = Math.max(0, Math.min(hi - 0.05, el / slowMs));
+            const { lo, hi } = trackBand(el, fastMs, slowMs, 0);
             const metersMid = Math.round(((lo + hi) / 2) * 515 / 10) * 10;
             const swapKey = `${activeRunner.runnerId}_${+startTime}`;
             // Hoe meer rondes, hoe feestelijker de kaart: ster per 3 rondes, vanaf ronde 5 warmere kleur, vanaf 8 een gloed, vanaf 12 draaiende stralen. Een kroon voor wie het snelste ronde-record of de meeste rondes heeft.
