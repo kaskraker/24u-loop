@@ -377,7 +377,7 @@ function nowCard() {
         <path d="${TRACK_D}" fill="none" stroke="#17120d" stroke-width="26" stroke-linejoin="round"/><path d="${TRACK_D}" fill="none" stroke="#ffffff" stroke-width="17"/>
         <path class="tlo" d="${TRACK_D}" fill="none" stroke="#f2a342" stroke-width="17" pathLength="1" stroke-dasharray=".001 2" opacity=".55"/>
         <path class="thi" d="${TRACK_D}" fill="none" stroke="#e8590c" stroke-width="17" pathLength="1" stroke-dasharray=".05 2"/>
-        <line x1="34.5" y1="90.5" x2="16.1" y2="108.9" stroke="#17120d" stroke-width="5"/></svg></div>
+        <line x1="34.5" y1="90.5" x2="16.1" y2="108.9" stroke="#17120d" stroke-width="5"/><circle class="tring" cx="25.3" cy="99.7" r="0" fill="none" stroke="#e8590c" style="opacity:0"/></svg></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${(lapNo === 1 ? [['Ronde', 1]] : [['Ronde', lapNo], ['Schatting', '± ' + mmss(ex)]]).map(([k, v]) => { const ts = k === 'Ronde' ? lapTileStyle(lapNo) : { bg: '#fff6df', fg: '#17120d', sub: '#6a5a48', shadow: 'none' }; return `<div style="background:${ts.bg};box-shadow:${ts.shadow};border:3px solid var(--ink);border-radius:12px;padding:4px 10px"><div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${ts.sub}">${k}</div><div style="font-size:22px;font-weight:800;line-height:1.15;color:${ts.fg}">${v}</div></div>`; }).join('')}</div></div>`;
 }
 // ---------- voor en na het event ----------
@@ -712,6 +712,18 @@ function connBanner() {
 }
 window.addEventListener('offline', () => setConn(false));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) later(); });
+// Na het vergrendelen van de gsm is de verbinding vaak stilletjes dood en bleef de vorige loper 'lopen' tot herladen.
+// Daarom bij terugkeren (na > 15 s weg) de verbinding opnieuw opzetten en meteen de actieve loper van de server lezen.
+let hiddenAt = 0, resyncing = false;
+async function resync() {
+  if (resyncing) return; resyncing = true;
+  try { await db.disableNetwork(); await db.enableNetwork(); } catch (e) {}
+  try { const s = await db.collection(col('activeRunner')).get({ source: 'server' }); const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; setConn(true); later(true); } catch (e) {}
+  resyncing = false;
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) { hiddenAt = Date.now(); return; } if (hiddenAt && Date.now() - hiddenAt > 15000) resync(); hiddenAt = 0; });
+window.addEventListener('pageshow', (e) => { if (e.persisted) resync(); });   // pagina terug uit de geheugen-cache van de browser
+window.addEventListener('online', () => resync());
 const onErr = (err) => { errCode = err.code || ''; setConn(false); };
 const snap = (name, fn) => db.collection(col(name)).onSnapshot({ includeMetadataChanges: true }, (s) => { setConn(!s.metadata.fromCache); fn(s); later(); }, onErr);
 const metaDoc = (id) => db.collection(col('meta')).doc(id);
@@ -775,21 +787,50 @@ function collectLive() {   // na elke wijziging van de pagina: de live-elementen
 // vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
 const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 function trackBand(el, fast, slow, nowMs) {
-  // Zachte rem vanaf 75 % van de ronde: het bereik schuift altijd nog wat op (steeds trager) en botst niet op de finish om daar stil te staan
-  const K = 0.75, ease = (x) => x <= K ? x : K + (1 - K) * (1 - Math.exp(-(x - K) / (1 - K)));
-  const hi = ease(el / fast), over = el - slow;
-  const minW = over <= 0 ? 0.05 : Math.max(0.012, 0.05 * Math.exp(-over / 40000));   // te laat: smaller worden, maar nooit weg
-  const lo = Math.max(0, Math.min(hi - minW, ease(el / slow)));
-  const pulse = over <= 0 || REDUCED_MOTION ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(2 * Math.PI * nowMs / 1400));
-  return { lo, hi, pulse };
+  const hi = Math.min(1, el / fast);
+  if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi };
+  // Langer weg dan de traagste verwachting: het laatste stuk voor de finish krijgt streepjes die naar de finish stromen (hij komt eraan)
+  const len = 0.05 + 0.07 * Math.min(1, (el - slow) / 3000);
+  return { lo: 1 - len, hi: 1, flow: REDUCED_MOTION ? null : flowDash(1 - len, nowMs) };
+}
+function flowDash(lo, nowMs) {   // stroke-dasharray (pathLength 1) met streepjes tussen lo en de finish, die elke 0,7 s één streepje opschuiven
+  const P = 0.024, D = 0.013, ph = (nowMs / 700 % 1) * P, out = [0]; let cur = 0;
+  for (let s = lo - P + ph; s < 1; s += P) { const a = Math.max(s, lo), b = Math.min(s + D, 1); if (b > a) { out.push(a - cur, b - a); cur = b; } }
+  out.push(2); return out.map((x) => +x.toFixed(4)).join(' ');
+}
+// Wissel van loper: het oude bereik schuift de finish in, aan de stand gaat een ring open (stokje doorgegeven) en het nieuwe bereik vertrekt daar
+function handoffFrame(e, f) {
+  if (e >= 1100) return null;
+  const io = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2, out = (x) => 1 - Math.pow(1 - x, 3), r = { ring: null };
+  if (e < 500) { const k = io(e / 500); r.old = true; r.lo = f.lo + (1 - f.lo) * k; r.hi = f.hi + (1 - f.hi) * k; r.tlo = r.lo; r.tloOp = 1; }
+  else { r.old = false; r.tlo = 1; r.tloOp = Math.max(0, 1 - (e - 500) / 400); r.newOp = Math.min(1, (e - 500) / 250); }
+  if (e >= 400) { const t = Math.min(1, (e - 400) / 700); r.ring = { r: 5 + 27 * out(t), op: 1 - t, w: 1 + 6 * (1 - t) }; }
+  return r;
+}
+const TRK = { start: null, shown: null, at: 0, sw: null };
+function paintTrack(el, band, fr) {
+  const tl = el.querySelector('.tlo'), th = el.querySelector('.thi'), rg = el.querySelector('.tring');
+  const old = fr && fr.old, lo = old ? fr.lo : band.lo, hi = Math.max(old ? fr.hi : band.hi, lo + 0.002);
+  tl.setAttribute('stroke-dasharray', `${Math.max(0.001, fr ? fr.tlo : band.lo)} 2`); tl.style.opacity = 0.55 * (fr ? fr.tloOp : 1);
+  if (!old && band.flow) { th.setAttribute('stroke-dasharray', band.flow); th.setAttribute('stroke-dashoffset', 0); }
+  else { th.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); th.setAttribute('stroke-dashoffset', -lo); }
+  th.style.opacity = fr && !old ? fr.newOp : 1;
+  if (rg) { const R = fr && fr.ring; rg.setAttribute('r', R ? R.r : 0); rg.setAttribute('stroke-width', R ? R.w : 0); rg.style.opacity = R ? R.op : 0; }
 }
 function liveTick() {
   const now = tnow();
   liveEls.forEach((el) => { el.textContent = mmssc(now - Number(el.dataset.live)); });
-  trackEls.forEach((el) => {
-    const e = Math.max(0, now - Number(el.dataset.start)), band = trackBand(e, Number(el.dataset.fast), Number(el.dataset.slow), performance.now()), hi = band.hi, lo = band.lo;
-    el.querySelector('.tlo').setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`);
-    const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo); h2.style.opacity = band.pulse;
+  const pn = performance.now();
+  trackEls.forEach((el, i) => {
+    const st = Number(el.dataset.start), e = Math.max(0, now - st), band = trackBand(e, Number(el.dataset.fast), Number(el.dataset.slow), pn);
+    let fr = null;
+    if (i === 0) {   // een andere loper (de piste werd vervangen): wissel-animatie vanaf wat er net nog stond
+      if (TRK.start !== null && st !== TRK.start && TRK.shown && pn - TRK.at < 3000 && !REDUCED_MOTION) TRK.sw = { at: pn, f: TRK.shown };
+      TRK.start = st; TRK.at = pn;
+      fr = TRK.sw ? handoffFrame(pn - TRK.sw.at, TRK.sw.f) : null; if (!fr) TRK.sw = null;
+      if (!fr) TRK.shown = { lo: band.lo, hi: band.hi };
+    }
+    paintTrack(el, band, fr);
   });
 }
 const hasLive = () => liveEls.length > 0 || trackEls.length > 0;

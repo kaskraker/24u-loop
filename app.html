@@ -674,12 +674,13 @@
         // Het oranje stuk is waar de loper waarschijnlijk zit (bereik), het lichte stuk is al gelopen.
         const TRACK = { L: 150, r: 42, cxL: 55, cxR: 205, cy: 70 };
         const TRACK_PATH = 'M 25.3 99.7 A 42 42 0 0 0 55 112 H 205 A 42 42 0 0 0 205 28 H 55 A 42 42 0 0 0 25.3 99.7';
-        const TrackGraphic = ({ lo, hi, label, loRef, hiRef }) => h('svg', { viewBox: '-2 -2 264 144', width: '100%', style: { display: 'block', overflow: 'visible' } },
+        const TrackGraphic = ({ lo, hi, label, loRef, hiRef, ringRef }) => h('svg', { viewBox: '-2 -2 264 144', width: '100%', style: { display: 'block', overflow: 'visible' } },
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#17120d', strokeWidth: 26, strokeLinejoin: 'round' }),
             h('path', { d: TRACK_PATH, fill: 'none', stroke: '#ffffff', strokeWidth: 17 }),
             h('path', { ref: loRef, d: TRACK_PATH, fill: 'none', stroke: '#f2a342', strokeWidth: 17, pathLength: 1, strokeDasharray: `${Math.max(0.001, lo)} 2`, opacity: 0.55 }),
             h('path', { ref: hiRef, d: TRACK_PATH, fill: 'none', stroke: '#e8590c', strokeWidth: 17, strokeLinecap: 'butt', pathLength: 1, strokeDasharray: `${Math.max(0.001, hi - lo)} 2`, strokeDashoffset: -lo }),
             h('line', { x1: 34.5, y1: 90.5, x2: 16.1, y2: 108.9, stroke: '#17120d', strokeWidth: 5 }),
+            ringRef && h('circle', { ref: ringRef, cx: 25.3, cy: 99.7, r: 0, fill: 'none', stroke: '#e8590c', style: { opacity: 0 } }),
             label && h('text', { x: 134, y: 78, textAnchor: 'middle', fontSize: 24, fontWeight: 800, fill: '#e8590c' }, label)
         );
 
@@ -861,16 +862,28 @@
         // vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
         const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
         function trackBand(el, fast, slow, nowMs) {
-          // Zachte rem vanaf 75 % van de ronde: het bereik schuift altijd nog wat op (steeds trager) en botst niet op de finish om daar stil te staan
-          const K = 0.75, ease = (x) => x <= K ? x : K + (1 - K) * (1 - Math.exp(-(x - K) / (1 - K)));
-          const hi = ease(el / fast), over = el - slow;
-          const minW = over <= 0 ? 0.05 : Math.max(0.012, 0.05 * Math.exp(-over / 40000));   // te laat: smaller worden, maar nooit weg
-          const lo = Math.max(0, Math.min(hi - minW, ease(el / slow)));
-          const pulse = over <= 0 || REDUCED_MOTION ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(2 * Math.PI * nowMs / 1400));
-          return { lo, hi, pulse };
+          const hi = Math.min(1, el / fast);
+          if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi };
+          // Langer weg dan de traagste verwachting: het laatste stuk voor de finish krijgt streepjes die naar de finish stromen (hij komt eraan)
+          const len = 0.05 + 0.07 * Math.min(1, (el - slow) / 3000);
+          return { lo: 1 - len, hi: 1, flow: REDUCED_MOTION ? null : flowDash(1 - len, nowMs) };
+        }
+        function flowDash(lo, nowMs) {   // stroke-dasharray (pathLength 1) met streepjes tussen lo en de finish, die elke 0,7 s één streepje opschuiven
+          const P = 0.024, D = 0.013, ph = (nowMs / 700 % 1) * P, out = [0]; let cur = 0;
+          for (let s = lo - P + ph; s < 1; s += P) { const a = Math.max(s, lo), b = Math.min(s + D, 1); if (b > a) { out.push(a - cur, b - a); cur = b; } }
+          out.push(2); return out.map((x) => +x.toFixed(4)).join(' ');
+        }
+        // Wissel van loper: het oude bereik schuift de finish in, aan de stand gaat een ring open (stokje doorgegeven) en het nieuwe bereik vertrekt daar
+        function handoffFrame(e, f) {
+          if (e >= 1100) return null;
+          const io = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2, out = (x) => 1 - Math.pow(1 - x, 3), r = { ring: null };
+          if (e < 500) { const k = io(e / 500); r.old = true; r.lo = f.lo + (1 - f.lo) * k; r.hi = f.hi + (1 - f.hi) * k; r.tlo = r.lo; r.tloOp = 1; }
+          else { r.old = false; r.tlo = 1; r.tloOp = Math.max(0, 1 - (e - 500) / 400); r.newOp = Math.min(1, (e - 500) / 250); }
+          if (e >= 400) { const t = Math.min(1, (e - 400) / 700); r.ring = { r: 5 + 27 * out(t), op: 1 - t, w: 1 + 6 * (1 - t) }; }
+          return r;
         }
         const LiveTrack = ({ startTime, fastMs, slowMs, lo0, hi0 }) => {
-            const loRef = React.useRef(null), hiRef = React.useRef(null);
+            const loRef = React.useRef(null), hiRef = React.useRef(null), ringRef = React.useRef(null);
             const par = React.useRef({ fastMs, slowMs, t0: +startTime });
             const shown = React.useRef(null);   // laatst getekende waarden
             par.current = { fastMs, slowMs, t0: +startTime };
@@ -879,21 +892,20 @@
                 const draw = (now) => {
                     const { fastMs: fm, slowMs: sm, t0 } = par.current;
                     const el = Math.max(0, effNow() - t0);
-                    const band = trackBand(el, fm, sm, now), thi = band.hi, tlo = band.lo;
-                    // Nieuwe loper: het oude bereik vervaagt (0,25 s), het nieuwe verschijnt vanaf de start (0,25 s)
-                    if (lastT0 !== null && t0 !== lastT0 && shown.current) sw = { at: now, frozen: { ...shown.current } };
+                    const band = trackBand(el, fm, sm, now);
+                    // Nieuwe loper: het oude bereik schuift de finish in, ring aan de stand, het nieuwe bereik vertrekt (zie handoffFrame)
+                    if (lastT0 !== null && t0 !== lastT0 && shown.current && !REDUCED_MOTION) sw = { at: now, f: { ...shown.current } };
                     lastT0 = t0;
-                    let v = { lo: tlo, hi: thi }, op = 1;
-                    if (sw) {
-                        const e = now - sw.at;
-                        if (e < 250) { v = sw.frozen; op = 1 - e / 250; }
-                        else if (e < 500) { op = (e - 250) / 250; }
-                        else sw = null;
+                    const fr = sw ? handoffFrame(now - sw.at, sw.f) : null; if (!fr) sw = null;
+                    if (!fr) shown.current = { lo: band.lo, hi: band.hi };
+                    const old = fr && fr.old, lo = old ? fr.lo : band.lo, hi = Math.max(old ? fr.hi : band.hi, lo + 0.002);
+                    if (loRef.current) { loRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, fr ? fr.tlo : band.lo)} 2`); loRef.current.style.opacity = fr ? fr.tloOp : 1; }
+                    if (hiRef.current) {
+                        if (!old && band.flow) { hiRef.current.setAttribute('stroke-dasharray', band.flow); hiRef.current.setAttribute('stroke-dashoffset', 0); }
+                        else { hiRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); hiRef.current.setAttribute('stroke-dashoffset', -lo); }
+                        hiRef.current.style.opacity = fr && !old ? fr.newOp : 1;
                     }
-                    if (!sw || now - sw.at >= 250) shown.current = { lo: tlo, hi: thi };
-                    const lo = v.lo, hi = Math.max(v.hi, lo + 0.002);
-                    if (loRef.current) { loRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`); loRef.current.style.opacity = op; }
-                    if (hiRef.current) { hiRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); hiRef.current.setAttribute('stroke-dashoffset', -lo); hiRef.current.style.opacity = op * band.pulse; }
+                    if (ringRef.current) { const R = fr && fr.ring; ringRef.current.setAttribute('r', R ? R.r : 0); ringRef.current.setAttribute('stroke-width', R ? R.w : 0); ringRef.current.style.opacity = R ? R.op : 0; }
                 };
                 const loop = (now) => { draw(now); raf = requestAnimationFrame(loop); };
                 raf = requestAnimationFrame(loop);
@@ -902,7 +914,7 @@
             }, []);
             // enkel de beginwaarden aan React geven: anders zet elke render de piste even terug op een oude stand
             const init = React.useRef({ lo: lo0, hi: hi0 });
-            return h(TrackGraphic, { lo: init.current.lo, hi: init.current.hi, loRef, hiRef });
+            return h(TrackGraphic, { lo: init.current.lo, hi: init.current.hi, loRef, hiRef, ringRef });
         };
 
         // ===== Display links: "Nu aan het lopen" met piste =====
@@ -939,7 +951,8 @@ function lapTileStyle(n) {
             const fastMs = best ? Math.max(expected * (1 - rel), best * 0.99) : firstRange[0];
             const slowMs = best ? Math.max(expected * (1 + rel), fastMs * 1.08) : firstRange[1];
             const el = startTime ? Math.max(0, effNow() - startTime) : elapsedTime;   // elapsedTime loopt op het scherm maar elke 30 s bij (en is bij een wissel nog die van de vorige loper)
-            const { lo, hi } = trackBand(el, fastMs, slowMs, 0);
+            const hi = Math.min(1, el / fastMs);
+            const lo = Math.max(0, Math.min(hi - 0.05, el / slowMs));
             const metersMid = Math.round(((lo + hi) / 2) * 515 / 10) * 10;
             const swapKey = `${activeRunner.runnerId}_${+startTime}`;
             // Hoe meer rondes, hoe feestelijker de kaart: ster per 3 rondes, vanaf ronde 5 warmere kleur, vanaf 8 een gloed, vanaf 12 draaiende stralen. Een kroon voor wie het snelste ronde-record of de meeste rondes heeft.
@@ -2036,8 +2049,8 @@ function predictNext(times, gender, restMs) {
                 // De autoplay is zelf 'de chronometer' (eigenaar 'autoplay' in meta/chrono, met levensteken): een chronometer-app kijkt dan mee
                 // en neemt enkel over met 'Overnemen'. Is die chronometer 60 s stil, of al 2 min op de achtergrond, dan neemt de autoplay het weer over.
                 const chronoRef = () => db.collection(colName('meta')).doc('chrono');
-                let apBeat = 0, hiddenSince = 0;
-                const beatAp = () => { if (stopped || chronoLink.owner !== 'autoplay' || Date.now() - apBeat < 15000) return; apBeat = Date.now(); chronoRef().set({ t: tnow(), hidden: false }, { merge: true }).catch(() => {}); };
+                let apBeat = 0, hiddenSince = 0, lateMax = 0;   // lateMax: hoeveel ms de autoplay te laat was (browser remt het tabblad af?)
+                const beatAp = () => { if (stopped || chronoLink.owner !== 'autoplay' || Date.now() - apBeat < 15000) return; apBeat = Date.now(); chronoRef().set({ t: tnow(), hidden: !!document.hidden, late: lateMax }, { merge: true }).catch(() => {}); };
                 const claimAp = () => { apBeat = Date.now(); chronoLink.owner = 'autoplay'; chronoRef().set({ owner: 'autoplay', ownerName: 'Autoplay', ownerSince: tnow(), t: tnow(), hidden: false }, { merge: true }).catch(() => {}); };
                 if (wk) wk.addEventListener('message', beatAp); const apIv = setInterval(beatAp, 15000);
                 const EARLY = Date.UTC(2000, 0, 1);      // wachtrij-items van autoplay staan altijd vóór handmatig toegevoegde
@@ -2045,6 +2058,7 @@ function predictNext(times, gender, restMs) {
                 const qItem = (l) => ({ runnerId: l.runnerId, runnerName: l.name, gender: l.gender || null, addedAt: new Date(EARLY + l.seq * 1000).toISOString(), order: l.seq });
                 const tick = () => {
                     if (stopped) return;
+                    if (dueAt) lateMax = Math.max(lateMax, Date.now() - dueAt);
                     clearTimeout(timer); dueAt = 0;
                     // Een echte (oefen)chronometer heeft voorrang: zolang die een levensteken geeft, schrijft de autoplay niets, dus een refresh van dit scherm stopt de lopende loper niet meer.
                     ensureChronoSub();
