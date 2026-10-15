@@ -424,6 +424,7 @@ function openAndScroll(list) {
 }
 let rankFocus = null;   // { list, id }: komt van een aangeklikte plaats of kroontje
 const lbOpen = {};      // welke klassementen zijn uitgeklapt (alle lopers i.p.v. de top 10)
+let fastSel = 'fast';   // snelste rondes: alle / vrouwen / mannen
 function fullList(key) {
   const ok = (r) => r.best > 0 && r.totalLaps > 0;
   if (key === 'fast') return runners.filter(ok).sort((x, y) => x.best - y.best).map((r) => ({ id: r.id, name: r.name, t: r.best }));
@@ -432,19 +433,20 @@ function fullList(key) {
   return runners.filter((r) => r.totalLaps > 0).sort((x, y) => y.totalLaps - x.totalLaps || x.totalTime - y.totalTime).map((r) => ({ id: r.id, name: r.name, n: r.totalLaps }));
 }
 function viewRank() {
-  const T = (SUM && SUM.top) || { fast: [], fastM: [], fastV: [], most: [] };
   const bgs = ['background:#ffd23f;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)', 'background:#f2a342;border:3px solid var(--ink)', 'background:#ffd58a;border:3px solid var(--ink)'];
   const crownSvg = '<svg viewBox="0 0 24 24" width="22" height="22" style="flex:none"><path d="M3 19h18l1.5-11-5 4L12 4 7 12 1.5 8z" fill="#fff" stroke="#17120d" stroke-width="1.8" stroke-linejoin="round"/></svg>';
   const row = (x, i, val, hit, rank) => `<div class="rank" ${hit ? 'data-own="1" ' : ''}data-act="view" data-id="${esc(x.id)}" style="cursor:pointer;align-items:center;border-radius:12px;padding:7px 8px;margin-bottom:6px;${rank <= 3 ? bgs[rank - 1] : 'background:#fff6df;border:3px solid transparent'}${hit ? ';outline:4px solid var(--deep);outline-offset:2px' : ''}"><b style="display:flex;justify-content:center;min-width:26px;color:${rank <= 3 ? 'var(--ink)' : 'var(--muted)'}">${rank === 1 && !(x.t === undefined && x.n < 2) ? crownSvg : rank}</b><div class="nm" style="font-weight:${rank <= 3 ? 800 : 700}">${esc(x.name)}${hit ? '<span class="badge">jij</span>' : ''}</div><div class="v" style="font-size:${rank <= 3 ? 19 : 17}px">${val(x)}</div></div>`;
+  // top 10 en 'Toon alle' uit dezelfde lijst (per loper), zodat de volgorde niet verspringt bij het uitklappen
   const card = (key, title, sub, top, val) => {
-    const open = !!lbOpen[key], arr = open ? fullList(key) : top, f = rankFocus && rankFocus.list === key ? rankFocus.id : '';
-    const total = open ? arr.length : fullList(key).length;
+    const all = fullList(key), open = !!lbOpen[key], arr = open ? all : all.slice(0, 10), f = rankFocus && rankFocus.list === key ? rankFocus.id : '';
+    const total = all.length;
     // gelijke tijden of rondes krijgen dezelfde plaats
     const rows = arr.length ? (() => { let rk = 0, prev; return arr.map((x, i) => { const kv = x.t !== undefined ? Math.ceil(x.t / 100) : x.n; /* gelijk = gelijk in tienden, zoals getoond */ if (i === 0 || kv !== prev) rk = i + 1; prev = kv; return row(x, i, val, (me && x.id === me) || (f && x.id === f), rk); }).join(''); })() : '<div class="empty">Nog geen data</div>';
     const toggle = total > 10 ? `<button class="link" data-act="lbtoggle" data-list="${key}" style="display:block;margin:2px auto 0;font-size:13px;color:var(--muted)">${open ? 'Toon minder ▴' : `Toon alle ${total} ▾`}</button>` : '';
     return `<div class="card" id="lb-${key}"><h2>${title} ${sub ? `<small>${sub}</small>` : ''}</h2>${rows}${toggle}</div>`;
   };
-  return card('fast', 'Snelste rondes', 'algemeen', T.fast, (x) => tenths(x.t)) + card('fastV', 'Snelste rondes', 'vrouwen', T.fastV, (x) => tenths(x.t)) + card('fastM', 'Snelste rondes', 'mannen', T.fastM, (x) => tenths(x.t)) + card('most', 'Meeste rondes', '', T.most, (x) => x.n);
+  const seg = [['fast', 'Alle'], ['fastV', 'Vrouwen'], ['fastM', 'Mannen']].map(([k, l]) => `<button class="btn small" data-act="fastsel" data-list="${k}" style="${k === fastSel ? 'background:var(--orange)' : ''}">${l}</button>`).join(' ');
+  return card(fastSel, 'Snelste rondes', '', null, (x) => tenths(x.t)).replace('</h2>', `</h2><div style="display:flex;gap:6px;margin:-2px 0 10px">${seg}</div>`) + card('most', 'Meeste rondes', '', null, (x) => x.n);
 }
 
 let lastParts = [], lastTab = '';
@@ -613,8 +615,9 @@ async function share() {
 // ---------- events ----------
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab],[data-act]'); if (!t) return;
-  if (t.dataset.tab) { rankFocus = null; tab = t.dataset.tab; if (tab !== 'search') viewId = ''; render(true); return; }
+  if (t.dataset.tab) { rankFocus = null; tab = t.dataset.tab; if (tab !== 'search') viewId = ''; if (tab === 'rank' && typeof refreshIndex === 'function') refreshIndex(); render(true); return; }
   const a = t.dataset.act;
+  if (a === 'fastsel') { lbOpen[t.dataset.list] = !!lbOpen[fastSel]; fastSel = t.dataset.list; render(true); return; }
   if (a === 'pick') { me = t.dataset.id; query = ''; try { localStorage.setItem(ME_KEY, me); } catch (e) {} tab = 'mine'; render(true); window.scrollTo(0, 0); }
   if (a === 'wfa') {
     e.preventDefault();
@@ -630,6 +633,7 @@ document.addEventListener('click', (e) => {
   if (a === 'other') { me = ''; query = ''; try { localStorage.removeItem(ME_KEY); } catch (e) {} render(true); }
   if (a === 'share') share();
   if (a === 'lbtoggle') { const k = t.dataset.list; lbOpen[k] = !lbOpen[k]; if (lbOpen[k] && typeof refreshIndex === 'function') refreshIndex(); render(true); if (!lbOpen[k]) { const c = document.getElementById('lb-' + k); if (c) c.scrollIntoView({ block: 'start' }); } return; }
+  if ((a === 'rankgo' || a === 'rankgo-close') && String(t.dataset.list).startsWith('fast')) fastSel = t.dataset.list;
   if (a === 'rankgo') { rankFocus = { list: t.dataset.list, id: t.dataset.id }; tab = 'rank'; viewId = ''; lbOpen[t.dataset.list] = true; if (typeof refreshIndex === 'function') refreshIndex(); render(true); openAndScroll(t.dataset.list); return; }
   if (a === 'crown') {
     e.stopPropagation(); const id = t.dataset.id, T = SUM && SUM.top, r = getR(id) || {}, name = esc(r.name || '');
@@ -714,7 +718,11 @@ function startHeavy(fromLean) {   // geen (verse) samenvatting beschikbaar: alle
   snap('laps', (s) => { rawLaps = s.docs.map((d) => ({ id: d.id, ...d.data() })); rebuild(); });
 }
 (function boot(tries) {
-  metaDoc('summary').get().then((d) => { if (d.exists) startLean(); else startHeavy(); }).catch((e) => { if (tries < 4) setTimeout(() => boot(tries + 1), 2500); else startHeavy(); });
+  // samenvatting al bij het opstarten veel ouder dan de nieuwste ronde? dan meteen alles zelf rekenen (zie checkStale)
+  metaDoc('summary').get().then((d) => { if (!d.exists) return startHeavy();
+    return db.collection(col('laps')).orderBy('timestamp', 'desc').limit(1).get().then((s) => {
+      const newest = s.empty ? 0 : new Date(s.docs[0].data().timestamp).getTime();
+      if (newest - (d.data().updatedAt || 0) > 10 * 60e3) startHeavy(); else startLean(); }); }).catch((e) => { if (tries < 4) setTimeout(() => boot(tries + 1), 2500); else startHeavy(); });
 })(0);
 
 // levende klok + piste bijwerken (zonder de pagina opnieuw op te bouwen).
