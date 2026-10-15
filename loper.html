@@ -683,14 +683,23 @@ function syncWatches() {   // rondes ophalen van enkel de gekozen lopers (jezelf
 function startCommon() {
   if (NS) db.collection(col('laps')).orderBy('timestamp').limit(1).get().then((s) => { if (!s.empty) setStartFrom(s.docs[0].data().timestamp); }).catch(() => {});
   snap('queue', (s) => { if (!s.metadata.fromCache) queueLoaded = true; queue = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)); });
-  db.collection(col('laps')).orderBy('timestamp', 'desc').limit(12).onSnapshot((s) => { recent = s.docs.map((d) => ({ id: d.id, ...d.data() })); if (NS && recent.length) setStartFrom(recent[recent.length - 1].timestamp); later(); }, onErr);
+  db.collection(col('laps')).orderBy('timestamp', 'desc').limit(12).onSnapshot((s) => { recent = s.docs.map((d) => ({ id: d.id, ...d.data() })); if (NS && recent.length) setStartFrom(recent[recent.length - 1].timestamp); checkStale(); later(); }, onErr);
   snap('activeRunner', (s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; });
+}
+// Samenvatting veel ouder dan de nieuwste rondes (bv. een oude chronometer-test in de oefenmodus, of de chronometer schrijft ze niet meer)?
+// Dan zelf rekenen uit alle rondes, anders staan oude klassementen naast de live rondes. Eerst 30 s wachten: de chronometer schrijft ze elke ~2 min.
+let staleT = null, unsubSum = null;
+function checkStale() {
+  if (MODE !== 'lean' || !SUM || !recent.length) return;
+  const stale = () => MODE === 'lean' && SUM && recent.length && new Date(recent[0].timestamp).getTime() - (SUM.updatedAt || 0) > 10 * 60e3;
+  if (!stale()) { clearTimeout(staleT); staleT = null; return; }
+  if (!staleT) staleT = setTimeout(() => { staleT = null; if (stale()) { if (unsubSum) unsubSum(); Object.keys(lapSubs).forEach((id) => { lapSubs[id](); delete lapSubs[id]; }); startHeavy(true); } }, 30000);
 }
 function startLean() {
   MODE = 'lean'; startCommon();
-  metaDoc('summary').onSnapshot((s) => { if (s.exists) { SUM = s.data(); later(); } }, onErr);
+  unsubSum = metaDoc('summary').onSnapshot((s) => { if (s.exists) { SUM = s.data(); checkStale(); later(); } }, onErr);
   let idxAt = 0, idxUpd = 0, soonWait = 20000;
-  const loadIndex = () => { idxAt = Date.now(); metaDoc('runnerIndex').get().then((s) => { if (s.exists) { const d = s.data();
+  const loadIndex = () => { if (MODE !== 'lean') return; idxAt = Date.now(); metaDoc('runnerIndex').get().then((s) => { if (s.exists) { const d = s.data();
     soonWait = d.updatedAt && d.updatedAt === idxUpd ? Math.min(soonWait * 2, 300000) : 20000;   // index onveranderd (chronometer even weg)? dan minder vaak opnieuw proberen
     idxUpd = d.updatedAt || 0; applyIndex(d.list || []); later(); } }).catch(() => {}); };
   window.refreshIndex = () => { if (Date.now() - idxAt > 60000) loadIndex(); };   // bij uitklappen van een klassement: verse gegevens
@@ -698,8 +707,8 @@ function startLean() {
   loadIndex(); setInterval(loadIndex, 10 * 60e3);
   window.addEventListener('focus', () => { if (Date.now() - idxAt > 120000) loadIndex(); });
 }
-function startHeavy() {   // geen samenvatting beschikbaar: alles lezen (enkel voor oefenen zonder chronometer)
-  MODE = 'heavy'; startCommon();
+function startHeavy(fromLean) {   // geen (verse) samenvatting beschikbaar: alles lezen (enkel voor oefenen zonder chronometer)
+  MODE = 'heavy'; if (!fromLean) startCommon();
   const rebuild = () => { const m = buildMeta(rawRunners, rawLaps); SUM = m.summary; applyIndex(m.index.list); Object.keys(LAPS).forEach((k) => delete LAPS[k]); rawLaps.forEach((l) => { (LAPS[l.runnerId] = LAPS[l.runnerId] || []).push(l); }); };
   snap('runners', (s) => { rawRunners = s.docs.map((d) => ({ id: d.id, ...d.data() })); rebuild(); });
   snap('laps', (s) => { rawLaps = s.docs.map((d) => ({ id: d.id, ...d.data() })); rebuild(); });
