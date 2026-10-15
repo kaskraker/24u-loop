@@ -856,6 +856,16 @@
         };
 
         // Piste die vloeiend meeloopt met de klok (eigen animatie, geen React-render)
+// Piste: waar is de loper waarschijnlijk? lo..hi als deel van de ronde. Loopt hij langer dan de traagste verwachting, dan blijft het stuk
+        // vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
+        const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+        function trackBand(el, fast, slow, nowMs) {
+          const hi = Math.min(1, el / fast);
+          if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi, pulse: 1 };
+          const over = el - slow, w = Math.max(0.012, 0.05 * Math.exp(-over / 40000));
+          const pulse = REDUCED_MOTION ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(2 * Math.PI * nowMs / 1400));
+          return { lo: 1 - w, hi: 1, pulse };
+        }
         const LiveTrack = ({ startTime, fastMs, slowMs, lo0, hi0 }) => {
             const loRef = React.useRef(null), hiRef = React.useRef(null);
             const par = React.useRef({ fastMs, slowMs, t0: +startTime });
@@ -866,8 +876,7 @@
                 const draw = (now) => {
                     const { fastMs: fm, slowMs: sm, t0 } = par.current;
                     const el = Math.max(0, effNow() - t0);
-                    const thi = Math.min(1, el / fm);
-                    const tlo = Math.max(0, Math.min(thi - 0.05, el / sm));
+                    const band = trackBand(el, fm, sm, now), thi = band.hi, tlo = band.lo;
                     // Nieuwe loper: het oude bereik vervaagt (0,25 s), het nieuwe verschijnt vanaf de start (0,25 s)
                     if (lastT0 !== null && t0 !== lastT0 && shown.current) sw = { at: now, frozen: { ...shown.current } };
                     lastT0 = t0;
@@ -881,7 +890,7 @@
                     if (!sw || now - sw.at >= 250) shown.current = { lo: tlo, hi: thi };
                     const lo = v.lo, hi = Math.max(v.hi, lo + 0.002);
                     if (loRef.current) { loRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`); loRef.current.style.opacity = op; }
-                    if (hiRef.current) { hiRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); hiRef.current.setAttribute('stroke-dashoffset', -lo); hiRef.current.style.opacity = op; }
+                    if (hiRef.current) { hiRef.current.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); hiRef.current.setAttribute('stroke-dashoffset', -lo); hiRef.current.style.opacity = op * band.pulse; }
                 };
                 const loop = (now) => { draw(now); raf = requestAnimationFrame(loop); };
                 raf = requestAnimationFrame(loop);

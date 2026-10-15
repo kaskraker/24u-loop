@@ -716,13 +716,23 @@ function collectLive() {   // na elke wijziging van de pagina: de live-elementen
   trackEls = [...document.querySelectorAll('svg[data-track]')];
   liveTick(); wakeLoop();
 }
+// Piste: waar is de loper waarschijnlijk? lo..hi als deel van de ronde. Loopt hij langer dan de traagste verwachting, dan blijft het stuk
+// vlak voor de finish staan maar wordt het nog langzaam smaller en 'ademt' het, zodat het niet lijkt alsof het scherm vastloopt.
+const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+function trackBand(el, fast, slow, nowMs) {
+  const hi = Math.min(1, el / fast);
+  if (el <= slow) return { lo: Math.max(0, Math.min(hi - 0.05, el / slow)), hi, pulse: 1 };
+  const over = el - slow, w = Math.max(0.012, 0.05 * Math.exp(-over / 40000));
+  const pulse = REDUCED_MOTION ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.cos(2 * Math.PI * nowMs / 1400));
+  return { lo: 1 - w, hi: 1, pulse };
+}
 function liveTick() {
   const now = tnow();
   liveEls.forEach((el) => { el.textContent = mmssc(now - Number(el.dataset.live)); });
   trackEls.forEach((el) => {
-    const e = Math.max(0, now - Number(el.dataset.start)), hi = Math.min(1, e / Number(el.dataset.fast)), lo = Math.max(0, Math.min(hi - 0.05, e / Number(el.dataset.slow)));
+    const e = Math.max(0, now - Number(el.dataset.start)), band = trackBand(e, Number(el.dataset.fast), Number(el.dataset.slow), performance.now()), hi = band.hi, lo = band.lo;
     el.querySelector('.tlo').setAttribute('stroke-dasharray', `${Math.max(0.001, lo)} 2`);
-    const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo);
+    const h2 = el.querySelector('.thi'); h2.setAttribute('stroke-dasharray', `${Math.max(0.001, hi - lo)} 2`); h2.setAttribute('stroke-dashoffset', -lo); h2.style.opacity = band.pulse;
   });
 }
 const hasLive = () => liveEls.length > 0 || trackEls.length > 0;
