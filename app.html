@@ -923,8 +923,9 @@ function lapTileStyle(n) {
             const rel = Math.max(0.06, Math.min(0.25, n >= 3 ? sdOf(mine.map(l => l.time)) / personalAvg : groupRel));
             // Snelst realistische ronde: nooit veel sneller dan zijn eigen record (die van vandaag); traagst: verwachting + marge
             const best = n ? Math.min(...mine.map(l => l.time)) : null;
-            const fastMs = best ? Math.max(expected * (1 - rel), best * 0.99) : expected * 0.82;   // nog nooit gelopen: brede marge
-            const slowMs = best ? Math.max(expected * (1 + rel), fastMs * 1.08) : expected * 1.12;
+            const firstRange = FIRST_LAP_RANGE[(me && me.gender) || (activeRunner && activeRunner.gender)] || FIRST_LAP_RANGE.X;   // nog nooit gelopen: bereik van vorig jaar
+            const fastMs = best ? Math.max(expected * (1 - rel), best * 0.99) : firstRange[0];
+            const slowMs = best ? Math.max(expected * (1 + rel), fastMs * 1.08) : firstRange[1];
             const el = startTime ? Math.max(0, effNow() - startTime) : elapsedTime;   // elapsedTime loopt op het scherm maar elke 30 s bij (en is bij een wissel nog die van de vorige loper)
             const hi = Math.min(1, el / fastMs);
             const lo = Math.max(0, Math.min(hi - 0.05, el / slowMs));
@@ -1075,6 +1076,8 @@ function lapTileStyle(n) {
         // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
         const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
 const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };
+// Bereik op de piste bij een eerste ronde: 80% van de eerste rondes van vorig jaar viel hiertussen (10e tot 90e percentiel; mannen n=200, vrouwen n=125). 'Geen' ligt tussen beide.
+const FIRST_LAP_RANGE = { M: [83000, 106000], V: [99000, 133000], X: [91000, 119500] };
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
 const EW_FIRST = 0.7, EW_NEXT = 0.6;

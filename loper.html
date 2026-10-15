@@ -124,6 +124,8 @@ let eventStart = NS ? 0 : EVENT_START_REAL;
 // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
 // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
 const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
+// Bereik op de piste bij een eerste ronde: 80% van de eerste rondes van vorig jaar viel hiertussen (10e tot 90e percentiel; mannen n=200, vrouwen n=125). 'Geen' ligt tussen beide.
+const FIRST_LAP_RANGE = { M: [83000, 106000], V: [99000, 133000], X: [91000, 119500] };
 const FIRST_LAP_TYPICAL_MS = { M: 92000, V: 112000, X: 99000 };   // meest waarschijnlijke eerste ronde (mediaan): voor de piste; FIRST_LAP_MS (gemiddelde) is voor de wachttijden (sommen)
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
@@ -351,7 +353,8 @@ function nowCard() {
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
   const rnn = getR(rid), nLaps = rnn ? rnn.totalLaps : 0, best = rnn && rnn.best ? rnn.best : 0, ex = nLaps ? expected(rid) : (FIRST_LAP_TYPICAL_MS[rnn && rnn.gender] || FIRST_LAP_TYPICAL_MS.X);
   const rel = Math.max(0.06, Math.min(0.25, nLaps >= 3 && rnn.sd ? rnn.sd : 0.15));
-  const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : ex * 0.82, slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : ex * 1.12;
+  const firstRange = FIRST_LAP_RANGE[(rnn && rnn.gender) || active.runner.gender] || FIRST_LAP_RANGE.X;   // nog nooit gelopen: bereik van vorig jaar
+  const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : firstRange[0], slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : firstRange[1];
   const lapNo = nLaps + 1;
   const topMost = SUM && SUM.top && SUM.top.most && SUM.top.most[0];
   const crown = SUM && SUM.record && SUM.record.name && SUM.record.name === active.runner.runnerName ? 'Recordhouder' : (topMost && topMost.id === rid && topMost.n >= 4 ? 'Koploper' : '');
