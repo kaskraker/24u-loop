@@ -282,8 +282,11 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 // Verwachte rondetijd voor een loper zonder eerdere ronde, vast gekozen uit de data van vorig jaar (gemiddelde eerste ronde: mannen 1:34, vrouwen 1:54, overige 1:41).
 // Wordt enkel intern gebruikt (piste, wachttijden); bij een eerste ronde tonen we geen verwachte tijd.
 const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
-// Eerste ronde: 80% van de eerste rondes van vorig jaar viel hiertussen (10e tot 90e percentiel), zelfde bereik als de piste op het grote scherm en in de lopers-app
-const FIRST_LAP_RANGE = { M: [83000, 106000], V: [99000, 133000], X: [91000, 119500] };
+// Groene zone (wanneer de volgende aan de wissel moet staan): 90% van de lopers komt erin binnen (5e tot 95e percentiel, vorig jaar).
+// Eerste ronde: rechtstreeks uit de eerste rondes van vorig jaar. Met eigen rondes: rond de voorspelling, scheef want lopers komen zelden veel
+// vroeger maar wel geregeld later binnen (vooral met weinig gekende rondes). [ms na de start] en [ms vóór, ms na de voorspelling]
+const FIRST_LAP_ZONE = { M: [82000, 116000], V: [97000, 141000], X: [89500, 128500] };
+const ZONE_AROUND = (n) => n === 1 ? [7000, 16000] : n === 2 ? [7000, 10000] : n <= 4 ? [7000, 8000] : [7000, 7000];
 const MIN_LAP = 60000, MIN_LAP_TXT = 'Een ronde duurt minstens 1 minuut';   // 515 m: sneller dan een minuut kan niet (record vorig jaar 1:14)
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
@@ -893,12 +896,11 @@ function viewChrono() {
   const startIn = (i) => { const ms = waitMs(i); return ms <= 5000 && i === 0 ? 'Start elk moment' : `Start ${waitText(ms, i)} · rond ${clock(tnow() + ms)}`; };
   // wisselbalk: voortgang van de lopende loper tegenover zijn verwachte ronde; de groene zone is het moment waarop de volgende moet klaarstaan
   // Breedte van de groene zone (± helft, in ms): hoe meer rondes we van deze loper kennen, hoe nauwkeuriger de schatting en hoe smaller de zone
-  const zoneFor = (rid) => {
-    const all = laps.filter((l) => l.runnerId === rid), n = all.length;
-    if (n === 0) { const rn = runners.find((r) => r.id === rid); return FIRST_LAP_RANGE[(rn && rn.gender) || (a && a.runner && a.runner.gender)] || FIRST_LAP_RANGE.X; }   // eerste ronde: bereik van vorig jaar
-    if (n === 1) return 14000; if (n === 2) return 10000;
-    const t = all.sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)).slice(-5).map((l) => l.time), mean = t.reduce((s, x) => s + x, 0) / t.length, sd = Math.sqrt(t.reduce((s, x) => s + (x - mean) ** 2, 0) / t.length);
-    return Math.max(5000, Math.min(10000, Math.round(sd * 1.3)));   // eigen spreiding van de laatste rondes
+  const zoneFor = (rid) => {   // groene zone als [begin, einde] in ms na de start
+    const n = laps.filter((l) => l.runnerId === rid).length;
+    if (n === 0) { const rn = runners.find((r) => r.id === rid); return FIRST_LAP_ZONE[(rn && rn.gender) || (a && a.runner && a.runner.gender)] || FIRST_LAP_ZONE.X; }
+    const ex = Math.round(expected(rid)), [before, after] = ZONE_AROUND(n);
+    return [ex - before, ex + after];
   };
   const paceBar = (nm) => `<div class="pace" data-st="${st || ''}" data-exp="${Math.round(expected(a.runner.runnerId))}" data-zone="${[].concat(zoneFor(a.runner.runnerId)).join(',')}"><div class="pace-row"><div class="pace-track"><div class="pace-zone"></div><div class="pace-fill"></div></div><div class="pace-next">${esc((nm || '?').trim().charAt(0).toUpperCase())}</div></div><div class="pace-txt">&nbsp;</div></div>`;
   // resultaat van de laatste ronde: ± 30 s op dezelfde plaats als 'Hierna', met een zachte overgang (beide staan op elkaar in één cel)
