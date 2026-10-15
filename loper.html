@@ -272,7 +272,7 @@ function statusCard(r, self = true) {
     return `<div class="status run"><div class="k">${self ? 'Jij loopt nu!' : fn + ' loopt nu!'}</div><div class="big" data-live="${st || ''}">0:00.00</div><div class="s">${self ? 'Succes! ' : ''}Elke ronde = € ${EUR_PER_LAP} voor Water for All</div></div>`;
   }
   const w = waiting(), idxs = w.map((q, i) => q.runnerId === r.id ? i : -1).filter((i) => i >= 0), idx = idxs.length ? idxs[0] : -1;
-  if (idx === -1) return `<div class="status none"><div class="k">${self ? 'Je staat niet in de wachtrij' : fn + ' staat niet in de wachtrij'}</div>${self ? '<div class="s" style="margin-top:6px">Wil je nog een ronde lopen? Schrijf je in aan de stand.</div>' : ''}</div>`;
+  if (idx === -1) return self ? '' : `<div class="status none"><div class="k">${fn} staat niet in de wachtrij</div></div>`;   // jezelf: geen melding nodig
   const ms = waitMs(idx);
   const head = self ? (idx === 0 ? 'Jij bent de volgende' : `Je staat ${idx + 1}e in de rij`) : (idx === 0 ? `${fn} is de volgende` : `${fn} staat ${idx + 1}e in de rij`);
   const now = idx === 0 && ms <= 5000;   // de lopende loper is (bijna) binnen
