@@ -913,7 +913,7 @@ function viewChrono() {
   const nextCard = resCard ? `<div class="slot">${resCard}${nextCard0}</div>` : nextCard0;
   const showOops = running || w.length || lastLapAction();
   const fixBtns = `<button class="fixbtn" data-act="early">‹ te vroeg</button><button class="fixbtn" data-act="late">te laat ›</button><button class="fixbtn err" data-act="oops">foutje?</button>`;
-  const ownerNm = owner && owner.name ? esc(owner.name) : 'het andere toestel';
+  const ownerNm = autoplayLive() && !(owner && tnow() - owner.t < 45000) ? 'de autoplay' : owner && owner.name ? esc(owner.name) : 'het andere toestel';
   const takeRow = (fixed) => `<div class="bigrow${fixed ? ' fixed' : ''}"><button class="big" data-act="takeover" style="background:var(--orange)">OVERNEMEN<small>${role === 'unknown' ? 'even geduld…' : `nu neemt ${ownerNm} de tijden`}</small></button></div>`;
   const bigRow = (fixed) => isOwner() ? bigRow0(fixed) : takeRow(fixed);
   const bigRow0 = (fixed) => `<div class="bigrow stack${fixed ? ' fixed' : ''}"><div class="layer${fixOn ? ' off' : ''}" data-fixmain="${fixUntil}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>${laMini ? `<div class="layer fix${fixOn ? '' : ' off'}" data-fixlayer="${fixUntil}">${fixBtns}</div>` : ''}</div>`;
@@ -1061,6 +1061,13 @@ async function claim() {   // dit toestel wordt de chronometer
     setRole('owner'); $('overlay').innerHTML = ''; buzz('start'); toast(`${device.name} neemt nu de tijden`, 3000); beat();
   } catch (e) { toast('Overnemen mislukt: ' + (e.code || e.message), 4000); }
 }
+function apGate() {
+  gateShown = true;
+  $('overlay').innerHTML = `<div class="modal"><div class="box" style="text-align:center"><h3>Autoplay loopt</h3>
+    <p style="margin:6px 0 14px">Zelf de tijden nemen stopt de autoplay.</p>
+    <button class="big" data-act="takeover" style="min-height:84px;background:var(--orange)">Zelf tijden nemen</button>
+    <button class="btn" data-act="closeov" style="width:100%;margin-top:14px">Enkel meekijken</button></div></div>`;
+}
 function gate() {   // bij het openen: een ander toestel is de chronometer
   gateShown = true;
   const nm = owner && owner.name ? esc(owner.name) : 'een ander toestel';
@@ -1070,11 +1077,17 @@ function gate() {   // bij het openen: een ander toestel is de chronometer
     <button class="btn" data-act="closeov" style="width:100%;margin-top:14px">Enkel meekijken</button>
     <div class="lbl2" style="margin-top:10px">Dit toestel: ${esc(device.name)}</div></div></div>`;
 }
+// Oefenmodus met autoplay (app.html?autoplay=1): die schrijft zelf de rondes. Dit toestel kijkt dan mee tot je echt overneemt (dan stopt de autoplay).
+let autoplayT = 0, apKnown = !NS, apPending = null;
+const autoplayLive = () => !!autoplayT && tnow() - autoplayT < 45000;
+if (NS) db.collection(col('meta')).doc('autoplay').onSnapshot((s) => { autoplayT = s.exists ? s.data().t || 0 : 0; if (!apKnown) { apKnown = true; if (apPending) { const p = apPending; apPending = null; onOwnerDoc(...p); } } else render(); }, () => { apKnown = true; if (apPending) onOwnerDoc(...apPending); });
 function onOwnerDoc(d, fromServer) {
   owner = d && d.owner ? { id: d.owner, name: d.ownerName || '', since: d.ownerSince || 0, t: d.t || 0 } : null;
   if (!fromServer && !ownerKnown) return;   // eerst de echte toestand van de server afwachten
+  if (!apKnown) { apPending = [d, fromServer]; return; }
   const first = !ownerKnown; ownerKnown = true;
   if (conflict) { if (role !== 'viewer') setRole('viewer'); return; }
+  if (first && autoplayLive() && !(owner && tnow() - owner.t < 45000)) { setRole('viewer'); apGate(); return; }
   if (!owner || owner.id === device.id) {
     if (!owner && first) claim();   // nog geen chronometer: dit toestel wordt het
     else if (role !== 'owner') setRole('owner');

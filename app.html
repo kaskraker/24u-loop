@@ -2032,6 +2032,9 @@ function predictNext(times, gender, restMs) {
                 // Daarom ook een wekker in een worker (die wordt niet afgeremd), zoals bij de chronometer.
                 const schedule = (ms) => { clearTimeout(timer); dueAt = Date.now() + ms; timer = setTimeout(tick, ms); };
                 let wk = null; try { wk = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},250)'], { type: 'text/javascript' }))); wk.onmessage = () => { if (!stopped && dueAt && Date.now() >= dueAt + 100) tick(); }; } catch (e) {}
+                // levensteken, zodat een chronometer in deze oefenomgeving niet zomaar overneemt (enkel als je het echt kiest)
+                let apBeat = 0; const beatAp = () => { if (stopped || Date.now() - apBeat < 15000) return; apBeat = Date.now(); try { db.collection(colName('meta')).doc('autoplay').set({ t: tnow() }); } catch (e) {} };
+                if (wk) wk.addEventListener('message', beatAp); const apIv = setInterval(beatAp, 15000);
                 const EARLY = Date.UTC(2000, 0, 1);      // wachtrij-items van autoplay staan altijd vóór handmatig toegevoegde
                 const lapId = (seq) => `import_l_${String(seq).padStart(4, '0')}`;
                 const qItem = (l) => ({ runnerId: l.runnerId, runnerName: l.name, gender: l.gender || null, addedAt: new Date(EARLY + l.seq * 1000).toISOString(), order: l.seq });
@@ -2090,7 +2093,7 @@ function predictNext(times, gender, restMs) {
                     plan = snap.docs.map(d => d.data()).sort((a, b) => a.seq - b.seq);
                     schedule(2500);     // even wachten tot rondes/wachtrij geladen zijn
                 });
-                return () => { stopped = true; clearTimeout(timer); if (wk) wk.terminate(); unsub(); };
+                return () => { stopped = true; clearTimeout(timer); clearInterval(apIv); if (wk) wk.terminate(); unsub(); };
             }, []);
 
             useEffect(() => {
