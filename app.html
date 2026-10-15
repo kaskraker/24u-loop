@@ -702,7 +702,7 @@
         const effNow = () => chronoOfflineNow() ? chronoLink.t : tnow();   // 'nu' voor alle lopende klokken en pistes
         const ensureChronoSub = () => {
             if (chronoLink.sub) return;
-            try { if (typeof db !== 'undefined' && db) chronoLink.sub = db.collection(colName('meta')).doc('chrono').onSnapshot({ includeMetadataChanges: true }, (snap) => { const d = snap.exists ? snap.data() : null; chronoLink.t = d && d.t ? d.t : null; chronoLink.fresh = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites; chronoLink.loaded = true; if (chronoLink.fresh && chronoLink.t && tnow() - chronoLink.t < 30000) chronoLink.seenLive = true; }, () => { chronoLink.loaded = true; }); } catch (e) {}
+            try { if (typeof db !== 'undefined' && db) chronoLink.sub = db.collection(colName('meta')).doc('chrono').onSnapshot({ includeMetadataChanges: true }, (snap) => { const d = snap.exists ? snap.data() : null; chronoLink.t = d && d.t ? d.t : null; chronoLink.owner = d && d.owner || null; chronoLink.hidden = !!(d && d.hidden); chronoLink.fresh = !snap.metadata.fromCache && !snap.metadata.hasPendingWrites; chronoLink.loaded = true; if (chronoLink.fresh && chronoLink.t && tnow() - chronoLink.t < 30000) chronoLink.seenLive = true; }, () => { chronoLink.loaded = true; }); } catch (e) {}
         };
         const useChronoOffline = () => {
             const [, tick] = React.useState(0);
@@ -2032,8 +2032,12 @@ function predictNext(times, gender, restMs) {
                 // Daarom ook een wekker in een worker (die wordt niet afgeremd), zoals bij de chronometer.
                 const schedule = (ms) => { clearTimeout(timer); dueAt = Date.now() + ms; timer = setTimeout(tick, ms); };
                 let wk = null; try { wk = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},250)'], { type: 'text/javascript' }))); wk.onmessage = () => { if (!stopped && dueAt && Date.now() >= dueAt + 100) tick(); }; } catch (e) {}
-                // levensteken, zodat een chronometer in deze oefenomgeving niet zomaar overneemt (enkel als je het echt kiest)
-                let apBeat = 0; const beatAp = () => { if (stopped || Date.now() - apBeat < 15000) return; apBeat = Date.now(); try { db.collection(colName('meta')).doc('autoplay').set({ t: tnow() }); } catch (e) {} };
+                // De autoplay is zelf 'de chronometer' (eigenaar 'autoplay' in meta/chrono, met levensteken): een chronometer-app kijkt dan mee
+                // en neemt enkel over met 'Overnemen'. Is die chronometer 60 s stil, of al 2 min op de achtergrond, dan neemt de autoplay het weer over.
+                const chronoRef = () => db.collection(colName('meta')).doc('chrono');
+                let apBeat = 0, hiddenSince = 0;
+                const beatAp = () => { if (stopped || chronoLink.owner !== 'autoplay' || Date.now() - apBeat < 15000) return; apBeat = Date.now(); chronoRef().set({ t: tnow(), hidden: false }, { merge: true }).catch(() => {}); };
+                const claimAp = () => { apBeat = Date.now(); chronoLink.owner = 'autoplay'; chronoRef().set({ owner: 'autoplay', ownerName: 'Autoplay', ownerSince: tnow(), t: tnow(), hidden: false }, { merge: true }).catch(() => {}); };
                 if (wk) wk.addEventListener('message', beatAp); const apIv = setInterval(beatAp, 15000);
                 const EARLY = Date.UTC(2000, 0, 1);      // wachtrij-items van autoplay staan altijd vóór handmatig toegevoegde
                 const lapId = (seq) => `import_l_${String(seq).padStart(4, '0')}`;
@@ -2044,7 +2048,10 @@ function predictNext(times, gender, restMs) {
                     // Een echte (oefen)chronometer heeft voorrang: zolang die een levensteken geeft, schrijft de autoplay niets, dus een refresh van dit scherm stopt de lopende loper niet meer.
                     ensureChronoSub();
                     if (!chronoLink.loaded) { schedule(800); return; }
-                    if (chronoLink.t != null && tnow() - chronoLink.t < 60000) { lastActive = undefined; schedule(5000); return; }
+                    const human = chronoLink.owner && chronoLink.owner !== 'autoplay' && chronoLink.t != null && tnow() - chronoLink.t < 60000;
+                    hiddenSince = human && chronoLink.hidden ? (hiddenSince || Date.now()) : 0;
+                    if (human && !(hiddenSince && Date.now() - hiddenSince > 120000)) { lastActive = undefined; schedule(5000); return; }
+                    if (chronoLink.owner !== 'autoplay') claimAp();
                     const now = tnow();
                     // 1. afgelopen rondes opslaan (met de juiste totalen van de loper)
                     const have = new Set(lapsRef.current.map(l => l.id));
