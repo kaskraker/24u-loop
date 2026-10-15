@@ -368,7 +368,14 @@ function setActive(batch, item, startISO) {
 const lockButtons = (ms = 1500) => { busyUntil = Date.now() + ms; render(); setTimeout(render, ms + 30); };
 const locked = () => Date.now() < busyUntil;
 
+// tijdacties (starten, ronde klaar, bijstellen, ...) enkel op het toestel dat de tijden neemt
+function mayTime() {
+  if (isOwner()) return true;
+  if (role === 'unknown') { toast('Even geduld: nagaan welk toestel de tijden neemt', 2500); return false; }
+  gate(); return false;
+}
 async function pressMain(opts) {
+  if (!mayTime()) return;
   if (locked()) return;
   const at = (opts && opts.t0) || tnow(), w = waiting();
   if (!isRunning()) {   // eerste loper starten
@@ -392,9 +399,9 @@ function finishLap(time, startNext, atISO) {
   const lapId = 'lap_' + new Date(a.startTime).getTime() + '_' + run.runnerId;
   if (laps.some((l) => l.id === lapId)) { toast('Deze ronde is al opgeslagen', 3000); buzz('fail'); return; }
   const lapRef = ref('laps', lapId);
-  const lapData = { runnerId: run.runnerId, runnerName: run.runnerName, time, distance: 515, timestamp: now, startTime: new Date(new Date(now).getTime() - time).toISOString(), isPersonalRecord: time < prevBest, lapNumber: (rn ? (rn.totalLaps || 0) : 0) + 1 };
+  const lapData = { runnerId: run.runnerId, runnerName: run.runnerName, time, distance: 515, timestamp: now, startTime: new Date(new Date(now).getTime() - time).toISOString(), isPersonalRecord: time < prevBest, lapNumber: mine.length + 1 };
   const b = db.batch();
-  b.set(lapRef, lapData);
+  b.set(lapRef, lapData); journal({ id: lapId, ...lapData });
   if (rn) b.update(ref('runners', rn.id), { totalLaps: FV.increment(1), totalTime: FV.increment(time) });
   if (qi) b.delete(ref('queue', qi.id));
   const nxt = waiting()[0];
@@ -475,6 +482,7 @@ function lastLapAction() {
     canUndo: !(a && a.isRunning) || nextStarted };   // enkel als er sindsdien niets anders gebeurde
 }
 async function undo(given) {
+  if (!mayTime()) return;
   const la = given || lastAction; if (!la) return;
   if (Date.now() - la.at > 120000 && !(await ask('Ongedaan maken?', `De laatste actie was meer dan 2 minuten geleden.\nDe ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd en de timer loopt weer verder voor die loper.`, { ok: 'Ja, ongedaan maken', danger: true }))) return;
   if (!la.at || Date.now() - la.at <= 120000) { if (!(await ask('Ongedaan maken?', `De ronde van ${la.lapData.runnerName} (${mmssc(la.time)}) wordt verwijderd.\nDe timer loopt weer verder voor ${la.lapData.runnerName}.`, { ok: 'Ja, ongedaan maken', danger: true }))) return; }
@@ -489,6 +497,7 @@ async function undo(given) {
   commit(b); lockButtons(800); toast('Ongedaan gemaakt: de timer loopt weer', 3500);
 }
 function adjustLast(d, given) {
+  if (!mayTime()) return;
   const la = given || lastAction; if (!la) return;
   const newTime = la.time - d;
   if (newTime < MIN_LAP) { toast(MIN_LAP_TXT, 3000); buzz('fail'); return; }
@@ -501,11 +510,13 @@ function adjustLast(d, given) {
   buzz('undo'); toast(`Tijd aangepast: ${la.lapData.runnerName} nu ${mmssc(newTime)}`, 3500); render();
 }
 async function skipNext() {
+  if (!mayTime()) return;
   const w = waiting(); if (!w.length) return;
   if (!(await ask('Niet aanwezig?', `${w[0].runnerName} komt niet opdagen?\nDie gaat naar het einde van de wachtrij.`, { ok: 'Ja, naar achteren' }))) return;
   const b = db.batch(); b.update(ref('queue', w[0].id), { addedAt: new Date(tnow()).toISOString(), order: Math.max(0, ...queue.map((q) => q.order || 0)) + 1 }); commit(b); buzz('undo');
 }
 function swapActive() {
+  if (!mayTime()) return;
   const w = waiting(); if (!isRunning() || !w.length) { toast('Niemand anders in de wachtrij', 2500); return; }
   $('overlay').innerHTML = `<div class="modal"><div class="box"><h3>Wie loopt er echt?</h3><p>De klok blijft lopen. Kies de loper die nu aan het lopen is.</p>
     ${w.slice(0, 12).map((q) => `<button class="btn pick" data-swap="${esc(q.id)}">${esc(q.runnerName)}</button>`).join('')}
@@ -518,6 +529,7 @@ function swapActive() {
   }; });
 }
 async function manualTime() {
+  if (!mayTime()) return;
   const a = activeData(); if (!a || !isRunning()) return;
   const v = await ask('Tijd intikken', `Rondetijd van ${a.runner.runnerName}, bijvoorbeeld 1:35 of 1:35.4`, { input: 'm:ss', ok: 'Opslaan en volgende' });
   if (v === null) return;
@@ -528,12 +540,14 @@ async function manualTime() {
   finishLap(ms, true);
 }
 async function stopAfterThis() {
+  if (!mayTime()) return;
   if (!isRunning()) return;
   const st = startMs(), time = st ? tnow() - st : 0;
   if (!(await ask('Ronde afsluiten en stoppen?', `${activeData().runner.runnerName}: ${mmssc(time)}\nDe ronde wordt opgeslagen en daarna start er niemand meer.`, { ok: 'Opslaan en stoppen' }))) return;
   finishLap(time, false);
 }
 async function cancelRun() {
+  if (!mayTime()) return;
   if (!isRunning()) return;
   if (!(await ask('Loop annuleren?', `De huidige loop van ${activeData().runner.runnerName} wordt NIET opgeslagen. ${activeData().runner.runnerName} blijft vooraan in de wachtrij staan.`, { ok: 'Ja, annuleren', danger: true }))) return;
   const b = db.batch(); activeClear(b); commit(b); toast('Loop geannuleerd', 3000);
@@ -617,6 +631,7 @@ function scheduleMeta() {
   metaTimer = setTimeout(writeMeta, metaAt ? Math.max(0, 120000 - (Date.now() - metaAt)) : 4000);
 }
 function writeMeta() {
+  if (!isOwner()) return;
   metaTimer = null;
   const m = buildMeta(runners, laps), sig = JSON.stringify([m.summary.total, m.summary.top, m.index.list]);
   if (sig === metaLast) return;
@@ -626,6 +641,7 @@ function writeMeta() {
 }
 // wachtrijlengte om de 5 minuten bewaren (voor de weetjes op het grote scherm)
 function sampleQueue() {
+  if (!isOwner()) return;
   if (!loaded.queue) return;
   const t5 = Math.floor(tnow() / 300000) * 300000;
   db.collection(col('meta')).doc('queueHistory').set({ samples: FV.arrayUnion({ t: t5, n: waiting().length }) }, { merge: true }).catch(() => {});
@@ -829,6 +845,8 @@ function renderChrome() {
   else if (nagUntil > Date.now()) ban = `<div class="banner">Even controleren: hangt de gsm aan de lader en staat het scherm aan?</div>`;
   else if (loaded.queue && !isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand in de wachtrij. Laat mensen inschrijven aan de stand.</div>`;
   else if (loaded.queue && isRunning() && waiting().length === 0) ban = `<div class="banner">Er staat niemand meer na deze loper.</div>`;
+  if (role === 'viewer' && !conflict) ban = `<div class="banner">Meekijken: ${owner && owner.name ? `<b>${esc(owner.name)}</b>` : 'een ander toestel'} neemt de tijden.</div>` + ban;
+  else if (netPaused && isOwner()) ban = `<div class="banner red">Geen verbinding. Je kan gewoon doorgaan: alles wordt bewaard op dit toestel en verstuurd zodra het internet terug is.</div>`;
   $('banner').innerHTML = ban;
   document.body.classList.toggle('focus', focusMode);
   // tijdnemer-modus: enkel geen verbinding of lege batterij, als smalle balk die niets verschuift
@@ -890,7 +908,10 @@ function viewChrono() {
   const nextCard = resCard ? `<div class="slot">${resCard}${nextCard0}</div>` : nextCard0;
   const showOops = running || w.length || lastLapAction();
   const fixBtns = `<button class="fixbtn" data-act="early">‹ te vroeg</button><button class="fixbtn" data-act="late">te laat ›</button><button class="fixbtn err" data-act="oops">foutje?</button>`;
-  const bigRow = (fixed) => `<div class="bigrow stack${fixed ? ' fixed' : ''}"><div class="layer${fixOn ? ' off' : ''}" data-fixmain="${fixUntil}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>${laMini ? `<div class="layer fix${fixOn ? '' : ' off'}" data-fixlayer="${fixUntil}">${fixBtns}</div>` : ''}</div>`;
+  const ownerNm = owner && owner.name ? esc(owner.name) : 'het andere toestel';
+  const takeRow = (fixed) => `<div class="bigrow${fixed ? ' fixed' : ''}"><button class="big" data-act="takeover" style="background:var(--orange)">OVERNEMEN<small>${role === 'unknown' ? 'even geduld…' : `nu neemt ${ownerNm} de tijden`}</small></button></div>`;
+  const bigRow = (fixed) => isOwner() ? bigRow0(fixed) : takeRow(fixed);
+  const bigRow0 = (fixed) => `<div class="bigrow stack${fixed ? ' fixed' : ''}"><div class="layer${fixOn ? ' off' : ''}" data-fixmain="${fixUntil}">${button}${showOops ? '<button class="oops" data-act="oops">Foutje?</button>' : ''}</div>${laMini ? `<div class="layer fix${fixOn ? '' : ' off'}" data-fixlayer="${fixUntil}">${fixBtns}</div>` : ''}</div>`;
   if (focusMode) {   // tijdnemer-modus: ook de drie lopers daarna, compact
     const after = w.slice(from, from + 3).map((q, i) => `<div class="row"><div class="no">${i + from + 1}</div><div class="nm">${esc(q.runnerName)}</div><div class="w">${waitText(waitMs(i + from), i + from)}<small>rond ${clock(tnow() + waitMs(i + from))}</small></div></div>`).join('');
     return `${top}${undoCard}${nextCard || (running ? '<div class="card nextc"><div class="lbl">Hierna</div><div class="nm2">Niemand meer</div></div>' : '')}${after ? `<div class="card" style="padding:10px 12px"><h2 style="font-size:15px;margin-bottom:6px">Daarna <small>${w.length} wachtend</small></h2>${after}</div>` : ''}${bigRow(true)}`;
@@ -956,6 +977,7 @@ function viewMore() {
     <div class="row"><div class="nm">Haptiek<small>${canVibrate ? 'trillen wordt ondersteund' : 'iPhone: via de schakelaar-truc (iOS 17.4+); zet Instellingen → Geluid en haptiek → Systeemhaptiek aan'}</small></div><button class="btn small primary" data-act="hapTest">Test</button></div>
     <div class="row"><div class="nm">Batterij<small>${batt ? `${Math.round(batt.level * 100)}%${batt.charging ? ' · aan de lader' : ' · niet aan de lader'}` : 'kan niet worden uitgelezen op dit toestel (iPhone): zet de gsm aan de lader'}</small></div></div>
     <div class="row"><div class="nm">Gedeelde tijd<small>klok van dit toestel ${TIME_OFFSET >= 0 ? '+' : '−'}${(Math.abs(TIME_OFFSET) / 1000).toFixed(2).replace('.', ',')} s gecorrigeerd</small></div></div>
+    <div class="row"><div class="nm">Dit toestel<small>${esc(device.name)} · ${isOwner() ? 'neemt de tijden' : role === 'viewer' ? 'kijkt mee' : '…'}</small></div><button class="btn small" data-act="rename">Naam</button></div>
     <div class="row"><div class="nm">Tijdnemer-modus<small>enkel klok, wachtrij en de grote knop</small></div><button class="btn small primary" data-act="focus">Start</button></div>
     <div class="row"><div class="nm">App vernieuwen<small>als iets niet meer meeloopt; niets gaat verloren</small></div><button class="btn small" data-act="reload">↻</button></div>
     <div class="row"><div class="nm">Offline-opslag<small>${persistence === 'on' ? 'aan: rondes gaan niet verloren zonder internet' : persistence.startsWith('off') ? 'niet beschikbaar in deze browser: sluit/herlaad niet' : 'bezig…'}</small></div></div></div>
@@ -1004,6 +1026,128 @@ document.addEventListener('pointerdown', (e) => {
 let lastDone = 0;
 document.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-hold]')) e.preventDefault(); });
 
+// ===== Eén chronometer tegelijk: eigenaar en overnemen =====
+// Elk toestel heeft een vaste naam (bv. "Huawei-1234"). De chronometer die de tijden neemt, staat als eigenaar in meta/chrono.
+// Een ander toestel kan altijd overnemen; het vorige toestel kijkt dan enkel nog mee.
+// Valt de eigenaar offline, dan houdt hij zijn wijzigingen bij zich (netwerk gepauzeerd) en kijkt hij bij terugkeer EERST of iemand overnam,
+// zodat zijn oude toestand nooit die van het nieuwe toestel overschrijft.
+const DEV_KEY = 'chronoDevice';
+function guessDeviceName() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone/.test(ua)) return 'iPhone'; if (/iPad/.test(ua)) return 'iPad';
+  const m = /Android[^;]*;\s*([^;)]+?)(?:\s+Build|\))/.exec(ua);
+  if (m && m[1] && m[1].trim() !== 'K') return m[1].trim().split(/\s+/).slice(0, 2).join(' ');
+  if (/Android/.test(ua)) return 'Android'; if (/Windows/.test(ua)) return 'Laptop'; if (/Mac/.test(ua)) return 'Mac';
+  return 'Toestel';
+}
+let device = null; try { device = JSON.parse(localStorage.getItem(DEV_KEY) || 'null'); } catch (e) {}
+if (!device || !device.id) { device = { id: Math.random().toString(36).slice(2, 10), name: guessDeviceName() + '-' + (1000 + Math.floor(Math.random() * 9000)) }; try { localStorage.setItem(DEV_KEY, JSON.stringify(device)); } catch (e) {} }
+// Chrome op Android verbergt het model in de user agent: vraag het apart op (enkel voor een nog algemene naam)
+try { if (/^Android-/.test(device.name) && navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) navigator.userAgentData.getHighEntropyValues(['model']).then((v) => { if (v.model) { device.name = v.model.split(/\s+/).slice(0, 2).join(' ') + device.name.slice(device.name.indexOf('-')); try { localStorage.setItem(DEV_KEY, JSON.stringify(device)); } catch (e) {} render(); } }).catch(() => {}); } catch (e) {}
+const LS = (k) => k + '_' + NS;
+let owner = null, ownerKnown = false, role = 'unknown', gateShown = false;   // role: 'owner' | 'viewer' | 'unknown'
+const isOwner = () => role === 'owner';
+const ago = (t) => { const m = Math.max(0, Math.round((tnow() - t) / 60000)); return m < 1 ? 'net nog' : m < 60 ? `${m} min geleden` : `${Math.floor(m / 60)} u geleden`; };
+function setRole(r) { role = r; try { localStorage.setItem(LS('chronoWasOwner'), r === 'owner' ? '1' : '0'); } catch (e) {} render(); }
+async function claim() {   // dit toestel wordt de chronometer
+  if (netPaused) { toast('Overnemen kan pas met internet', 3500); return; }
+  try {
+    await db.collection(col('meta')).doc('chrono').set({ owner: device.id, ownerName: device.name, ownerSince: tnow(), t: tnow() }, { merge: true });
+    setRole('owner'); $('overlay').innerHTML = ''; buzz('start'); toast(`${device.name} neemt nu de tijden`, 3000); beat();
+  } catch (e) { toast('Overnemen mislukt: ' + (e.code || e.message), 4000); }
+}
+function gate() {   // bij het openen: een ander toestel is de chronometer
+  gateShown = true;
+  const nm = owner && owner.name ? esc(owner.name) : 'een ander toestel';
+  $('overlay').innerHTML = `<div class="modal"><div class="box" style="text-align:center"><h3>Chronometer</h3>
+    <p style="margin:6px 0 14px"><b>${nm}</b> neemt nu de tijden${owner && owner.t ? ` (laatst actief ${ago(owner.t)})` : ''}.</p>
+    <button class="big" data-act="takeover" style="min-height:84px;background:var(--orange)">Overnemen van ${nm}</button>
+    <button class="btn" data-act="closeov" style="width:100%;margin-top:14px">Enkel meekijken</button>
+    <div class="lbl2" style="margin-top:10px">Dit toestel: ${esc(device.name)}</div></div></div>`;
+}
+function onOwnerDoc(d, fromServer) {
+  owner = d && d.owner ? { id: d.owner, name: d.ownerName || '', since: d.ownerSince || 0, t: d.t || 0 } : null;
+  if (!fromServer && !ownerKnown) return;   // eerst de echte toestand van de server afwachten
+  const first = !ownerKnown; ownerKnown = true;
+  if (conflict) { if (role !== 'viewer') setRole('viewer'); return; }
+  if (!owner || owner.id === device.id) {
+    if (!owner && first) claim();   // nog geen chronometer: dit toestel wordt het
+    else if (role !== 'owner') setRole('owner');
+    return;
+  }
+  if (role === 'owner' && !first) {   // iemand anders nam over terwijl dit toestel actief was
+    setRole('viewer'); buzz('warn');
+    toast(`${owner.name || 'Een ander toestel'} heeft overgenomen: dit toestel kijkt nu enkel mee`, 6000);
+    return;
+  }
+  if (role !== 'viewer') setRole('viewer');
+  if (first && !gateShown) gate();
+}
+// geen verbinding bij het openen: wie de vorige keer de chronometer was, blijft het (offline verder werken), anders enkel meekijken
+setTimeout(() => { if (!ownerKnown && role === 'unknown') { let was = '0'; try { was = localStorage.getItem(LS('chronoWasOwner')); } catch (e) {} setRole(was === '1' ? 'owner' : 'viewer'); } }, 6000);
+
+// ----- offline: netwerk pauzeren en bij terugkeer eerst controleren -----
+let netPaused = false; try { netPaused = localStorage.getItem(LS('netPaused')) === '1'; } catch (e) {}
+let conflict = null; try { conflict = JSON.parse(localStorage.getItem(LS('chronoConflict')) || 'null'); } catch (e) {}
+if (netPaused) db.disableNetwork().catch(() => {});   // ook na herladen: niets versturen voor we weten wie de chronometer is
+async function pauseNet() {
+  if (netPaused || !isOwner()) return;
+  netPaused = true; try { localStorage.setItem(LS('netPaused'), '1'); } catch (e) {}
+  try { await db.disableNetwork(); } catch (e) {}
+  render();
+}
+async function probe() {   // rechtstreeks (zonder de offline-wachtrij) bij de server vragen wie de chronometer is
+  if (!netPaused) return;
+  let doc = null;
+  try {
+    const r = await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${col('meta')}/chrono?key=${firebaseConfig.apiKey}`, { cache: 'no-store' });
+    if (r.status === 404) doc = {}; else if (r.ok) doc = (await r.json()).fields || {}; else return;
+  } catch (e) { return; }   // nog geen internet
+  const o = doc.owner && doc.owner.stringValue;
+  if (!o || o === device.id) {   // niemand nam over: alles versturen zoals altijd
+    netPaused = false; try { localStorage.removeItem(LS('netPaused')); } catch (e) {}
+    try { await db.enableNetwork(); } catch (e) {}
+    toast('Weer online: alles wordt verstuurd', 3000); render(); return;
+  }
+  // iemand anders nam over: de wachtende wijzigingen van dit toestel NIET versturen; de rondes bewaren we apart
+  const c = { by: (doc.ownerName && doc.ownerName.stringValue) || 'een ander toestel', since: Number((doc.ownerSince && (doc.ownerSince.integerValue || doc.ownerSince.doubleValue)) || 0) };
+  try { localStorage.setItem(LS('chronoConflict'), JSON.stringify(c)); localStorage.removeItem(LS('netPaused')); localStorage.setItem(LS('chronoWasOwner'), '0'); } catch (e) {}
+  try { await db.terminate(); await db.clearPersistence(); } catch (e) {}
+  location.reload();
+}
+setInterval(() => { if (isOwner() && !netPaused && connState() === 'off') pauseNet(); }, 3000);
+window.addEventListener('offline', () => { if (isOwner()) pauseNet(); });
+setInterval(probe, 8000); window.addEventListener('online', probe);
+
+// ----- dagboek: elke ronde van dit toestel, om na een overname terug te kunnen vinden -----
+function journal(lap) {
+  try { const j = JSON.parse(localStorage.getItem(LS('lapJournal')) || '[]'); j.push(lap); localStorage.setItem(LS('lapJournal'), JSON.stringify(j.slice(-80))); } catch (e) {}
+}
+function missingFromJournal() {
+  let j = []; try { j = JSON.parse(localStorage.getItem(LS('lapJournal')) || '[]'); } catch (e) {}
+  return j.filter((x) => !laps.some((l) => l.id === x.id || (l.runnerId === x.runnerId && Math.abs(new Date(l.timestamp) - new Date(x.timestamp)) < 45000)) && tnow() - new Date(x.timestamp) < 12 * 3600e3);
+}
+function conflictScreen() {   // na herladen: tonen wat dit toestel offline deed en niet verstuurd werd
+  const miss = missingFromJournal(), when = conflict.since ? clock(conflict.since) : '';
+  $('overlay').innerHTML = `<div class="modal"><div class="box"><h3>Overgenomen</h3>
+    <p><b>${esc(conflict.by)}</b> heeft ${when ? `om ${when} ` : ''}overgenomen terwijl dit toestel offline was. Wat dit toestel intussen deed, is niet verstuurd.</p>
+    ${miss.length ? `<p style="margin-top:8px"><b>${miss.length} ${miss.length === 1 ? 'ronde staat' : 'rondes staan'} nog niet in de lijst:</b></p>${miss.map((x) => `<div class="row"><div class="no" style="width:46px;font-size:13px">${clock(x.timestamp)}</div><div class="nm">${esc(x.runnerName)}</div><div class="w">${mmssc(x.time)}</div></div>`).join('')}
+      <div class="row2" style="margin-top:10px"><button class="btn" data-act="cfdrop">Niet toevoegen</button><button class="btn primary" data-act="cfadd">Toevoegen</button></div>`
+    : '<p style="margin-top:8px">Alle rondes van dit toestel staan al in de lijst.</p><button class="btn primary" data-act="cfdrop" style="width:100%;margin-top:10px">Oké</button>'}</div></div>`;
+}
+function resolveConflict(add) {
+  if (add) {
+    const miss = missingFromJournal(), b = db.batch();
+    miss.forEach((x) => { b.set(ref('laps', x.id), { runnerId: x.runnerId, runnerName: x.runnerName, time: x.time, distance: 515, timestamp: x.timestamp, startTime: x.startTime, isPersonalRecord: false, lapNumber: laps.filter((l) => l.runnerId === x.runnerId).length + 1, recovered: true });
+      if (runners.some((r) => r.id === x.runnerId)) b.update(ref('runners', x.runnerId), { totalLaps: FV.increment(1), totalTime: FV.increment(x.time) }); });
+    if (miss.length) { commit(b); toast(`${miss.length} ${miss.length === 1 ? 'ronde' : 'rondes'} toegevoegd`, 3500); }
+  }
+  conflict = null; lastAction = null;
+  try { localStorage.removeItem(LS('chronoConflict')); localStorage.removeItem(LS('lapJournal')); localStorage.removeItem('lastAction_' + NS); } catch (e) {}
+  $('overlay').innerHTML = ''; render();
+}
+setInterval(() => { if (conflict && loaded.laps && ownerKnown && !$('overlay').innerHTML) conflictScreen(); }, 1000);
+
 // ===== batterij en levensteken =====
 let batt = null, nagUntil = 0;
 (async () => { try { if (navigator.getBattery) { batt = await navigator.getBattery(); const upd = () => { if (batt.level <= 0.2 && !batt.charging) buzz('warn'); render(); }; batt.addEventListener('levelchange', upd); batt.addEventListener('chargingchange', render); render(); } } catch (e) {} })();
@@ -1012,6 +1156,7 @@ setInterval(() => { if (!batt) { nagUntil = Date.now() + 60000; buzz('warn'); re
 // daarom tikt de klok ook in een aparte worker (die wordt niet afgeremd), en bij het terugkeren naar de app sturen we meteen een teken.
 let beatSeq = 0;
 function beat() {
+  if (!isOwner() || netPaused) return;
   db.collection(col('meta')).doc('chrono').set({ t: tnow(), seq: ++beatSeq, hidden: !!document.hidden, battery: batt ? Math.round(batt.level * 100) : null, charging: batt ? !!batt.charging : null, pending }, { merge: true }).catch(() => {});
 }
 try { const w = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},15000)'], { type: 'text/javascript' }))); w.onmessage = beat; } catch (e) { setInterval(beat, 15000); }
@@ -1023,6 +1168,11 @@ document.addEventListener('click', (e) => {
   if (t.dataset.tab) { tab = t.dataset.tab; unfocus(); render(); window.scrollTo(0, 0); return; }
   const a = t.dataset.act, id = t.dataset.id;
   if (a === 'focus') { setFocus(true); return; }
+  if (a === 'takeover') { claim(); return; }
+  if (a === 'cfadd') { resolveConflict(true); return; }
+  if (a === 'cfdrop') { resolveConflict(false); return; }
+  if (a === 'rename') { ask('Naam van dit toestel', 'Zo zien andere toestellen dit toestel, bv. bij "Overnemen van …".', { input: device.name, ok: 'Opslaan' }).then((v) => { if (v && v.trim()) { device.name = v.trim().slice(0, 24); try { localStorage.setItem(DEV_KEY, JSON.stringify(device)); } catch (e) {} if (isOwner()) db.collection(col('meta')).doc('chrono').set({ ownerName: device.name }, { merge: true }).catch(() => {}); render(); } }); return; }
+  if (['early', 'late', 'oops'].includes(a) && !mayTime()) return;
   if (a === 'nooffer') { offerDone(); render(); return; }
   if (a === 'restoggle') { if (lastResult && Date.now() - lastResult.at < RES_MAX) { resOverride = resShown() ? 'next' : 'result'; buzz('tick'); } return; }
   if (a === 'oops') { oopsSheet(); return; }
@@ -1062,6 +1212,7 @@ const listen = (name, fn) => db.collection(col(name)).onSnapshot({ includeMetada
   if (s.metadata.fromCache) { if (!offlineSince) offlineSince = Date.now(); lastCacheFalse = Date.now(); } else { offlineSince = 0; lastOK = Date.now(); }
   if (s.docChanges().length || !loaded[name === 'activeRunner' ? 'active' : name]) { fn(s); loaded[name === 'activeRunner' ? 'active' : name] = true; sc = null; render(); scheduleMeta(); }
 }, (err) => { $('chipTxt').textContent = 'Fout: ' + err.code; });
+db.collection(col('meta')).doc('chrono').onSnapshot({ includeMetadataChanges: true }, (s) => { onOwnerDoc(s.exists ? s.data() : null, !s.metadata.fromCache); }, () => {});
 listen('runners', (s) => { runners = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
 listen('laps', (s) => { laps = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
 listen('queue', (s) => { queue = s.docs.map((d) => ({ id: d.id, ...d.data() })); });
