@@ -346,7 +346,7 @@ function buzz(kind = 'tick') {
   try { if (canVibrate) { navigator.vibrate(pat); return 'vibrate'; } } catch (e) {}
   try { let t = 0; pat.forEach((ms, i) => { if (i % 2 === 0) { if (t === 0) hapLabel.click(); else setTimeout(() => hapLabel.click(), t); } t += ms; }); return 'switch'; } catch (e) { return 'geen'; }
 }
-let holdMode = true; try { holdMode = localStorage.getItem('holdMode') !== 'off'; } catch (e) {}
+let holdMode = false; try { holdMode = localStorage.getItem('holdMode') === 'on'; } catch (e) {}   // standaard één tik; ingedrukt houden is een keuze in Beheer
 
 // bevestigingsvenster in de stijl van de app (geen browser-popup)
 function ask(title, text, { ok = 'Ja, doorgaan', danger = false, input = null, cancel = 'Annuleren' } = {}) {
@@ -933,7 +933,7 @@ function viewChrono() {
     const ex = Math.round(expected(rid)), [before, after] = ZONE_AROUND(n);
     return [ex - before, ex + after];
   };
-  const paceBar = (nm) => `<div class="pace" data-st="${st || ''}" data-exp="${Math.round(expected(a.runner.runnerId))}" data-zone="${[].concat(zoneFor(a.runner.runnerId)).join(',')}"><div class="pace-row"><div class="pace-track"><div class="pace-zone"></div><div class="pace-fill"></div></div><div class="pace-next">${esc((nm || '?').trim().charAt(0).toUpperCase())}</div></div><div class="pace-txt">&nbsp;</div></div>`;
+  const paceBar = (nm) => !laps.some(inEvent) ? '' : `<div class="pace" data-st="${st || ''}" data-exp="${Math.round(expected(a.runner.runnerId))}" data-zone="${[].concat(zoneFor(a.runner.runnerId)).join(',')}"><div class="pace-row"><div class="pace-track"><div class="pace-zone"></div><div class="pace-fill"></div></div><div class="pace-next">${esc((nm || '?').trim().charAt(0).toUpperCase())}</div></div><div class="pace-txt">&nbsp;</div></div>`;
   // resultaat van de laatste ronde: ± 30 s op dezelfde plaats als 'Hierna', met een zachte overgang (beide staan op elkaar in één cel)
   const resAge = lastResult ? Date.now() - lastResult.at : Infinity, resLive = resShown(), resHere = resAge < RES_MAX + 1500, resTap = resAge < RES_MAX ? ' data-act="restoggle"' : '';
   const resCard = (lastResult && resHere) ? (() => { const L = lastResult, d = L.prev != null ? L.time - L.prev : null;

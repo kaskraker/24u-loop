@@ -985,7 +985,7 @@ function lapTileStyle(n) {
                                     h('div', { className: 'font-extrabold leading-tight', style: { color: ts.fg, fontSize: 'clamp(24px, 2vw, 48px)' } }, v)); })
                         )
                     ),
-                    h('div', { style: { width: 'clamp(300px, 20vw, 540px)', flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))
+                    laps.length === 0 ? null : h('div', { style: { width: 'clamp(300px, 20vw, 540px)', flexShrink: 0 } }, startTime ? h(LiveTrack, { startTime, fastMs, slowMs, lo0: lo, hi0: hi }) : h(TrackGraphic, { lo, hi }))   // startronde (halve ronde, afstand onbekend): geen piste
                 )
             );
         };
