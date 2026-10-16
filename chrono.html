@@ -296,6 +296,8 @@ const FIRST_LAP_MS = { M: 94000, V: 114000, X: 101000 };
 // vroeger maar wel geregeld later binnen (vooral met weinig gekende rondes). [ms na de start] en [ms vóór, ms na de voorspelling]
 const FIRST_LAP_ZONE = { M: [82000, 116000], V: [97000, 141000], X: [89500, 128500] };
 const ZONE_AROUND = (n) => n === 1 ? [7000, 16000] : n === 2 ? [7000, 10000] : n <= 4 ? [7000, 8000] : [7000, 7000];
+// Startronde: de eerste ronde van het hele event (alle kringen starten op één startlijn, een halve ronde vóór het standje). Telt als ronde (€, km), maar niet voor tijden, records en voorspellingen.
+const full = (arr) => arr.filter((l) => !l.half);
 const MIN_LAP = 60000, MIN_LAP_TXT = 'Een ronde duurt minstens 1 minuut';   // 515 m: sneller dan een minuut kan niet (record vorig jaar 1:14)
 // Voorspelling van de volgende ronde: recente rondes tellen zwaarder (exponentieel gewogen), gestart vanaf de waarde van vorig jaar per geslacht.
 // Op de data van vorig jaar 17% nauwkeuriger dan een gewoon gemiddelde (gemiddelde fout 4,1 s tegenover 5,0 s); een afzonderlijke trend-extrapolatie bleek niet beter.
@@ -324,11 +326,11 @@ const waiting = () => { const q = sortedQueue(), r = runItem(); return r ? q.fil
 
 // wachttijd-schatting (zelfde als het grote scherm)
 let sc = null;
-const stats = () => { if (sc && sc.n === laps.length && Date.now() - sc.at < 15000) return sc; const per = {}; laps.forEach((l) => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; });
-  const hourAgo = tnow() - 3600e3, rec = laps.filter((l) => new Date(l.timestamp).getTime() > hourAgo);
-  const group = rec.length >= 5 ? rec.reduce((a, l) => a + l.time, 0) / rec.length : laps.length >= 5 ? laps.reduce((a, l) => a + l.time, 0) / laps.length : 100000;
+const stats = () => { if (sc && sc.n === laps.length && Date.now() - sc.at < 15000) return sc; const per = {}; full(laps).forEach((l) => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; });
+  const hourAgo = tnow() - 3600e3, rec = full(laps).filter((l) => new Date(l.timestamp).getTime() > hourAgo);
+  const group = rec.length >= 5 ? rec.reduce((a, l) => a + l.time, 0) / rec.length : full(laps).length >= 5 ? full(laps).reduce((a, l) => a + l.time, 0) / full(laps).length : 100000;
   sc = { n: laps.length, at: Date.now(), per, group }; return sc; };
-const expected = (rid) => { const rn = runners.find((x) => x.id === rid), mine = laps.filter((l) => l.runnerId === rid).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)), last = mine.length ? new Date(mine[mine.length - 1].timestamp).getTime() : tnow(); const at = (isRunning() && activeData().runner.runnerId === rid && startMs()) || tnow(); return predictNext(mine.map((l) => l.time), rn && rn.gender, at - last); };
+const expected = (rid) => { const rn = runners.find((x) => x.id === rid), mine = laps.filter((l) => l.runnerId === rid).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)), last = mine.length ? new Date(mine[mine.length - 1].timestamp).getTime() : tnow(); const at = (isRunning() && activeData().runner.runnerId === rid && startMs()) || tnow(); return predictNext(full(mine).map((l) => l.time), rn && rn.gender, at - last); };
 const waitMs = (idx) => { let t = 0; if (isRunning()) { const st = startMs(); t = Math.max(5000, expected(activeData().runner.runnerId) - (st ? tnow() - st : 0)); } const w = waiting(); for (let j = 0; j < idx && j < w.length; j++) t += 2000 + expected(w[j].runnerId); return t; };
 const waitText = (ms, i) => i === 0 && ms <= 5000 ? 'elk moment' : i === 0 && ms < 90000 ? `± ${Math.max(10, Math.round(ms / 10000) * 10)} s` : `± ${Math.max(1, Math.round(ms / 60000))} min`;
 
@@ -400,8 +402,8 @@ async function pressMain(opts) {
     return;
   }
   const st = startMs(), time = st ? at - st : 0, run = activeData().runner;
-  const mine = laps.filter((l) => l.runnerId === run.runnerId).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0;
-  const limit = Math.max(MIN_LAP, best ? best * 0.6 : 0);   // korter dan een minuut, of duidelijk te kort voor deze loper
+  const mine = full(laps.filter((l) => l.runnerId === run.runnerId)).map((l) => l.time), best = mine.length ? Math.min(...mine) : 0;
+  const limit = !laps.some(inEvent) ? 15000 : Math.max(MIN_LAP, best ? best * 0.6 : 0);   // startronde (halve ronde): enkel een foutieve dubbele tik opvangen   // korter dan een minuut, of duidelijk te kort voor deze loper
   if (time < limit && !(await ask('Al klaar?', `${run.runnerName} is pas ${(time / 1000).toFixed(1)} s onderweg${best ? ` (snelste ronde ${mmss(best)})` : ''}.\nZeker dat de ronde klaar is?`, { ok: 'Ja, ronde klaar' }))) { buzz('undo'); return; }
   finishLap(time, true, new Date(at).toISOString());
 }
@@ -409,11 +411,11 @@ function finishLap(time, startNext, atISO) {
   const a = activeData(); if (!a) return;
   const run = a.runner, now = atISO || new Date(tnow()).toISOString();
   const rn = runners.find((r) => r.id === run.runnerId), qi = runItem();
-  const mine = laps.filter((l) => l.runnerId === run.runnerId), prevBest = mine.length ? Math.min(...mine.map((l) => l.time)) : Infinity;
+  const mine = laps.filter((l) => l.runnerId === run.runnerId), half = !laps.some(inEvent), mineF = full(mine), prevBest = mineF.length ? Math.min(...mineF.map((l) => l.time)) : Infinity;
   const lapId = 'lap_' + new Date(a.startTime).getTime() + '_' + run.runnerId;
   if (laps.some((l) => l.id === lapId)) { toast('Deze ronde is al opgeslagen', 3000); buzz('fail'); return; }
   const lapRef = ref('laps', lapId);
-  const lapData = { runnerId: run.runnerId, runnerName: run.runnerName, time, distance: 515, timestamp: now, startTime: new Date(new Date(now).getTime() - time).toISOString(), isPersonalRecord: time < prevBest, lapNumber: mine.length + 1 };
+  const lapData = { runnerId: run.runnerId, runnerName: run.runnerName, time, distance: 515, timestamp: now, startTime: new Date(new Date(now).getTime() - time).toISOString(), isPersonalRecord: !half && time < prevBest, lapNumber: mine.length + 1, ...(half ? { half: true } : {}) };
   const b = db.batch();
   b.set(lapRef, lapData); journal({ id: lapId, ...lapData });
   if (rn) b.update(ref('runners', rn.id), { totalLaps: FV.increment(1), totalTime: FV.increment(time) });
@@ -423,11 +425,11 @@ function finishLap(time, startNext, atISO) {
   lastAction = { lapId: lapRef.id, nextStartISO: (startNext && nxt) ? now : null, lapData, runnerDocId: rn ? rn.id : null, time, queueItem: qi ? { id: qi.id, data: { runnerId: qi.runnerId, runnerName: qi.runnerName, addedAt: qi.addedAt, order: qi.order || 0 } } : null, prevActive: a, at: Date.now(), nextName: nxt ? nxt.runnerName : null };
   try { localStorage.setItem('lastAction_' + NS, JSON.stringify(lastAction)); } catch (e) {}
   commit(b); lockButtons(1500); buzz('lap');
-  const feats = achievements(run.runnerId, rn, time, mine);
+  const feats = achievements(run.runnerId, rn, time, mine, null, half);
   if (feats.length) buzz([60, 50, 60, 50, 60, 50, 200]);
-  const prevLap = [...mine].sort((x, y) => new Date(y.timestamp) - new Date(x.timestamp))[0];
+  const prevLap = [...mineF].sort((x, y) => new Date(y.timestamp) - new Date(x.timestamp))[0];
   // Het resultaat neemt ± 30 s de plaats in van het 'Hierna'-blokje (de volgende loper is dan toch net gestart)
-  lastResult = { at: Date.now(), lapId, name: run.runnerName, time, n: mine.length + 1, prev: prevLap ? prevLap.time : null, best: isFinite(prevBest) ? prevBest : null, feats };
+  lastResult = { at: Date.now(), lapId, name: run.runnerName, time, n: mine.length + 1, prev: prevLap && !half ? prevLap.time : null, best: isFinite(prevBest) && !half ? prevBest : null, feats, half };
   resOverride = null; clearTimeout(window._resT); window._resT = setTimeout(render, RES_MAX + 800);
   handoff(run.runnerName, time, startNext && nxt ? nxt.runnerName : null, []);
 }
@@ -438,13 +440,14 @@ function syncResult() {
   if (!cur) { if (Date.now() - lastResult.at > 4000 && loaded.laps) { lastResult = null; resOverride = null; } return; }
   if (cur.time !== lastResult.time) {
     const rn = runners.find((r) => r.id === cur.runnerId), mine = laps.filter((l) => l.runnerId === cur.runnerId && l.id !== cur.id);
-    lastResult.time = cur.time; lastResult.feats = achievements(cur.runnerId, rn, cur.time, mine, cur.id);
+    lastResult.time = cur.time; lastResult.feats = achievements(cur.runnerId, rn, cur.time, mine, cur.id, !!cur.half);
   }
 }
 // Wat is er straf aan deze ronde? De tijdnemer kan het meteen aan de loper melden. Pas vanaf genoeg rondes in de dataset, anders is 'record' niets waard.
-function achievements(rid, rn, time, mine, exId) {
-  const L = exId ? laps.filter((l) => l.id !== exId) : laps;   // bij een bijstelling: de ronde zelf telt niet mee in de vergelijking
-  const out = [], n = mine.length + 1, gOf = (id) => { const r = runners.find((x) => x.id === id); return r && r.gender; }, g = rn && rn.gender;
+function achievements(rid, rn, time, mineAll, exId, half) {
+  if (half) return [];
+  const mine = full(mineAll), La = exId ? laps.filter((l) => l.id !== exId) : laps, L = full(La);   // bij een bijstelling: de ronde zelf telt niet mee in de vergelijking
+  const out = [], n = mineAll.length + 1, gOf = (id) => { const r = runners.find((x) => x.id === id); return r && r.gender; }, g = rn && rn.gender;
   const best = (arr) => arr.length ? Math.min(...arr.map((l) => l.time)) : Infinity;
   if (L.length >= 5 && time < best(L)) out.push({ t: 'Nieuw record!', s: 'Snelste ronde tot nu toe' });
   else {
@@ -452,9 +455,9 @@ function achievements(rid, rn, time, mine, exId) {
     if (grp.length >= 3 && time < best(grp)) out.push({ t: g === 'V' ? 'Record bij de vrouwen' : 'Record bij de mannen', s: 'Snelste ronde van de groep' });
   }
   if (mine.length >= 2 && time < best(mine)) out.push({ t: 'Persoonlijk record', s: `${((best(mine) - time) / 1000).toFixed(1)} s sneller dan zijn/haar beste` });
-  const cnt = {}; L.forEach((l) => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
+  const cnt = {}; La.forEach((l) => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
   const others = Math.max(0, ...Object.entries(cnt).filter(([id]) => id !== rid).map(([, c]) => c));
-  if (n >= 4 && n > others && mine.length <= others) out.push({ t: 'Nu aan de leiding', s: `Meeste rondes: ${n}` });
+  if (n >= 4 && n > others && mineAll.length <= others) out.push({ t: 'Nu aan de leiding', s: `Meeste rondes: ${n}` });
   else if (n >= 5 && n % 5 === 0) out.push({ t: `${n}e ronde`, s: 'Een mijlpaal!' });
   return out.slice(0, 3);
 }
@@ -598,8 +601,8 @@ function exportCsv(kind) {
   const q = (s) => `"${String(s).replace(/"/g, '""')}"`, dt = (ts) => { const d = new Date(ts), p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}, ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
   let rows;
   if (kind === 'laps') {
-    const best = {}; const all = [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); const overall = laps.length ? Math.min(...laps.map((l) => l.time)) : 0;
-    rows = [['Naam', 'Ronde Nummer', 'Tijd (MM:SS)', 'Tijd (seconden)', 'Start Tijd', 'Finish Tijd', 'Afstand (m)', 'Persoonlijk Record', 'Algemeen Record'].join(',')].concat(all.map((l, i) => { const pr = best[l.runnerId] === undefined || l.time < best[l.runnerId]; if (pr) best[l.runnerId] = l.time; return [q(l.runnerName), i + 1, mmss(l.time), (l.time / 1000).toFixed(2), q(dt(l.startTime || new Date(new Date(l.timestamp) - l.time))), q(dt(l.timestamp)), 515, l.isPersonalRecord ? 'Ja' : 'Nee', l.time === overall ? 'Ja' : 'Nee'].join(','); }));
+    const best = {}; const all = [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); const overall = full(laps).length ? Math.min(...full(laps).map((l) => l.time)) : 0;
+    rows = [['Naam', 'Ronde Nummer', 'Tijd (MM:SS)', 'Tijd (seconden)', 'Start Tijd', 'Finish Tijd', 'Afstand (m)', 'Persoonlijk Record', 'Algemeen Record'].join(',')].concat(all.map((l, i) => { const pr = !l.half && (best[l.runnerId] === undefined || l.time < best[l.runnerId]); if (pr) best[l.runnerId] = l.time; return [q(l.runnerName), i + 1, mmss(l.time), (l.time / 1000).toFixed(2), q(dt(l.startTime || new Date(new Date(l.timestamp) - l.time))), q(dt(l.timestamp)), 515, l.isPersonalRecord ? 'Ja' : 'Nee', !l.half && l.time === overall ? 'Ja' : 'Nee'].join(','); }));
   } else {
     rows = [['Naam', 'Gender', 'Rondes', 'Totale tijd (seconden)', 'Gemiddeld (seconden)'].join(',')].concat(runners.map((r) => [q(r.name), r.gender || '', r.totalLaps || 0, ((r.totalTime || 0) / 1000).toFixed(1), r.totalLaps ? ((r.totalTime || 0) / r.totalLaps / 1000).toFixed(2) : ''].join(',')));
   }
@@ -625,10 +628,12 @@ async function resetAll() {
 function buildMeta(runnersArr, lapsArr) {
   lapsArr = lapsArr.filter(inEvent);
   const by = {};
+  const cntAll = {}; lapsArr.forEach((l) => { cntAll[l.runnerId] = (cntAll[l.runnerId] || 0) + 1; });
+  const total = lapsArr.length; lapsArr = full(lapsArr);   // de startronde telt mee in het aantal, niet in tijden en records
   lapsArr.forEach((l) => { const e = by[l.runnerId] || (by[l.runnerId] = { n: 0, tt: 0, best: Infinity, sq: 0 }); e.n++; e.tt += l.time; if (l.time < e.best) e.best = l.time; });
   lapsArr.forEach((l) => { const e = by[l.runnerId], m = e.tt / e.n; e.sq += (l.time - m) * (l.time - m); });
   const seqs = {}, lastAt = {}; [...lapsArr].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach((l) => { (seqs[l.runnerId] = seqs[l.runnerId] || []).push(l.time); lastAt[l.runnerId] = new Date(l.timestamp).getTime(); });
-  const list = runnersArr.map((r) => { const e = by[r.id]; return { i: r.id, n: r.name || '', g: r.gender || 'X', l: e ? e.n : 0, t: e ? Math.round(e.tt) : 0, b: e ? Math.round(e.best) : 0, s: e && e.n >= 3 ? +(Math.sqrt(e.sq / e.n) / (e.tt / e.n)).toFixed(3) : 0, e: e ? Math.round(predictNext(seqs[r.id] || [], r.gender, Date.now() - (lastAt[r.id] || Date.now()))) : 0 }; });
+  const list = runnersArr.map((r) => { const e = by[r.id]; return { i: r.id, n: r.name || '', g: r.gender || 'X', l: cntAll[r.id] || 0, f: e ? e.n : 0, t: e ? Math.round(e.tt) : 0, b: e ? Math.round(e.best) : 0, s: e && e.n >= 3 ? +(Math.sqrt(e.sq / e.n) / (e.tt / e.n)).toFixed(3) : 0, e: e ? Math.round(predictNext(seqs[r.id] || [], r.gender, Date.now() - (lastAt[r.id] || Date.now()))) : 0 }; });
   const gOf = {}; runnersArr.forEach((r) => { gOf[r.id] = r.gender; });
   const sorted = [...lapsArr].sort((a, b) => a.time - b.time);
   const top = (arr) => arr.slice(0, 10).map((l) => ({ id: l.runnerId, name: l.runnerName, t: l.time, at: l.timestamp }));
@@ -636,7 +641,7 @@ function buildMeta(runnersArr, lapsArr) {
   const now = Date.now();
   return {
     index: { updatedAt: now, list },
-    summary: { updatedAt: now, total: lapsArr.length, record: sorted[0] ? { t: sorted[0].time, name: sorted[0].runnerName } : null,
+    summary: { updatedAt: now, total, record: sorted[0] ? { t: sorted[0].time, name: sorted[0].runnerName } : null,
       top: { fast: top(sorted), fastM: top(sorted.filter((l) => gOf[l.runnerId] === 'M')), fastV: top(sorted.filter((l) => gOf[l.runnerId] === 'V')), most } }
   };
 }
@@ -729,7 +734,7 @@ async function addLapManual() {   // gemiste ronde toevoegen
   if (v === null) return;
   const ms = parseTime(v); if (!ms) { toast('Ongeldige tijd. Gebruik m:ss', 3500); return; }
   if (ms < MIN_LAP) { toast(MIN_LAP_TXT, 3500); return; }
-  const mine = laps.filter((l) => l.runnerId === r.id), prevBest = mine.length ? Math.min(...mine.map((l) => l.time)) : Infinity, now = new Date(Math.min(tnow(), EVENT_END - 1000));   // na het einde: net vóór 20:00, anders telt ze niet
+  const mine = laps.filter((l) => l.runnerId === r.id), prevBest = full(mine).length ? Math.min(...full(mine).map((l) => l.time)) : Infinity, now = new Date(Math.min(tnow(), EVENT_END - 1000));   // na het einde: net vóór 20:00, anders telt ze niet
   const b = db.batch();
   b.set(ref('laps').doc(), { runnerId: r.id, runnerName: r.name, time: ms, distance: 515, timestamp: now.toISOString(), startTime: new Date(now.getTime() - ms).toISOString(), isPersonalRecord: ms < prevBest, lapNumber: mine.length + 1, manual: true });
   b.update(ref('runners', r.id), { totalLaps: FV.increment(1), totalTime: FV.increment(ms) });
@@ -876,7 +881,9 @@ function renderChrome() {
 function runnerFacts(rid, next) {
   const mine = laps.filter((l) => l.runnerId === rid).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   if (!mine.length) return '<div class="facts"><span>Eerste rondje</span></div>';
-  const best = Math.min(...mine.map((l) => l.time)), last = mine[mine.length - 1].time;
+  const fl = full(mine);
+  if (!fl.length) return next ? `<div class="facts"><span><small>Rondje</small>${mine.length + 1}</span></div>` : '<div class="facts"><span>Eerste volle ronde</span></div>';
+  const best = Math.min(...fl.map((l) => l.time)), last = fl[fl.length - 1].time;
   const first = next ? `<span><small>Rondje</small>${mine.length + 1}</span>` : `<span><small>Schatting</small>± ${mmss(expected(rid))}</span>`;
   return `<div class="facts">${first}<span><small>Laatste</small>${mmss(last)}</span><span><small>Snelste</small>${mmss(best)}</span></div>`;
 }
@@ -921,7 +928,7 @@ function viewChrono() {
   // wisselbalk: voortgang van de lopende loper tegenover zijn verwachte ronde; de groene zone is het moment waarop de volgende moet klaarstaan
   // Breedte van de groene zone (± helft, in ms): hoe meer rondes we van deze loper kennen, hoe nauwkeuriger de schatting en hoe smaller de zone
   const zoneFor = (rid) => {   // groene zone als [begin, einde] in ms na de start
-    const n = laps.filter((l) => l.runnerId === rid).length;
+    const n = full(laps.filter((l) => l.runnerId === rid)).length;
     if (n === 0) { const rn = runners.find((r) => r.id === rid); return FIRST_LAP_ZONE[(rn && rn.gender) || (a && a.runner && a.runner.gender)] || FIRST_LAP_ZONE.X; }
     const ex = Math.round(expected(rid)), [before, after] = ZONE_AROUND(n);
     return [ex - before, ex + after];
@@ -930,7 +937,7 @@ function viewChrono() {
   // resultaat van de laatste ronde: ± 30 s op dezelfde plaats als 'Hierna', met een zachte overgang (beide staan op elkaar in één cel)
   const resAge = lastResult ? Date.now() - lastResult.at : Infinity, resLive = resShown(), resHere = resAge < RES_MAX + 1500, resTap = resAge < RES_MAX ? ' data-act="restoggle"' : '';
   const resCard = (lastResult && resHere) ? (() => { const L = lastResult, d = L.prev != null ? L.time - L.prev : null;
-    const facts = `<span><small>Rondje</small>${L.n}</span>${d != null ? `<span class="${d < 0 ? 'good' : 'bad'}"><small>Vorige</small>${d < 0 ? '−' : '+'}${(Math.abs(d) / 1000).toFixed(1)} s</span>` : ''}${L.best != null ? `<span><small>Beste</small>${mmss(L.best)}</span>` : ''}`;
+    const facts = L.half ? `<span><small>Rondje</small>${L.n}</span><span><small>Start</small>halve ronde</span>` : `<span><small>Rondje</small>${L.n}</span>${d != null ? `<span class="${d < 0 ? 'good' : 'bad'}"><small>Vorige</small>${d < 0 ? '−' : '+'}${(Math.abs(d) / 1000).toFixed(1)} s</span>` : ''}${L.best != null ? `<span><small>Beste</small>${mmss(L.best)}</span>` : ''}`;
     const feats = L.feats.length ? `<div class="rfeats">${L.feats.map((f) => `<div class="rfeat"><span class="st">★</span><div><b>${esc(f.t)}</b><small>${esc(f.s)}</small></div></div>`).join('')}</div><div class="tell">Meld dit aan ${esc(L.name)}</div>` : '';
     return `<div class="card nextc res${resLive ? '' : ' off'}${resAge < 800 ? ' fresh' : ''}" data-slot="res"${resTap}><div class="lbl">Net binnen</div><div class="nm2">${esc(L.name)}</div><div class="rtime">${mmssc(L.time)}</div><div class="facts">${facts}</div>${feats}${resTap && w.length ? '<div class="swaphint">tik om de volgende loper te zien</div>' : ''}</div>`; })() : '';
   const nextCard0 = running && w.length ? `<div class="card nextc${resLive ? ' off' : ''}" data-slot="next"${resCard ? resTap : ''}><div class="lbl">Hierna</div><div class="nm2">${esc(w[0].runnerName)}</div>${paceBar(w[0].runnerName)}${runnerFacts(w[0].runnerId, true)}${resCard && resTap ? '<div class="swaphint">tik om de laatste ronde te zien</div>' : ''}</div>` : '';
@@ -974,7 +981,7 @@ function viewQueue() {
 function lresHtml() {   // rondes: de laatste 40, of alle rondes van wie je zoekt
   const q = lq.trim(), ids = q ? new Set(findRunners(q, 50).map((r) => r.id)) : null;
   const list = [...laps].filter((l) => !ids || ids.has(l.runnerId)).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, q ? 80 : 40);
-  return list.length === 0 ? `<div class="empty">${q ? 'Geen rondes gevonden' : 'Nog geen rondes'}</div>` : list.map((l) => `<div class="lrow"><div class="main"><b>${esc(l.runnerName)}</b><span class="t">${mmssc(l.time)}</span> <small>${clock(l.timestamp)} · ronde ${l.lapNumber || '?'}${l.manual ? ' · ingetikt' : ''}</small></div>
+  return list.length === 0 ? `<div class="empty">${q ? 'Geen rondes gevonden' : 'Nog geen rondes'}</div>` : list.map((l) => `<div class="lrow"><div class="main"><b>${esc(l.runnerName)}</b><span class="t">${mmssc(l.time)}</span> <small>${clock(l.timestamp)} · ronde ${l.lapNumber || '?'}${l.half ? ' · startronde' : ''}${l.manual ? ' · ingetikt' : ''}</small></div>
       <button class="ib" aria-label="Tijd aanpassen" data-act="edit" data-id="${esc(l.id)}">${I_EDIT}</button><button class="ib" aria-label="Andere loper" data-act="lapwho" data-id="${esc(l.id)}">${I_USER}</button><button class="ib red" aria-label="Verwijderen" data-act="del" data-id="${esc(l.id)}">${I_TRASH}</button></div>`).join('');
 }
 function viewLaps() {

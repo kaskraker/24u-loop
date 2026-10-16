@@ -183,11 +183,12 @@ const db = firebase.firestore();
 
 // ===== Samenvatting voor de lopers-app: de chronometer schrijft elke ~2 min een kleine samenvatting, zodat gsm's niet alle rondes hoeven te lezen =====
 function buildMeta(runnersArr, lapsArr) {
-  const by = {};
+  const by = {}, cntAll = {}; lapsArr.forEach((l) => { cntAll[l.runnerId] = (cntAll[l.runnerId] || 0) + 1; });
+  const total = lapsArr.length; lapsArr = lapsArr.filter((l) => !l.half);   // de startronde (halve ronde) telt mee in het aantal, niet in tijden en records
   lapsArr.forEach((l) => { const e = by[l.runnerId] || (by[l.runnerId] = { n: 0, tt: 0, best: Infinity, sq: 0 }); e.n++; e.tt += l.time; if (l.time < e.best) e.best = l.time; });
   lapsArr.forEach((l) => { const e = by[l.runnerId], m = e.tt / e.n; e.sq += (l.time - m) * (l.time - m); });
   const seqs = {}, lastAt = {}; [...lapsArr].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach((l) => { (seqs[l.runnerId] = seqs[l.runnerId] || []).push(l.time); lastAt[l.runnerId] = new Date(l.timestamp).getTime(); });
-  const list = runnersArr.map((r) => { const e = by[r.id]; return { i: r.id, n: r.name || '', g: r.gender || 'X', l: e ? e.n : 0, t: e ? Math.round(e.tt) : 0, b: e ? Math.round(e.best) : 0, s: e && e.n >= 3 ? +(Math.sqrt(e.sq / e.n) / (e.tt / e.n)).toFixed(3) : 0, e: e ? Math.round(predictNext(seqs[r.id] || [], r.gender, Date.now() - (lastAt[r.id] || Date.now()))) : 0 }; });
+  const list = runnersArr.map((r) => { const e = by[r.id]; return { i: r.id, n: r.name || '', g: r.gender || 'X', l: cntAll[r.id] || 0, f: e ? e.n : 0, t: e ? Math.round(e.tt) : 0, b: e ? Math.round(e.best) : 0, s: e && e.n >= 3 ? +(Math.sqrt(e.sq / e.n) / (e.tt / e.n)).toFixed(3) : 0, e: e ? Math.round(predictNext(seqs[r.id] || [], r.gender, Date.now() - (lastAt[r.id] || Date.now()))) : 0 }; });
   const gOf = {}; runnersArr.forEach((r) => { gOf[r.id] = r.gender; });
   const sorted = [...lapsArr].sort((a, b) => a.time - b.time);
   const top = (arr) => arr.slice(0, 10).map((l) => ({ id: l.runnerId, name: l.runnerName, t: l.time, at: l.timestamp }));
@@ -195,7 +196,7 @@ function buildMeta(runnersArr, lapsArr) {
   const now = Date.now();
   return {
     index: { updatedAt: now, list },
-    summary: { updatedAt: now, total: lapsArr.length, record: sorted[0] ? { t: sorted[0].time, name: sorted[0].runnerName } : null,
+    summary: { updatedAt: now, total, record: sorted[0] ? { t: sorted[0].time, name: sorted[0].runnerName } : null,
       top: { fast: top(sorted), fastM: top(sorted.filter((l) => gOf[l.runnerId] === 'M')), fastV: top(sorted.filter((l) => gOf[l.runnerId] === 'V')), most } }
   };
 }
@@ -209,14 +210,14 @@ const lapsOf = (id) => LAPS[id] || [];
 const getR = (id) => rMap.get(id);
 let idxRunners = [];
 function applyIndex(list) {
-  idxRunners = list.map((a) => ({ id: a.i, name: a.n, gender: a.g, totalLaps: a.l, totalTime: a.t, best: a.b, sd: a.s, exp: a.e }));
+  idxRunners = list.map((a) => ({ id: a.i, name: a.n, gender: a.g, totalLaps: a.l, full: a.f != null ? a.f : a.l, totalTime: a.t, best: a.b, sd: a.s, exp: a.e }));
   mergeKnown();
 }
 // Wie net ingeschreven is, staat nog niet in de lopersindex (de chronometer schrijft die hoogstens om de 2 min).
 // Zulke lopers nemen we voorlopig over uit de wachtrij, de lopende loper of de laatste rondes, zodat ze meteen hun wachttijd zien.
 function mergeKnown() {
   const known = new Set(idxRunners.map((r) => r.id)), extra = [];
-  const add = (id, name, gender) => { if (id && name && !known.has(id)) { known.add(id); extra.push({ id, name, gender: gender || 'X', totalLaps: 0, totalTime: 0, best: 0, sd: 0, exp: 0, temp: true }); } };   // klassement staat mee in de wachtrij
+  const add = (id, name, gender) => { if (id && name && !known.has(id)) { known.add(id); extra.push({ id, name, gender: gender || 'X', totalLaps: 0, full: 0, totalTime: 0, best: 0, sd: 0, exp: 0, temp: true }); } };   // klassement staat mee in de wachtrij
   queue.forEach((q) => add(q.runnerId, q.runnerName, q.gender));
   if (active && active.runner) add(active.runner.runnerId, active.runner.runnerName, active.runner.gender);
   recent.forEach((l) => add(l.runnerId, l.runnerName));
@@ -257,7 +258,7 @@ const waiting = () => {
 
 function expected(rid) {
   const r = getR(rid), prior = FIRST_LAP_MS[r && r.gender] || FIRST_LAP_MS.X;
-  return r && r.totalLaps > 0 ? (r.exp || (r.totalTime + prior * 2) / (r.totalLaps + 2)) : prior;   // voorspelling met recente rondes zwaarder (uit de samenvatting)
+  return r && r.totalLaps > 0 ? (r.exp || (r.totalTime + prior * 2) / (r.full + 2)) : prior;   // voorspelling met recente rondes zwaarder (uit de samenvatting)
 }
 function waitMs(idx) {
   let t = 0;
@@ -325,8 +326,8 @@ function viewMine() {
 }
 function profile(r, self) {
   const my = [...lapsOf(r.id)].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  const times = my.map((l) => l.time), loadingLaps = r.totalLaps > 0 && my.length === 0;
-  const best = times.length ? Math.min(...times) : (r.best || 0), avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : (r.totalLaps ? r.totalTime / r.totalLaps : 0);
+  const times = my.filter((l) => !l.half).map((l) => l.time), loadingLaps = r.totalLaps > 0 && my.length === 0;
+  const best = times.length ? Math.min(...times) : (r.best || 0), avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : (r.full ? r.totalTime / r.full : 0);
   const n = my.length || r.totalLaps || 0;
   const overall = SUM && SUM.record ? SUM.record.t : 0;
   // plaats: iedereen vergelijken op dezelfde gegevens (de lijst van alle lopers), zodat gelijke aantallen rondes dezelfde plaats krijgen
@@ -348,7 +349,7 @@ function profile(r, self) {
       ${self && n ? `<button class="btn full" style="margin-top:12px" data-act="share">Deel mijn resultaat</button>` : ''}</div>
     ${times.length >= 2 ? `<div class="card"><h2>${self ? 'Jouw' : 'Het'} tempo</h2>${tempoSvg(times)}</div>` : ''}
     <div class="card"><h2>${self ? 'Jouw rondes' : 'Rondes'}</h2>${loadingLaps ? '<div class="empty">Rondes laden…</div>' : my.length === 0 ? '<div class="empty">Nog geen rondes gelopen</div>' :
-      my.map((l, i) => ({ l, nr: i + 1 })).reverse().map(({ l, nr }) => `<div class="lap"><div class="t">${clock(l.timestamp)}</div><div class="n">ronde ${nr}${l.time === overall ? '<span class="badge">record</span>' : l.time === best && my.length > 1 ? '<span class="badge">PR</span>' : ''}</div><div class="r">${mmss(l.time)}</div></div>`).join('')}</div>`;
+      my.map((l, i) => ({ l, nr: i + 1 })).reverse().map(({ l, nr }) => `<div class="lap"><div class="t">${clock(l.timestamp)}</div><div class="n">ronde ${nr}${l.half ? '<span class="badge">start</span>' : l.time === overall ? '<span class="badge">record</span>' : l.time === best && times.length > 1 ? '<span class="badge">PR</span>' : ''}</div><div class="r">${mmss(l.time)}</div></div>`).join('')}</div>`;
 }
 function resultsHtml(res, q, act = 'pick') {
   if (!q) return '';
@@ -379,8 +380,8 @@ const crownOf = (id, s = 16) => { const T = SUM && SUM.top; if (!T) return ''; c
 function nowCard() {
   if (!isRunning()) return '';
   const rid = active.runner.runnerId, st = startMs(); if (!st) return '';
-  const rnn = getR(rid), nLaps = rnn ? rnn.totalLaps : 0, best = rnn && rnn.best ? rnn.best : 0, ex = nLaps ? expected(rid) : (FIRST_LAP_TYPICAL_MS[rnn && rnn.gender] || FIRST_LAP_TYPICAL_MS.X);
-  const rel = Math.max(0.06, Math.min(0.25, nLaps >= 3 && rnn.sd ? rnn.sd : 0.15));
+  const rnn = getR(rid), nLaps = rnn ? rnn.totalLaps : 0, nFull = rnn ? (rnn.full != null ? rnn.full : rnn.totalLaps) : 0, best = rnn && rnn.best ? rnn.best : 0, ex = nFull ? expected(rid) : (FIRST_LAP_TYPICAL_MS[rnn && rnn.gender] || FIRST_LAP_TYPICAL_MS.X);
+  const rel = Math.max(0.06, Math.min(0.25, nFull >= 3 && rnn.sd ? rnn.sd : 0.15));
   const firstRange = FIRST_LAP_RANGE[(rnn && rnn.gender) || active.runner.gender] || FIRST_LAP_RANGE.X;   // nog nooit gelopen: bereik van vorig jaar
   const fast = best ? Math.max(ex * (1 - rel), best * 0.99) : firstRange[0], slow = best ? Math.max(ex * (1 + rel), fast * 1.08) : firstRange[1];
   const lapNo = nLaps + 1;
@@ -470,7 +471,7 @@ function viewQueue() {
       ${w.length > LIM ? `<button class="btn small full" data-act="qall" style="margin-top:4px">Toon alle ${w.length} wachtenden</button>` : showAllQ && w.length > 8 ? '<button class="btn small full" data-act="qall" style="margin-top:4px">Toon minder</button>' : ''}</div>
     ${ph === 'before' && !recent.length ? '' : `<div class="card"><h2>Net gelopen <small>laatste ${recent.length || ''} rondes</small></h2>
       ${recent.length === 0 ? '<div class="empty">Nog geen rondes</div>' : recent.map((l) => {
-        const ago = Math.max(0, Math.round((tnow() - new Date(l.timestamp).getTime()) / 60000)), rec = SUM && SUM.record && l.time <= SUM.record.t;
+        const ago = Math.max(0, Math.round((tnow() - new Date(l.timestamp).getTime()) / 60000)), rec = SUM && SUM.record && !l.half && l.time <= SUM.record.t;
         return `<div class="row ${l.runnerId === me ? 'me' : ''}"><div class="no" style="width:44px;font-size:13px">${clock(l.timestamp)}</div><div class="nm" data-act="view" data-id="${esc(l.runnerId)}" style="cursor:pointer">${crownOf(l.runnerId)}${esc(l.runnerName)}${l.runnerId === me ? '<span class="badge">jij</span>' : ''}${rec ? '<span class="badge">record</span>' : ''}<small>${ago < 1 ? 'net binnengekomen' : ago + ' min geleden'}</small></div><div class="w">${mmss(l.time)}</div></div>`;
       }).join('')}</div>`}`;
 }
@@ -525,13 +526,13 @@ function checkCelebrate() {
   if (celeb.me !== me || !celeb.ids) { celeb.me = me; celeb.ids = new Set(my.map((l) => l.id)); return; }   // eerste keer: alles wat er al staat telt niet mee
   const fresh = my.filter((l) => !celeb.ids.has(l.id)); if (!fresh.length) return;
   fresh.forEach((l) => celeb.ids.add(l.id));
-  const last = my[my.length - 1], before = my.filter((l) => l !== last && !fresh.includes(l)).map((l) => l.time), prevBest = before.length ? Math.min(...before) : 0, n = my.length;
+  const last = my[my.length - 1], before = my.filter((l) => l !== last && !fresh.includes(l) && !l.half).map((l) => l.time), prevBest = before.length ? Math.min(...before) : 0, n = my.length;
   const overall = SUM && SUM.record ? SUM.record.t : 0, km = (n * LAP_KM).toFixed(1).replace('.', ',');
   let c = null;
-  if (overall && last.time <= overall && n > 0) c = { title: 'Snelste ronde van het event!', time: mmss(last.time), sub: 'Niemand liep tot nu toe sneller. Wat een ronde!' };
-  else if (prevBest && last.time < prevBest) c = { title: 'Nieuw persoonlijk record!', time: mmss(last.time), sub: `${Math.max(1, Math.round((prevBest - last.time) / 1000))} s sneller dan je vorige beste (${mmss(prevBest)}).` };
+  if (!last.half && overall && last.time <= overall && n > 0) c = { title: 'Snelste ronde van het event!', time: mmss(last.time), sub: 'Niemand liep tot nu toe sneller. Wat een ronde!' };
+  else if (!last.half && prevBest && last.time < prevBest) c = { title: 'Nieuw persoonlijk record!', time: mmss(last.time), sub: `${Math.max(1, Math.round((prevBest - last.time) / 1000))} s sneller dan je vorige beste (${mmss(prevBest)}).` };
   else if (n % 5 === 0) c = { title: `${n} rondes!`, time: '', sub: `${km} km gelopen en € ${n * EUR_PER_LAP} voor Water for All.` };
-  else if (n === 1) c = { title: 'Eerste ronde klaar!', time: mmss(last.time), sub: `Die telt: € ${EUR_PER_LAP} voor Water for All. Tot de volgende!` };
+  else if (n === 1) c = { title: 'Eerste ronde klaar!', time: last.half ? '' : mmss(last.time), sub: `Die telt: € ${EUR_PER_LAP} voor Water for All. Tot de volgende!` };
   if (c) showCelebration(c);
 }
 function showCelebration(c) {
@@ -634,8 +635,8 @@ let rt = null; const later = (force) => { clearTimeout(rt); rt = setTimeout(() =
 // ---------- gedeelde kaart ----------
 async function share() {
   const r = runners.find((x) => x.id === me); if (!r) return;
-  const my = lapsOf(me), times = my.map((l) => l.time); if (!my.length) return;
-  const best = Math.min(...times), avg = times.reduce((a, b) => a + b, 0) / times.length, n = my.length;
+  const my = lapsOf(me), times = my.filter((l) => !l.half).map((l) => l.time); if (!my.length) return;
+  const best = times.length ? Math.min(...times) : 0, avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0, n = my.length;
   const F = '"Bricolage Grotesque", sans-serif';
   try { await Promise.race([Promise.all(['800 70px', '600 36px', '500 34px'].map((f) => document.fonts.load(`${f} ${F}`))), new Promise((ok) => setTimeout(ok, 1500))]); } catch (e) {}   // anders tekent het canvas met een gewoon lettertype
   const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const x = c.getContext('2d');
@@ -657,9 +658,9 @@ async function share() {
   x.font = `800 190px ${F}`; x.fillText(String(n), 100, 590); const nw = x.measureText(String(n)).width;
   x.font = `600 56px ${F}`; x.fillText(n === 1 ? 'ronde' : 'rondes', 100 + nw + 30, 590);
   const t = (l, v, xx, yy) => { card(xx, yy, 450, 200, '#fff'); x.fillStyle = '#6a5a48'; x.font = `600 36px ${F}`; x.fillText(l, xx + 30, yy + 70); x.fillStyle = '#17120d'; x.font = `800 78px ${F}`; x.fillText(v, xx + 30, yy + 160); };
-  t('Afstand', (n * LAP_KM).toFixed(2).replace('.', ',') + ' km', 60, 710); t('Snelste ronde', mmss(best), 550, 710);
-  t('Gemiddeld', mmss(avg), 60, 960); t('Voor Water for All', '€ ' + n * EUR_PER_LAP, 550, 960);
-  const rec = SUM && SUM.record && best <= SUM.record.t, rank = runners.filter((y) => y.totalLaps > Math.max(n, r.totalLaps || 0)).length + 1;
+  t('Afstand', (n * LAP_KM).toFixed(2).replace('.', ',') + ' km', 60, 710); t('Snelste ronde', best ? mmss(best) : '–', 550, 710);
+  t('Gemiddeld', avg ? mmss(avg) : '–', 60, 960); t('Voor Water for All', '€ ' + n * EUR_PER_LAP, 550, 960);
+  const rec = SUM && SUM.record && best > 0 && best <= SUM.record.t, rank = runners.filter((y) => y.totalLaps > Math.max(n, r.totalLaps || 0)).length + 1;
   x.fillStyle = '#17120d'; x.font = `700 40px ${F}`; x.fillText(rec ? 'Snelste ronde van het event!' : rank <= 10 ? `#${rank} in meeste rondes` : 'Bedankt om mee te lopen!', 60, 1260);
   const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
   const file = new File([blob], '24u-loop-resultaat.png', { type: 'image/png' });

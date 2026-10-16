@@ -794,7 +794,7 @@
             const key = laps.length + ':' + (laps[laps.length - 1] && laps[laps.length - 1].id);
             if (key === _crownKey) return _crownVal;
             const out = {}; let best = Infinity, bestId = null; const cnt = {};
-            laps.forEach(l => { if (l.time < best) { best = l.time; bestId = l.runnerId; } cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
+            laps.forEach(l => { if (!l.half && l.time < best) { best = l.time; bestId = l.runnerId; } cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
             const mx = Math.max(0, ...Object.values(cnt));
             if (mx >= 4) Object.keys(cnt).forEach(id => { if (cnt[id] === mx) out[id] = 'Koploper'; });
             if (bestId) out[bestId] = 'Recordhouder';
@@ -933,9 +933,10 @@ function lapTileStyle(n) {
                 );
             }
             const me = runners.find(r => r.id === activeRunner.runnerId);
-            const mine = laps.filter(l => l.runnerId === activeRunner.runnerId);
-            const recent = laps.filter(l => Date.now() - new Date(l.timestamp).getTime() < 3600e3);
-            const base = recent.length >= 5 ? recent : laps;
+            const lapsF = laps.filter(l => !l.half);   // startronde (halve ronde) telt niet mee voor tijden
+            const mine = lapsF.filter(l => l.runnerId === activeRunner.runnerId);
+            const recent = lapsF.filter(l => Date.now() - new Date(l.timestamp).getTime() < 3600e3);
+            const base = recent.length >= 5 ? recent : lapsF;
             const sdOf = (arr) => { const m = arr.reduce((a, b) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length); };
             const overallAvg = base.length ? base.reduce((sum, l) => sum + l.time, 0) / base.length : 100000;
             const n = mine.length;
@@ -959,7 +960,7 @@ function lapTileStyle(n) {
             // Hoe meer rondes, hoe feestelijker de kaart: ster per 3 rondes, vanaf ronde 5 warmere kleur, vanaf 8 een gloed, vanaf 12 draaiende stralen. Een kroon voor wie het snelste ronde-record of de meeste rondes heeft.
             const testLap = Number(new URLSearchParams(window.location.search).get('testlap')) || 0;   // ?testlap=12 toont het ontwerp van ronde 12 (voor testen)
             const lapNo = testLap || (me && me.totalLaps || 0) + 1;
-            const recBest = laps.reduce((m, l) => l.time < m.t ? { t: l.time, id: l.runnerId } : m, { t: Infinity, id: null });
+            const recBest = lapsF.reduce((m, l) => l.time < m.t ? { t: l.time, id: l.runnerId } : m, { t: Infinity, id: null });
             const cnt = {}; laps.forEach(l => { cnt[l.runnerId] = (cnt[l.runnerId] || 0) + 1; });
             const maxCnt = Math.max(0, ...Object.values(cnt));
             const crown = new URLSearchParams(window.location.search).get('testcrown') ? 'Recordhouder' : recBest.id === activeRunner.runnerId ? 'Recordhouder' : (maxCnt >= 4 && cnt[activeRunner.runnerId] === maxCnt ? 'Koploper' : null);
@@ -996,10 +997,10 @@ function lapTileStyle(n) {
                 let overall = Infinity; const hour = {}, runner = {}, count = {};
                 laps.forEach(l => {
                     count[l.runnerId] = (count[l.runnerId] || 0) + 1;
-                    if (l.time < overall) overall = l.time;
+                    if (!l.half && l.time < overall) overall = l.time;
                     const d = new Date(l.timestamp), hk = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate() + '-' + d.getHours();
-                    if (hour[hk] === undefined || l.time < hour[hk]) hour[hk] = l.time;
-                    if (runner[l.runnerId] === undefined || l.time < runner[l.runnerId]) runner[l.runnerId] = l.time;
+                    if (!l.half && (hour[hk] === undefined || l.time < hour[hk])) hour[hk] = l.time;
+                    if (!l.half && (runner[l.runnerId] === undefined || l.time < runner[l.runnerId])) runner[l.runnerId] = l.time;
                 });
                 return { overall, hour, runner, count };
             }, [laps]);
@@ -1065,7 +1066,7 @@ function lapTileStyle(n) {
             React.useEffect(() => { const i = setInterval(() => setTick((n) => n + 1), 2000); return () => clearInterval(i); }, []);
             const list = waiting.slice(0, SHOW);
             const pb = {};
-            laps.forEach(l => { if (pb[l.runnerId] === undefined || l.time < pb[l.runnerId]) pb[l.runnerId] = l.time; });
+            laps.forEach(l => { if (!l.half && (pb[l.runnerId] === undefined || l.time < pb[l.runnerId])) pb[l.runnerId] = l.time; });
             const clock = (ms) => new Date(Date.now() + ms).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
             return h('div', { className: 'bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3' },
                 h('div', { className: 'flex items-center justify-between pb-1 mb-2', style: { borderBottom: '3px solid #17120d' } },
@@ -1148,7 +1149,7 @@ function predictNext(times, gender, restMs) {
             const runnersCount = Object.keys(first).length;
             const newRunners = Object.values(first).filter(t => now - t < hour).length;
             const km = laps.length * 0.515;
-            const avgMs = laps.length ? laps.reduce((sum, l) => sum + l.time, 0) / laps.length : 0;
+            const lapsF = laps.filter(l => !l.half), avgMs = lapsF.length ? lapsF.reduce((sum, l) => sum + l.time, 0) / lapsF.length : 0;
             const kmh = avgMs ? 0.515 / (avgMs / hour) : 0;
             const nl1 = (x) => x.toFixed(1).replace('.', ',');
             const ps = avgMs ? Math.round(avgMs / 1000 / 0.515) : 0, pace = ps ? `${Math.floor(ps / 60)}:${String(ps % 60).padStart(2, '0')}` : null;   // min/km voor de Strava-lopers
@@ -1225,15 +1226,15 @@ function predictNext(times, gender, restMs) {
                 const LO = 70, STEP = 6, N = 14;   // 1:10 tot 2:34 in stappen van 6 s
                 const bins = new Array(N).fill(0);
                 let sum = 0;
-                laps.forEach(l => { const s = l.time / 1000; sum += s; bins[Math.max(0, Math.min(N - 1, Math.floor((s - LO) / STEP)))]++; });
-                const avg = laps.length ? sum / laps.length : 0;
+                laps.filter(l => !l.half).forEach(l => { const s = l.time / 1000; sum += s; bins[Math.max(0, Math.min(N - 1, Math.floor((s - LO) / STEP)))]++; });
+                const nT = laps.filter(l => !l.half).length, avg = nT ? sum / nT : 0;
                 const hours = []; const nowH = new Date(); nowH.setMinutes(0, 0, 0);
                 for (let i = 9; i >= 0; i--) { const t0 = nowH.getTime() - i * 3600e3; hours.push({ h: new Date(t0).getHours(), n: laps.filter(l => { const t = new Date(l.timestamp).getTime(); return t >= t0 && t < t0 + 3600e3; }).length }); }
 
                 // per loper
                 const by = {};
                 laps.forEach(l => { (by[l.runnerId] = by[l.runnerId] || { name: l.runnerName, laps: [] }).laps.push(l); });
-                Object.values(by).forEach(r => r.laps.sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)));
+                Object.values(by).forEach(r => { r.laps.sort((x, y) => new Date(x.timestamp) - new Date(y.timestamp)); r.full = r.laps.filter(l => !l.half); });
                 const now = Date.now();
                 // Spotlights. Reeks, metronoom en steeds sneller kijken naar de laatste 3 uur (zo schuiven ze mee door de nacht);
                 // is die lijst leeg, dan het hele event. Record en mijlpaal gaan over het laatste halfuur.
@@ -1242,7 +1243,7 @@ function predictNext(times, gender, restMs) {
                 const lists = (win) => {
                     const streakL = [], metroL = [], improveL = [];
                     Object.values(by).forEach(r => {
-                        const all = r.laps.map(l => l.time), inWin = win ? r.laps.filter(l => now - tsOf(l) < win) : r.laps, t = inWin.map(l => l.time), off = all.length - t.length;
+                        const all = r.full.map(l => l.time), inWin = win ? r.full.filter(l => now - tsOf(l) < win) : r.full, t = inWin.map(l => l.time), off = all.length - t.length;
                         let cur = 0, best = 0, end = 0;
                         t.forEach((x, i) => { if (x < 90000) { cur++; if (cur > best) { best = cur; end = i; } } else cur = 0; });
                         if (best >= 3) streakL.push({ name: r.name, n: best, times: all, from: off + end - best + 1, to: off + end });
@@ -1252,7 +1253,7 @@ function predictNext(times, gender, restMs) {
                         }
                         if (all.length >= 3) {   // beste ronde vergeleken met de eerste; met venster: enkel als die beste ronde in het venster viel
                             const bi = all.indexOf(Math.min(...all)), gain = all[0] - all[bi];
-                            if (gain >= 5000 && (!win || now - tsOf(r.laps[bi]) < win)) improveL.push({ name: r.name, gain, first: all[0], best: all[bi], times: all });
+                            if (gain >= 5000 && (!win || now - tsOf(r.full[bi]) < win)) improveL.push({ name: r.name, gain, first: all[0], best: all[bi], times: all });
                         }
                     });
                     streakL.sort((x, y) => y.n - x.n); metroL.sort((x, y) => x.sd - y.sd); improveL.sort((x, y) => y.gain - x.gain);
@@ -1261,11 +1262,12 @@ function predictNext(times, gender, restMs) {
                 const L3 = lists(W3), LA = lists(0);
                 const streakL = L3.streakL.length ? L3.streakL : LA.streakL, metroL = L3.metroL.length ? L3.metroL : LA.metroL, improveL = L3.improveL.length ? L3.improveL : LA.improveL;
                 Object.values(by).forEach(r => {
-                    const t = r.laps.map(l => l.time), last = r.laps[r.laps.length - 1], lastAt = tsOf(last);
-                    const recent = r.laps.filter(l => now - tsOf(l) < 3600e3);
+                    if (!r.full.length) return;
+                    const t = r.full.map(l => l.time), last = r.full[r.full.length - 1], lastAt = tsOf(last);
+                    const recent = r.full.filter(l => now - tsOf(l) < 3600e3);
                     if (recent.length >= 3) hotL.push({ name: r.name, n: recent.length, times: recent.map(l => l.time) });
                     if (t.length >= 2 && now - lastAt < W30 && last.time < Math.min(...t.slice(0, -1))) prL.push({ name: r.name, time: last.time, prev: Math.min(...t.slice(0, -1)), at: lastAt, times: t });
-                    if (t.length >= 5 && t.length % 5 === 0 && now - lastAt < W30) mileL.push({ name: r.name, n: t.length, at: lastAt, times: t });
+                    if (r.laps.length >= 5 && r.laps.length % 5 === 0 && now - lastAt < W30) mileL.push({ name: r.name, n: r.laps.length, at: lastAt, times: t });
                 });
                 hotL.sort((x, y) => y.n - x.n); [prL, mileL].forEach(a => a.sort((x, y) => y.at - x.at));   // net gebeurd: nieuwste eerst
 
@@ -1279,14 +1281,14 @@ function predictNext(times, gender, restMs) {
                 const firstSeen = Object.values(by).map(r => new Date(r.laps[0].timestamp).getTime());
                 const newcomers = firstSeen.filter(t => t >= now - 3600e3).length;
                 // gemiddelde rondetijd per uur (laatste 10 uur)
-                const tempoHours = hours.map((hh, i) => { const t0 = nowH.getTime() - (9 - i) * 3600e3; const arr = laps.filter(l => { const t = new Date(l.timestamp).getTime(); return t >= t0 && t < t0 + 3600e3; }).map(l => l.time); return { h: hh.h, avg: arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length / 1000 : null }; });
+                const tempoHours = hours.map((hh, i) => { const t0 = nowH.getTime() - (9 - i) * 3600e3; const arr = laps.filter(l => { const t = new Date(l.timestamp).getTime(); return !l.half && t >= t0 && t < t0 + 3600e3; }).map(l => l.time); return { h: hh.h, avg: arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length / 1000 : null }; });
                 // start van het event (de klok zelf rekenen de slides telkens opnieuw uit, zodat het aftellen niet stilstaat tussen twee rondes)
                 const evStart = eventStartFor(laps);
 
                 // man / vrouw
                 const gOf = {}; runners.forEach(r => { gOf[r.id] = r.gender; });
                 const agg = { M: { runners: new Set(), n: 0, sum: 0, best: Infinity }, V: { runners: new Set(), n: 0, sum: 0, best: Infinity } };
-                laps.forEach(l => { const g = agg[gOf[l.runnerId]]; if (!g) return; g.runners.add(l.runnerId); g.n++; g.sum += l.time; if (l.time < g.best) g.best = l.time; });
+                laps.forEach(l => { const g = agg[gOf[l.runnerId]]; if (!g || l.half) return; g.runners.add(l.runnerId); g.n++; g.sum += l.time; if (l.time < g.best) g.best = l.time; });
 
                 // hoeveel rondes loopt iedereen
                 const buckets = [['1 ronde', 1, 1], ['2–3', 2, 3], ['4–6', 4, 6], ['7–10', 7, 10], ['11+', 11, 999]].map(([label, lo, hi]) => ({ label, n: Object.values(by).filter(r => r.laps.length >= lo && r.laps.length <= hi).length }));
@@ -1927,12 +1929,12 @@ function predictNext(times, gender, restMs) {
             const d = React.useMemo(() => {
                 const gOf = {}, nameOf = {}; runners.forEach(r => { gOf[r.id] = r.gender || 'X'; nameOf[r.id] = r.name; });
                 const per = {};
-                laps.forEach(l => { const e = per[l.runnerId] || (per[l.runnerId] = { id: l.runnerId, name: nameOf[l.runnerId] || l.runnerName, g: gOf[l.runnerId] || 'X', n: 0, sum: 0, best: Infinity }); e.n++; e.sum += l.time; if (l.time < e.best) e.best = l.time; });
+                laps.forEach(l => { const e = per[l.runnerId] || (per[l.runnerId] = { id: l.runnerId, name: nameOf[l.runnerId] || l.runnerName, g: gOf[l.runnerId] || 'X', n: 0, nf: 0, sum: 0, best: Infinity }); e.n++; if (!l.half) { e.nf++; e.sum += l.time; if (l.time < e.best) e.best = l.time; } });
                 const all = Object.values(per);
                 const most = (f) => all.filter(f).sort((a, b) => b.n - a.n || a.best - b.best).map(x => ({ id: x.id, name: x.name, v: x.n, txt: `${x.n} rondes` }));
                 // snelste rondes per RONDE, zoals de ranglijst op het grote scherm (dezelfde loper mag er twee keer in staan)
-                const fast = (f) => laps.filter(l => f(per[l.runnerId])).sort((a, b) => a.time - b.time).map(l => ({ id: l.id, name: nameOf[l.runnerId] || l.runnerName, v: Math.ceil(l.time / 100), el: lapTenthsEl(l.time) }));
-                const avg = all.filter(x => x.n >= 5).sort((a, b) => a.sum / a.n - b.sum / b.n).map(x => ({ id: x.id, name: x.name, v: Math.ceil(x.sum / x.n / 1000), txt: `${formatMMSS(x.sum / x.n)} gem.` }));
+                const fast = (f) => laps.filter(l => !l.half && f(per[l.runnerId])).sort((a, b) => a.time - b.time).map(l => ({ id: l.id, name: nameOf[l.runnerId] || l.runnerName, v: Math.ceil(l.time / 100), el: lapTenthsEl(l.time) }));
+                const avg = all.filter(x => x.n >= 5 && x.nf > 0).sort((a, b) => a.sum / a.nf - b.sum / b.nf).map(x => ({ id: x.id, name: x.name, v: Math.ceil(x.sum / x.nf / 1000), txt: `${formatMMSS(x.sum / x.nf)} gem.` }));
                 const boards = [
                     ['Meeste rondes', most(() => true)],
                     ['Snelste ronde · vrouwen', fast(x => x.g === 'V')],
@@ -1944,7 +1946,7 @@ function predictNext(times, gender, restMs) {
                 const start = endAt - 24 * 3600e3, hours = Array(24).fill(0);
                 laps.forEach(l => { const i = Math.floor((new Date(l.timestamp).getTime() - start) / 3600e3); if (i >= 0 && i < 24) hours[i]++; });
                 const peak = hours.indexOf(Math.max(...hours));
-                const sorted = [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)), rec = laps.reduce((m, l) => !m || l.time < m.time ? l : m, null);
+                const sorted = [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)), rec = laps.reduce((m, l) => l.half ? m : (!m || l.time < m.time ? l : m), null);
                 const night = laps.filter(l => { const hh = new Date(l.timestamp).getHours(); return hh < 6; }).length;
                 return { boards, hours, peak, start, rec, first: sorted[0], last: sorted[sorted.length - 1], night, nRunners: all.length };
             }, [laps, runners, endAt]);
@@ -2140,6 +2142,7 @@ function predictNext(times, gender, restMs) {
                 return () => clearInterval(iv);
             }, [endAt]);
             const laps = React.useMemo(() => isFinite(endAt) ? lapsRaw.filter(l => new Date(l.timestamp).getTime() <= endAt) : lapsRaw, [lapsRaw, endAt]);
+            const lapsT = React.useMemo(() => laps.filter(l => !l.half), [laps]);   // rondes met tijd: de startronde (halve ronde) telt mee als ronde, niet voor tijden en records
             const queue = ended ? [] : queueRaw;
             const isRunning = isRunningRaw && !ended;
             const [startTime, setStartTime] = useState(null);
@@ -2707,12 +2710,12 @@ function predictNext(times, gender, restMs) {
             const lapStats = React.useMemo(() => {
                 const per = {}; let sumAll = 0;
                 const seq = {}, lastAt = {};
-                [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach(l => { (seq[l.runnerId] = seq[l.runnerId] || []).push(l.time); lastAt[l.runnerId] = new Date(l.timestamp).getTime(); });
-                laps.forEach(l => { const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; sumAll += l.time; });
+                [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach(l => { if (!l.half) (seq[l.runnerId] = seq[l.runnerId] || []).push(l.time); lastAt[l.runnerId] = new Date(l.timestamp).getTime(); });
+                laps.forEach(l => { if (l.half) return; const e = per[l.runnerId] || (per[l.runnerId] = { n: 0, sum: 0 }); e.n++; e.sum += l.time; sumAll += l.time; });
                 const hourAgo = Date.now() - 3600e3;
-                const recent = laps.filter(l => new Date(l.timestamp).getTime() > hourAgo);
+                const recent = laps.filter(l => !l.half && new Date(l.timestamp).getTime() > hourAgo), nFull = laps.filter(l => !l.half).length;
                 const group = recent.length >= 5 ? recent.reduce((x, l) => x + l.time, 0) / recent.length
-                    : laps.length >= 5 ? sumAll / laps.length : 100000;
+                    : nFull >= 5 ? sumAll / nFull : 100000;
                 return { per, group, seq, lastAt };
             }, [laps]);
             const getAvgLapMs = () => lapStats.group;
@@ -2977,7 +2980,7 @@ function predictNext(times, gender, restMs) {
 
                 // Check if this is a personal record
                 const runnerPreviousLaps = laps.filter(l => l.runnerId === activeRunner.runnerId);
-                const previousBest = runnerPreviousLaps.length > 0 ? Math.min(...runnerPreviousLaps.map(l => l.time)) : Infinity;
+                const previousBest = runnerPreviousLaps.length > 0 ? Math.min(...runnerPreviousLaps.filter(l => !l.half).map(l => l.time)) : Infinity;
                 const isPersonalRecord = timeMs < previousBest;
 
                 // SNAPSHOT: Save complete state BEFORE any changes for undo
@@ -3321,7 +3324,7 @@ function predictNext(times, gender, restMs) {
 
                 // Check if this is a personal record
                 const runnerPreviousLaps = laps.filter(l => l.runnerId === newLapRunnerId);
-                const previousBest = runnerPreviousLaps.length > 0 ? Math.min(...runnerPreviousLaps.map(l => l.time)) : Infinity;
+                const previousBest = runnerPreviousLaps.length > 0 ? Math.min(...runnerPreviousLaps.filter(l => !l.half).map(l => l.time)) : Infinity;
                 const isPersonalRecord = timeMs < previousBest;
 
                 // Add lap to Firestore
@@ -3645,7 +3648,7 @@ function predictNext(times, gender, restMs) {
                 const sortedLaps = [...laps].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
                 // Get overall record time
-                const overallRecordTime = Math.min(...laps.map(l => l.time));
+                const overallRecordTime = Math.min(...lapsT.map(l => l.time));
 
                 // Add data rows
                 sortedLaps.forEach((lap, idx) => {
@@ -3659,7 +3662,7 @@ function predictNext(times, gender, restMs) {
                     
                     // Check if personal record
                     const runnerLaps = laps.filter(l => l.runnerId === lap.runnerId);
-                    const runnerBestTime = Math.min(...runnerLaps.map(l => l.time));
+                    const runnerBestTime = Math.min(...runnerLaps.filter(l => !l.half).map(l => l.time));
                     const isPersonalRecord = lap.time === runnerBestTime;
 
                     csv += `"${lap.runnerName}",${idx + 1},${formatTimeSimple(lap.time)},${timeSeconds},"${startTime}","${finishTime}",515,${isPersonalRecord ? 'Ja' : 'Nee'},${isOverallRecord ? 'Ja' : 'Nee'}\n`;
@@ -3690,8 +3693,9 @@ function predictNext(times, gender, restMs) {
                 runners.forEach(runner => {
                     const runnerLaps = laps.filter(l => l.runnerId === runner.id);
                     const totalDistance = (runner.totalLaps * 515) / 1000;
-                    const avgTime = runnerLaps.length ? runnerLaps.reduce((sum, l) => sum + l.time, 0) / runnerLaps.length : 0;
-                    const fastestTime = runnerLaps.length ? Math.min(...runnerLaps.map(l => l.time)) : 0;
+                    const rT = runnerLaps.filter(l => !l.half);
+                    const avgTime = rT.length ? rT.reduce((sum, l) => sum + l.time, 0) / rT.length : 0;
+                    const fastestTime = rT.length ? Math.min(...rT.map(l => l.time)) : 0;
 
                     csv += `"${runner.name}",${runner.totalLaps},${totalDistance.toFixed(2)},${formatTimeSimple(runner.totalTime)},${avgTime ? formatTimeSimple(avgTime) : '--:--'},${fastestTime ? formatTimeSimple(fastestTime) : '--:--'}\n`;
                 });
@@ -3711,11 +3715,11 @@ function predictNext(times, gender, restMs) {
             // Stats
             const totalLaps = laps.length;
             const totalDistance = (totalLaps * 515) / 1000;
-            const fastestLap = laps.length ? Math.min(...laps.map(l => l.time)) : 0;
-            const avgLapTime = laps.length ? laps.reduce((sum, l) => sum + l.time, 0) / laps.length : 0;
+            const fastestLap = lapsT.length ? Math.min(...lapsT.map(l => l.time)) : 0;
+            const avgLapTime = lapsT.length ? lapsT.reduce((sum, l) => sum + l.time, 0) / lapsT.length : 0;
 
             // Overall rankings
-            const fastestLaps = [...laps].sort((a, b) => a.time - b.time).slice(0, 10);
+            const fastestLaps = [...lapsT].sort((a, b) => a.time - b.time).slice(0, 10);
             
             const lapsByRunner = runners.map(runner => ({
                 ...runner,
@@ -3723,7 +3727,7 @@ function predictNext(times, gender, restMs) {
             })).sort((a, b) => b.laps - a.laps);
 
             const avgTimeByRunner = runners.map(runner => {
-                const runnerLaps = lapsOfRunner(laps, runner.id);
+                const runnerLaps = lapsOfRunner(lapsT, runner.id);
                 const avg = runnerLaps.length ? runnerLaps.reduce((sum, l) => sum + l.time, 0) / runnerLaps.length : 0;
                 return { ...runner, avgTime: avg, lapCount: runnerLaps.length };
             }).filter(r => r.lapCount > 0).sort((a, b) => a.avgTime - b.avgTime);
@@ -3732,12 +3736,12 @@ function predictNext(times, gender, restMs) {
             const genderOf = {}; runners.forEach(r => { genderOf[r.id] = r.gender; });
             const getRunnerGender = (runnerId) => genderOf[runnerId] || 'X';
 
-            const fastestLapsMen = [...laps]
+            const fastestLapsMen = [...lapsT]
                 .filter(lap => getRunnerGender(lap.runnerId) === 'M')
                 .sort((a, b) => a.time - b.time)
                 .slice(0, 10);
             
-            const fastestLapsWomen = [...laps]
+            const fastestLapsWomen = [...lapsT]
                 .filter(lap => getRunnerGender(lap.runnerId) === 'V')
                 .sort((a, b) => a.time - b.time)
                 .slice(0, 10);
@@ -4231,17 +4235,17 @@ function predictNext(times, gender, restMs) {
                                     const totalLaps = runner ? runner.totalLaps : 0;
                                     
                                     // Check for overall record (fastest ever)
-                                    const allTimes = laps.map(l => l.time);
+                                    const allTimes = lapsT.map(l => l.time);
                                     const isOverallRecord = lap.time === Math.min(...allTimes);
                                     
                                     // Check for record in last hour
                                     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-                                    const recentLaps = laps.filter(l => new Date(l.timestamp) > oneHourAgo);
+                                    const recentLaps = lapsT.filter(l => new Date(l.timestamp) > oneHourAgo);
                                     const recentTimes = recentLaps.map(l => l.time);
                                     const isHourlyRecord = recentTimes.length > 0 && lap.time === Math.min(...recentTimes) && new Date(lap.timestamp) > oneHourAgo;
                                     
                                     // Check for personal record
-                                    const runnerLaps = laps.filter(l => l.runnerId === lap.runnerId);
+                                    const runnerLaps = lapsT.filter(l => l.runnerId === lap.runnerId);
                                     const runnerTimes = runnerLaps.map(l => l.time);
                                     const isPersonalRecord = lap.isPersonalRecord || (runnerTimes.length > 0 && lap.time === Math.min(...runnerTimes));
                                     
@@ -4522,18 +4526,19 @@ function predictNext(times, gender, restMs) {
                         }
 
                         const myLaps = laps.filter(l => l.runnerId === me.id).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                        const best = myLaps.length ? Math.min(...myLaps.map(l => l.time)) : 0;
-                        const avg = myLaps.length ? myLaps.reduce((sum, l) => sum + l.time, 0) / myLaps.length : 0;
+                        const myT = myLaps.filter(l => !l.half);
+                        const best = myT.length ? Math.min(...myT.map(l => l.time)) : 0;
+                        const avg = myT.length ? myT.reduce((sum, l) => sum + l.time, 0) / myT.length : 0;
                         const lapsRank = lapsByRunner.findIndex(r => r.id === me.id) + 1;
                         const bestByRunner = runners
                             .map(r => {
-                                const rl = laps.filter(l => l.runnerId === r.id);
+                                const rl = lapsT.filter(l => l.runnerId === r.id);
                                 return { id: r.id, best: rl.length ? Math.min(...rl.map(l => l.time)) : null };
                             })
                             .filter(r => r.best !== null)
                             .sort((a, b) => a.best - b.best);
                         const bestRank = bestByRunner.findIndex(r => r.id === me.id) + 1;
-                        const overallBest = laps.length ? Math.min(...laps.map(l => l.time)) : 0;
+                        const overallBest = lapsT.length ? Math.min(...lapsT.map(l => l.time)) : 0;
                         const fmtClock = (ts) => new Date(ts).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
                         return h('div', { className: 'space-y-4 max-w-xl mx-auto' },
@@ -4638,8 +4643,9 @@ function predictNext(times, gender, restMs) {
                                     // Prepare data with all values
                                     const runnersWithData = filteredRunners.map(runner => {
                                         const runnerLaps = laps.filter(l => l.runnerId === runner.id);
-                                        const avgTime = runnerLaps.length ? runnerLaps.reduce((sum, l) => sum + l.time, 0) / runnerLaps.length : 0;
-                                        const fastestTime = runnerLaps.length ? Math.min(...runnerLaps.map(l => l.time)) : 0;
+                                        const rT = runnerLaps.filter(l => !l.half);
+                                        const avgTime = rT.length ? rT.reduce((sum, l) => sum + l.time, 0) / rT.length : 0;
+                                        const fastestTime = rT.length ? Math.min(...rT.map(l => l.time)) : 0;
                                         const distance = (runnerLaps.length * 515) / 1000;
                                         
                                         return {
@@ -4830,7 +4836,7 @@ function predictNext(times, gender, restMs) {
                                                 h('tbody', null,
                                                     sortedLaps.map((lap, idx) => {
                                                         // Check for records
-                                                        const allTimes = laps.map(l => l.time);
+                                                        const allTimes = lapsT.map(l => l.time);
                                                         const isOverallRecord = lap.time === Math.min(...allTimes);
                                                         
                                                         const lapDate = new Date(lap.timestamp);
@@ -4840,7 +4846,7 @@ function predictNext(times, gender, restMs) {
                                                         const hourEnd = new Date(hourStart);
                                                         hourEnd.setHours(hourStart.getHours() + 1);
                                                         
-                                                        const lapsThisHour = laps.filter(lap => {
+                                                        const lapsThisHour = lapsT.filter(lap => {
                                                             const lTime = new Date(lap.timestamp);
                                                             return lTime >= hourStart && lTime < hourEnd;
                                                         });
@@ -4848,7 +4854,7 @@ function predictNext(times, gender, restMs) {
                                                         const isHourlyRecord = hourTimes.length > 0 && lap.time === Math.min(...hourTimes);
                                                         
                                                         // Check if this is the CURRENT personal record (best time for this runner)
-                                                        const runnerLaps = laps.filter(l => l.runnerId === lap.runnerId);
+                                                        const runnerLaps = lapsT.filter(l => l.runnerId === lap.runnerId);
                                                         const runnerBestTime = runnerLaps.length > 0 ? Math.min(...runnerLaps.map(l => l.time)) : Infinity;
                                                         const isCurrentPersonalRecord = lap.time === runnerBestTime;
                                                         

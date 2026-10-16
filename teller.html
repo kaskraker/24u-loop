@@ -99,7 +99,7 @@ async function syncClock() {
 
 // ===== Gegevens =====
 let realLaps = null, SUM = null, recent = [], fullCount = null, active = null, lastOk = Date.now();
-const runnerIdx = new Map();   // id → { l: rondes, t: totale tijd, b: beste, s: spreiding, e: verwachte volgende ronde, g }
+const runnerIdx = new Map();   // id → { l: volle rondes (zonder startronde), t: totale tijd, b: beste, s: spreiding, e: verwachte volgende ronde, g }
 function lapsNow() {
   if (fullCount != null) return fullCount;
   if (!SUM) return null;
@@ -135,7 +135,7 @@ function startFirebase() {
   meta.doc('summary').onSnapshot({ includeMetadataChanges: true }, (s) => { ok(s); if (s.exists) { SUM = s.data(); checkStale(); pushLaps(); } else if (!SUM) startFull(); }, () => {});
   db.collection(col('laps')).orderBy('timestamp', 'desc').limit(12).onSnapshot({ includeMetadataChanges: true }, (s) => { ok(s); recent = s.docs.map((d) => d.data()); checkStale(); pushLaps(); }, () => {});
   db.collection(col('activeRunner')).onSnapshot((s) => { const d = s.docs.find((x) => x.id === 'current') || s.docs[0]; active = d ? d.data() : null; }, () => {});
-  const loadIndex = () => meta.doc('runnerIndex').get().then((s) => { if (s.exists) (s.data().list || []).forEach((a) => runnerIdx.set(a.i, { l: a.l, t: a.t, b: a.b, s: a.s, e: a.e, g: a.g })); }).catch(() => {});
+  const loadIndex = () => meta.doc('runnerIndex').get().then((s) => { if (s.exists) (s.data().list || []).forEach((a) => runnerIdx.set(a.i, { l: a.f != null ? a.f : a.l, t: a.t, b: a.b, s: a.s, e: a.e, g: a.g })); }).catch(() => {});
   loadIndex(); setInterval(loadIndex, 2 * 60e3);
   setTimeout(() => { if (realLaps == null) realLaps = 0; }, 6000);
 }
